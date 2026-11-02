@@ -1,0 +1,1014 @@
+/* =========================================
+   VELORIDER — GLOBAL STYLES
+========================================= */
+
+* {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+html {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+body {
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: pan-x pan-y;
+    background: #030712;
+}
+
+button {
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+img,
+svg {
+    max-width: 100%;
+}
+
+
+/* =========================================
+   SAFE AREA — TELEGRAM
+========================================= */
+
+body {
+    padding-top: env(safe-area-inset-top, 0px);
+}
+
+@supports (height: 100dvh) {
+    body {
+        height: 100dvh;
+    }
+}
+
+
+/* =========================================
+   ЭКРАНЫ
+========================================= */
+
+.screen {
+    display: none;
+    opacity: 0;
+    transform: scale(0.98);
+}
+
+.screen.active {
+    display: flex;
+    animation: fadeIn 0.3s ease-out forwards;
+}
+
+@keyframes fadeIn {
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+
+/* =========================================
+   CANVAS
+========================================= */
+
+#raceCanvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+#screen-race {
+    min-width: 0;
+    min-height: 0;
+}
+
+
+/* =========================================
+   CUSTOM SCROLLBAR
+========================================= */
+
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1f2937;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #374151;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #10b981;
+}
+
+
+/* =========================================
+   CONTAINER ANIMATION
+========================================= */
+
+@keyframes shake {
+    0%, 100% {
+        transform: translate(0, 0) rotate(0deg) scale(1.05);
+        filter: brightness(1.2);
+    }
+
+    10%, 30%, 50%, 70%, 90% {
+        transform: translate(-4px, -2px) rotate(-3deg) scale(1.05);
+        filter: brightness(1.3);
+    }
+
+    20%, 40%, 60%, 80% {
+        transform: translate(4px, 2px) rotate(3deg) scale(1.05);
+        filter: brightness(1.1);
+    }
+}
+
+.shake-animation {
+    animation: shake 0.4s ease-in-out infinite;
+    pointer-events: none;
+}
+
+
+/* =========================================
+   ITEM RARITIES
+========================================= */
+
+.rarity-common {
+    color: #9ca3af;
+    font-weight: 500;
+}
+
+.rarity-rare {
+    color: #3b82f6;
+    font-weight: 600;
+    text-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
+}
+
+.rarity-epic {
+    color: #a855f7;
+    font-weight: 700;
+    text-shadow: 0 0 12px rgba(168, 85, 247, 0.5);
+}
+
+.rarity-legendary {
+    background: linear-gradient(
+        90deg,
+        #eab308,
+        #fde047,
+        #eab308,
+        #ca8a04
+    );
+
+    background-size: 200% auto;
+
+    color: transparent;
+    -webkit-background-clip: text;
+    background-clip: text;
+
+    font-weight: 900;
+
+    text-shadow: 0 0 15px rgba(234, 179, 8, 0.5);
+
+    animation: shine 2.5s linear infinite;
+}
+
+@keyframes shine {
+    to {
+        background-position: 200% center;
+    }
+}
+
+
+/* =========================================
+   HEADER
+========================================= */
+
+header {
+    flex-shrink: 0;
+    min-width: 0;
+}
+
+header > div {
+    min-width: 0;
+}
+
+
+/* =========================================
+   NAVIGATION BUTTONS
+========================================= */
+
+.nav-btn {
+    min-height: 48px;
+    white-space: nowrap;
+    touch-action: manipulation;
+}
+
+.nav-btn:active {
+    transform: scale(0.97);
+}
+
+
+/* =========================================
+   GARAGE
+========================================= */
+
+#screen-garage {
+    min-width: 0;
+    min-height: 0;
+}
+
+.garage-page {
+    scrollbar-width: thin;
+    scrollbar-color: #334155 #0f172a;
+}
+
+.garage-bike-svg {
+    max-height: 330px;
+}
+
+.garage-equipped-card,
+.garage-stat-card {
+    min-width: 0;
+}
+
+.garage-part-name {
+    overflow-wrap: anywhere;
+}
+
+
+/* =========================================
+   UPGRADE SCREEN
+========================================= */
+
+#screen-upgrade {
+    min-width: 0;
+    min-height: 0;
+}
+
+#upgrade-categories {
+    scrollbar-width: thin;
+}
+
+#upgrade-parts {
+    min-width: 0;
+}
+
+#upgrade-parts > div {
+    min-width: 0;
+}
+
+#upgrade-parts button {
+    min-height: 42px;
+}
+
+
+/* =========================================
+   SHOP
+========================================= */
+
+#screen-shop {
+    min-width: 0;
+    min-height: 0;
+}
+
+#container-shop-list {
+    min-width: 0;
+}
+
+#loot-result {
+    overflow-wrap: anywhere;
+}
+
+
+/* =========================================
+   TRACKS
+========================================= */
+
+#screen-tracks {
+    min-width: 0;
+    min-height: 0;
+}
+
+#tracks-list {
+    min-width: 0;
+}
+
+
+/* =========================================
+   RACE CONTROLS
+========================================= */
+
+#btn-accelerate,
+#btn-brake,
+#btn-reverse,
+#btn-jump {
+    min-width: 0;
+    min-height: 55px;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+#btn-accelerate:active,
+#btn-brake:active,
+#btn-reverse:active,
+#btn-jump:active {
+    filter: brightness(1.15);
+}
+
+#race-ui {
+    padding: 12px;
+}
+
+#race-ui > div {
+    max-width: 100%;
+}
+
+
+/* =========================================
+   MOBILE — TABLETS AND PHONES
+========================================= */
+
+@media screen and (max-width: 760px) {
+
+    html,
+    body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+    }
+
+    body {
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* HEADER */
+
+    header {
+        padding: 9px 12px !important;
+        gap: 8px;
+        flex-wrap: wrap;
+        min-height: 58px;
+    }
+
+    header > div:first-child {
+        font-size: 19px !important;
+        flex-shrink: 0;
+    }
+
+    header > div:last-child {
+        padding: 5px 8px !important;
+        gap: 9px !important;
+        font-size: 12px !important;
+        flex-wrap: nowrap;
+    }
+
+    header > div:last-child > div {
+        gap: 4px !important;
+    }
+
+    header .text-sm {
+        font-size: 9px !important;
+    }
+
+    /* MAIN APPLICATION LAYOUT */
+
+    body > div.flex.flex-1.overflow-hidden {
+        flex: 1;
+        min-height: 0;
+        min-width: 0;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    /* BOTTOM NAVIGATION */
+
+    body > div.flex.flex-1.overflow-hidden > aside {
+        order: 2;
+
+        width: 100% !important;
+        height: auto;
+
+        flex: 0 0 auto;
+
+        min-height: 64px;
+
+        display: flex;
+        flex-direction: row;
+        align-items: stretch;
+
+        gap: 6px !important;
+
+        padding: 7px 8px !important;
+
+        border-right: 0 !important;
+        border-top: 1px solid #374151;
+
+        overflow-x: auto;
+        overflow-y: hidden;
+
+        box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.3);
+
+        background: #1f2937;
+
+        scrollbar-width: none;
+
+        padding-bottom: max(
+            7px,
+            env(safe-area-inset-bottom, 0px)
+        ) !important;
+    }
+
+    body > div.flex.flex-1.overflow-hidden > aside::-webkit-scrollbar {
+        display: none;
+    }
+
+    /* HIDE MENU TITLE */
+
+    body > div.flex.flex-1.overflow-hidden > aside > div:first-child {
+        display: none;
+    }
+
+    /* NAV BUTTONS */
+
+    body > div.flex.flex-1.overflow-hidden > aside > button.nav-btn {
+        flex: 1 0 auto;
+
+        min-width: 65px;
+        min-height: 48px;
+
+        padding: 7px 10px !important;
+
+        justify-content: center;
+
+        font-size: 11px;
+
+        text-align: center;
+
+        white-space: nowrap;
+
+        border-radius: 11px;
+    }
+
+    body > div.flex.flex-1.overflow-hidden > aside > button.nav-btn span:first-child {
+        font-size: 17px;
+    }
+
+    /* RACE AND RESET GROUP */
+
+    body > div.flex.flex-1.overflow-hidden > aside > div.mt-auto {
+        display: contents;
+    }
+
+    body > div.flex.flex-1.overflow-hidden > aside > div.mt-auto > button {
+        flex: 1 0 auto;
+
+        min-width: 75px;
+
+        min-height: 48px;
+
+        padding: 7px 10px !important;
+
+        font-size: 11px !important;
+    }
+
+    /* MAIN SCREEN */
+
+    body > div.flex.flex-1.overflow-hidden > main {
+        order: 1;
+
+        flex: 1;
+
+        width: 100%;
+        min-width: 0;
+        min-height: 0;
+
+        padding: 10px !important;
+
+        overflow: hidden;
+    }
+
+
+    /* =====================================
+       GARAGE MOBILE
+    ===================================== */
+
+    #screen-garage.garage-v2 {
+        height: 100%;
+        width: 100%;
+        min-height: 0;
+    }
+
+    .garage-page {
+        padding: 10px !important;
+    }
+
+    .garage-heading {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+
+        gap: 12px;
+
+        margin-bottom: 12px;
+    }
+
+    .garage-title {
+        font-size: 25px !important;
+    }
+
+    .garage-subtitle {
+        font-size: 11px;
+    }
+
+    .garage-actions {
+        display: flex;
+        width: 100%;
+        gap: 7px;
+    }
+
+    .garage-action {
+        flex: 1;
+        padding: 10px 7px !important;
+        font-size: 10px !important;
+    }
+
+    .garage-overview {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .garage-panel {
+        border-radius: 15px;
+    }
+
+    .garage-bike-panel,
+    .garage-stats-panel {
+        padding: 13px;
+    }
+
+    .garage-bike-stage {
+        min-height: 145px !important;
+        padding: 5px 0;
+    }
+
+    .garage-bike-svg {
+        width: 100%;
+        max-height: 190px;
+    }
+
+    .garage-bike-model {
+        font-size: 17px !important;
+    }
+
+    .garage-bike-caption {
+        font-size: 10px;
+    }
+
+    .garage-frame-rarity {
+        font-size: 9px;
+        padding: 5px 7px;
+    }
+
+    .garage-completeness {
+        font-size: 9px;
+        gap: 6px;
+    }
+
+    .garage-stats-title {
+        font-size: 15px;
+    }
+
+    .garage-stats-desc {
+        font-size: 10px;
+        margin-bottom: 10px;
+    }
+
+    .garage-stat-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px;
+    }
+
+    .garage-stat-card {
+        min-height: 80px;
+        padding: 10px;
+    }
+
+    .garage-stat-top {
+        font-size: 9px;
+    }
+
+    .garage-stat-value {
+        font-size: 22px;
+        margin-top: 9px;
+    }
+
+    .garage-extra-stats {
+        gap: 5px;
+        margin-top: 8px;
+    }
+
+    .garage-extra-stat {
+        padding: 6px;
+        font-size: 9px;
+    }
+
+    .garage-lower {
+        margin-top: 10px;
+    }
+
+    .garage-equipment-panel {
+        padding: 12px;
+    }
+
+    .garage-section-title {
+        font-size: 15px;
+    }
+
+    .garage-equipped-grid {
+        grid-template-columns: 1fr;
+    }
+
+
+    /* =====================================
+       UPGRADE MOBILE
+    ===================================== */
+
+    #screen-upgrade {
+        overflow-y: auto;
+        gap: 10px !important;
+        padding-bottom: 8px;
+    }
+
+    #screen-upgrade h2 {
+        font-size: 21px !important;
+    }
+
+    #screen-upgrade > div:first-child {
+        flex-shrink: 0;
+    }
+
+    #screen-upgrade > div.flex.flex-1.min-h-0 {
+        display: flex;
+
+        flex-direction: column;
+
+        gap: 10px;
+
+        min-height: 0;
+        overflow: visible;
+    }
+
+    #screen-upgrade > div.flex.flex-1.min-h-0 > div:first-child {
+        width: 100% !important;
+
+        flex-shrink: 0;
+
+        max-height: 115px;
+
+        padding: 10px;
+
+        overflow-x: auto;
+        overflow-y: hidden;
+    }
+
+    #upgrade-categories {
+        display: flex !important;
+        flex-direction: row !important;
+
+        gap: 7px;
+
+        overflow-x: auto;
+        overflow-y: hidden;
+
+        padding-bottom: 5px;
+    }
+
+    #upgrade-categories button {
+        flex: 0 0 auto;
+
+        width: auto !important;
+        min-width: 115px;
+
+        padding: 9px !important;
+
+        font-size: 11px;
+
+        text-align: center;
+    }
+
+    #screen-upgrade > div.flex.flex-1.min-h-0 > div:nth-child(2) {
+        width: 100%;
+
+        flex: 1;
+
+        min-height: 0;
+
+        padding: 12px !important;
+    }
+
+    #upgrade-category-title {
+        font-size: 18px !important;
+    }
+
+    #upgrade-parts {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 8px;
+    }
+
+    #upgrade-parts > div {
+        padding: 10px !important;
+        gap: 8px !important;
+    }
+
+    #upgrade-parts .text-xl {
+        font-size: 13px !important;
+        line-height: 1.3;
+    }
+
+    #upgrade-parts button {
+        min-height: 40px;
+        padding: 9px 5px !important;
+        font-size: 10px !important;
+    }
+
+
+    /* =====================================
+       SHOP MOBILE
+    ===================================== */
+
+    #screen-shop {
+        justify-content: flex-start !important;
+        padding: 10px;
+    }
+
+    #screen-shop h2 {
+        font-size: 24px !important;
+        margin-bottom: 18px !important;
+        text-align: center;
+    }
+
+    #container-shop-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+
+        width: 100%;
+
+        padding: 0 !important;
+
+        gap: 8px !important;
+
+        margin-top: 12px !important;
+    }
+
+    #container-shop-list > div {
+        padding: 11px !important;
+        gap: 8px !important;
+    }
+
+    #container-shop-list h3 {
+        font-size: 14px !important;
+    }
+
+    #container-shop-list p {
+        font-size: 10px !important;
+        min-height: 35px !important;
+    }
+
+    #container-shop-list button {
+        padding: 9px 5px !important;
+        font-size: 10px !important;
+    }
+
+    #loot-result {
+        font-size: 17px !important;
+        margin-top: 15px !important;
+    }
+
+
+    /* =====================================
+       TRACKS MOBILE
+    ===================================== */
+
+    #screen-tracks h2 {
+        font-size: 23px !important;
+        margin-bottom: 12px !important;
+    }
+
+    #tracks-list {
+        grid-template-columns: 1fr !important;
+        gap: 10px !important;
+        padding-right: 2px !important;
+    }
+
+    #tracks-list > div {
+        padding: 14px !important;
+        min-height: 0 !important;
+    }
+
+
+    /* =====================================
+       RACE MOBILE
+    ===================================== */
+
+    #screen-race {
+        display: none;
+        flex-direction: column;
+
+        height: 100%;
+        min-height: 0;
+
+        gap: 9px !important;
+    }
+
+    #screen-race.active {
+        display: flex;
+    }
+
+    #screen-race > div:first-child {
+        flex: 1;
+
+        min-height: 0;
+
+        width: 100%;
+
+        border-radius: 13px;
+    }
+
+    #raceCanvas {
+        width: 100%;
+        height: 100%;
+    }
+
+    #screen-race > div.grid {
+        height: 118px !important;
+
+        flex-shrink: 0;
+
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+
+        grid-template-rows: repeat(2, minmax(0, 1fr));
+
+        gap: 7px !important;
+    }
+
+    #btn-accelerate,
+    #btn-brake,
+    #btn-reverse,
+    #btn-jump {
+        min-height: 48px;
+
+        border-radius: 12px;
+
+        font-size: 13px !important;
+
+        box-shadow: 0 4px 0 rgba(0, 0, 0, 0.3) !important;
+    }
+
+    #btn-accelerate span:last-child,
+    #btn-brake span:last-child,
+    #btn-reverse span:last-child,
+    #btn-jump span:last-child {
+        display: none;
+    }
+
+    /* RESULT WINDOW */
+
+    #race-ui > div {
+        width: 100%;
+        max-width: 340px;
+
+        padding: 22px !important;
+
+        border-radius: 20px;
+    }
+
+    #race-result-title {
+        font-size: 32px !important;
+    }
+
+    #race-reward {
+        font-size: 17px !important;
+    }
+
+    #race-ui button {
+        width: 100%;
+        padding: 13px !important;
+        font-size: 16px !important;
+    }
+}
+
+
+/* =========================================
+   VERY SMALL PHONES
+========================================= */
+
+@media screen and (max-width: 380px) {
+
+    header > div:first-child {
+        font-size: 16px !important;
+    }
+
+    header > div:last-child {
+        gap: 5px !important;
+        font-size: 10px !important;
+    }
+
+    body > div.flex.flex-1.overflow-hidden > aside > button.nav-btn {
+        min-width: 57px;
+        padding: 6px !important;
+        font-size: 10px;
+    }
+
+    .garage-title {
+        font-size: 22px !important;
+    }
+
+    .garage-bike-stage {
+        min-height: 125px !important;
+    }
+
+    #upgrade-parts {
+        grid-template-columns: 1fr !important;
+    }
+
+    #container-shop-list {
+        grid-template-columns: 1fr !important;
+    }
+
+    #screen-race > div.grid {
+        height: 108px !important;
+    }
+}
+
+
+/* =========================================
+   LANDSCAPE PHONE
+========================================= */
+
+@media screen and (max-height: 500px) and (orientation: landscape) {
+
+    body > div.flex.flex-1.overflow-hidden > aside {
+        min-height: 48px;
+    }
+
+    body > div.flex.flex-1.overflow-hidden > aside > button.nav-btn {
+        min-height: 36px;
+    }
+
+    #screen-race > div.grid {
+        height: 76px !important;
+        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        grid-template-rows: 1fr;
+    }
+
+    #btn-accelerate span:last-child,
+    #btn-brake span:last-child,
+    #btn-reverse span:last-child,
+    #btn-jump span:last-child {
+        display: block;
+    }
+
+    .garage-bike-stage {
+        min-height: 130px !important;
+    }
+}
+
+
+/* =========================================
+   REDUCED MOTION
+========================================= */
+
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

@@ -1,0 +1,2175 @@
+import { player } from './state.js';
+import { TRACKS_DB, OBSTACLE_TYPES } from './db.js';
+
+// =========================================
+// VELOCITY RACE ENGINE
+// Игрок и боты едут по одной общей трассе
+// и встречают одни и те же препятствия.
+// =========================================
+
+const GRAVITY = 0.42;
+const BIKE_WIDTH = 46;
+const BIKE_HEIGHT = 24;
+const TRACK_MULTIPLIER = 3;
+const OBSTACLE_MULTIPLIER = 3;
+const PLAYER_LANE_OFFSET = 0;
+const BOT_LANE_OFFSET = 0;
+
+const TRACK_BALANCE = {
+    t1:  { speed: 0.70, accel: 0.65, jumpForce: 10.5 },
+    t2:  { speed: 0.58, accel: 0.65, jumpForce: 10.5 },
+    t3:  { speed: 0.52, accel: 0.68, jumpForce: 10.7 },
+    t4:  { speed: 0.46, accel: 0.70, jumpForce: 10.7 },
+    t5:  { speed: 0.43, accel: 0.72, jumpForce: 10.8 },
+    t6:  { speed: 0.41, accel: 0.74, jumpForce: 11.0 },
+    t7:  { speed: 0.39, accel: 0.76, jumpForce: 11.0 },
+    t8:  { speed: 0.38, accel: 0.78, jumpForce: 11.2 },
+    t9:  { speed: 0.36, accel: 0.80, jumpForce: 11.3 },
+    t10: { speed: 0.35, accel: 0.82, jumpForce: 11.5 }
+};
+
+// =========================================
+// РЕЛЬЕФ ТРАСС
+// =========================================
+
+const TRACK_TERRAIN = {
+    t1:  { amplitude: 8,  longFrequency: 0.0010, shortFrequency: 0.0030, micro: 1.4, phase: 0.2, ridge: 0.08 },
+    t2:  { amplitude: 15, longFrequency: 0.0011, shortFrequency: 0.0032, micro: 2.0, phase: 1.1, ridge: 0.12 },
+    t3:  { amplitude: 21, longFrequency: 0.0010, shortFrequency: 0.0038, micro: 2.4, phase: 2.0, ridge: 0.16 },
+    t4:  { amplitude: 29, longFrequency: 0.0009, shortFrequency: 0.0040, micro: 2.5, phase: 0.8, ridge: 0.22 },
+    t5:  { amplitude: 52, longFrequency: 0.00072, shortFrequency: 0.0028, micro: 3.3, phase: 1.7, ridge: 0.42 },
+    t6:  { amplitude: 12, longFrequency: 0.0014, shortFrequency: 0.0046, micro: 1.8, phase: 2.4, ridge: 0.10 },
+    t7:  { amplitude: 36, longFrequency: 0.00082, shortFrequency: 0.0042, micro: 3.1, phase: 0.4, ridge: 0.30 },
+    t8:  { amplitude: 65, longFrequency: 0.00066, shortFrequency: 0.0032, micro: 3.8, phase: 2.8, ridge: 0.58 },
+    t9:  { amplitude: 28, longFrequency: 0.0011, shortFrequency: 0.0050, micro: 2.8, phase: 1.3, ridge: 0.24 },
+    t10: { amplitude: 74, longFrequency: 0.00058, shortFrequency: 0.0035, micro: 4.2, phase: 2.1, ridge: 0.72 }
+};
+
+// =========================================
+// ЦВЕТОВЫЕ ТЕМЫ
+// =========================================
+
+const TRACK_PALETTES = {
+    t1:  { skyTop: '#102b3d', skyMid: '#397b88', skyBottom: '#b8d4bc', far: '#345b59', near: '#1d3938', road: '#475569', edge: '#a8b7bd', accent: '#bbf7d0' },
+    t2:  { skyTop: '#392b43', skyMid: '#bd7952', skyBottom: '#f2c78b', far: '#8e5b4c', near: '#583b3c', road: '#51434a', edge: '#e8b98a', accent: '#fed7aa' },
+    t3:  { skyTop: '#112d36', skyMid: '#39756a', skyBottom: '#b5c98d', far: '#456b50', near: '#294b39', road: '#46564b', edge: '#a3b18a', accent: '#bbf7d0' },
+    t4:  { skyTop: '#1d233f', skyMid: '#5c557c', skyBottom: '#d1a58e', far: '#514c70', near: '#30314e', road: '#4b4b61', edge: '#c4b5fd', accent: '#ddd6fe' },
+    t5:  { skyTop: '#092d49', skyMid: '#3b7eaa', skyBottom: '#d1e9ef', far: '#a7c8d8', near: '#567f99', road: '#526a7c', edge: '#dbeafe', accent: '#bae6fd' },
+    t6:  { skyTop: '#19364c', skyMid: '#76a7ae', skyBottom: '#f3d49a', far: '#9e9a6c', near: '#59654e', road: '#555b52', edge: '#fcdba5', accent: '#fde68a' },
+    t7:  { skyTop: '#242b3a', skyMid: '#67727d', skyBottom: '#c2b8a4', far: '#77766c', near: '#454943', road: '#494b48', edge: '#d6d3d1', accent: '#d6d3d1' },
+    t8:  { skyTop: '#090f2b', skyMid: '#263d66', skyBottom: '#7d7394', far: '#343e68', near: '#202747', road: '#343b55', edge: '#a5b4fc', accent: '#c4b5fd' },
+    t9:  { skyTop: '#1a263c', skyMid: '#6b6680', skyBottom: '#d3b2a4', far: '#666078', near: '#3d4157', road: '#4a4b5b', edge: '#d8b4fe', accent: '#e9d5ff' },
+    t10: { skyTop: '#281b2c', skyMid: '#9b4b42', skyBottom: '#f0a36d', far: '#8e4944', near: '#4c3039', road: '#4b3b40', edge: '#fdba74', accent: '#fed7aa' }
+};
+
+// =========================================
+// СОСТОЯНИЕ ИГРЫ
+// =========================================
+
+let canvas = null;
+let ctx = null;
+let viewWidth = 0;
+let viewHeight = 0;
+let animationId = null;
+let resizeHandlerAttached = false;
+let callbackOnRaceEnd = null;
+let currentTrack = null;
+let finishX = 0;
+let cameraX = 0;
+let obstacles = [];
+let frameCounter = 0;
+let raceFinished = false;
+let raceRunning = false;
+
+let input = {
+    accelerating: false,
+    braking: false,
+    reversing: false,
+    jumpRequested: false
+};
+
+let playerBike = null;
+let botBike = null;
+let additionalBots = [];
+let activeBots = [];
+let currentTrackLevel = 1;
+
+// =========================================
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// =========================================
+
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
+
+function randomItem(items) {
+    if (!items || !items.length) return null;
+
+    return items[Math.floor(Math.random() * items.length)];
+}
+
+function getTrackBalance(trackId) {
+    return TRACK_BALANCE[trackId] || {
+        speed: 0.5,
+        accel: 0.7,
+        jumpForce: 10.5
+    };
+}
+
+function getTrackLevel() {
+    const index = TRACKS_DB.findIndex(
+        track => track.id === currentTrack?.id
+    );
+
+    return Math.max(1, index + 1);
+}
+
+// =========================================
+// НОВАЯ СИСТЕМА СЛОЖНОСТИ БОТОВ
+// =========================================
+
+// Первый бот использует характеристики текущей трассы.
+// Второй бот использует характеристики предыдущей трассы.
+//
+// Например:
+// Трасса 5:
+// Бот 1 = сложность трассы 5.
+// Бот 2 = сложность трассы 4.
+//
+// Трасса 8:
+// Бот 1 = сложность трассы 8.
+// Бот 2 = сложность трассы 7.
+
+function getBotDifficultyTrack(botIndex) {
+    const currentIndex = TRACKS_DB.findIndex(
+        track => track.id === currentTrack?.id
+    );
+
+    if (currentIndex < 0) {
+        return currentTrack;
+    }
+
+    // Первый бот — текущий уровень.
+    if (botIndex === 1) {
+        return TRACKS_DB[currentIndex];
+    }
+
+    // Второй бот — предыдущий уровень.
+    if (botIndex === 2) {
+        return TRACKS_DB[Math.max(0, currentIndex - 1)];
+    }
+
+    return TRACKS_DB[currentIndex];
+}
+
+// Получаем индивидуальные характеристики конкретного бота.
+function getBotDifficultyStats(botIndex) {
+    const difficultyTrack = getBotDifficultyTrack(botIndex);
+
+    const balance = getTrackBalance(difficultyTrack?.id);
+
+    const fallbackSpeed =
+        Number(currentTrack?.botMaxSpeed) || 4;
+
+    const fallbackAccel =
+        Number(currentTrack?.botAccel) || 0.05;
+
+    const rawSpeed =
+        Number(difficultyTrack?.botMaxSpeed) || fallbackSpeed;
+
+    const rawAcceleration =
+        Number(difficultyTrack?.botAccel) || fallbackAccel;
+
+    return {
+        trackId: difficultyTrack?.id || currentTrack?.id,
+
+        maxSpeed: Math.max(
+            1.5,
+            rawSpeed * balance.speed
+        ),
+
+        acceleration: Math.max(
+            0.012,
+            rawAcceleration * balance.accel
+        ),
+
+        jumpForce: balance.jumpForce
+    };
+}
+
+// =========================================
+// РЕЛЬЕФ
+// =========================================
+
+function getTrackTerrain() {
+    const fallbackHills = Math.max(
+        1,
+        Number(currentTrack?.hills) || 15
+    );
+
+    return TRACK_TERRAIN[currentTrack?.id] || {
+        amplitude: 10 + fallbackHills * 0.9,
+        longFrequency: 0.0011,
+        shortFrequency: 0.0035,
+        micro: 2.5,
+        phase: 0.5,
+        ridge: 0.18
+    };
+}
+
+function getTrackPalette() {
+    return TRACK_PALETTES[currentTrack?.id] || TRACK_PALETTES.t1;
+}
+
+function getGroundY(worldX, laneOffset = 0) {
+    const base = viewHeight * 0.72 + laneOffset;
+    const profile = getTrackTerrain();
+    const amplitude = profile.amplitude;
+
+    const longWave =
+        Math.sin(worldX * profile.longFrequency + profile.phase) *
+        amplitude;
+
+    const shortWave =
+        Math.sin(worldX * profile.shortFrequency + profile.phase * 1.7) *
+        (amplitude * 0.28);
+
+    const ridgeWave =
+        Math.sin(worldX * profile.longFrequency * 2.3 + profile.phase);
+
+    const sharperRidges =
+        Math.sign(ridgeWave) *
+        Math.pow(Math.abs(ridgeWave), 2.2) *
+        amplitude *
+        profile.ridge;
+
+    const tinyWave =
+        Math.sin(worldX * 0.008 + profile.phase) *
+        profile.micro;
+
+    return clamp(
+        base + longWave + shortWave + sharperRidges + tinyWave,
+        viewHeight * 0.45,
+        viewHeight * 0.88
+    );
+}
+
+// =========================================
+// ПРЕПЯТСТВИЯ
+// =========================================
+
+function isTouchingObstacle(bike, obstacle) {
+    const bikeLeft = bike.x - BIKE_WIDTH * 0.35;
+    const bikeRight = bike.x + BIKE_WIDTH * 0.35;
+
+    return bikeRight >= obstacle.x &&
+        bikeLeft <= obstacle.x + obstacle.width;
+}
+
+// =========================================
+// СПОСОБНОСТИ БОТОВ
+// =========================================
+
+function getBotAbilities(botIndex) {
+    return {
+        nitroUnlocked:
+            currentTrackLevel >= 5 &&
+            botIndex === 1,
+
+        superJumpUnlocked:
+            currentTrackLevel >= 8 &&
+            botIndex === 2,
+
+        shieldCharges:
+            currentTrackLevel >= 10
+                ? (botIndex === 1 ? 2 : 1)
+                : 0
+    };
+}
+
+// =========================================
+// СОЗДАНИЕ ВЕЛОСИПЕДА
+// =========================================
+
+function createBike(isBot = false, botIndex = 1) {
+    const botColor = botIndex === 2
+        ? '#38bdf8'
+        : '#f97316';
+
+    const startX = isBot
+        ? (botIndex === 2 ? 145 : 245)
+        : 350;
+
+    // Получаем индивидуальный профиль сложности.
+    const difficulty = isBot
+        ? getBotDifficultyStats(botIndex)
+        : null;
+
+    return {
+        id: isBot ? `bot-${botIndex}` : 'player',
+
+        x: startX,
+        previousX: startX,
+
+        velocityX: 0,
+
+        jumpHeight: 0,
+        jumpVelocity: 0,
+        jumpGravity: GRAVITY,
+
+        grounded: true,
+
+        rampLift: 0,
+        currentRamp: null,
+
+        impactSlowTimer: 0,
+        impactSpeedLimit: 0,
+
+        collidedObstacles: new Set(),
+
+        isBot,
+        botIndex: isBot ? botIndex : 0,
+
+        color: isBot ? botColor : '#22c55e',
+
+        abilities: isBot
+            ? getBotAbilities(botIndex)
+            : null,
+
+        // Индивидуальные характеристики бота.
+        botDifficultyTrackId: difficulty?.trackId || null,
+        botBaseMaxSpeed: difficulty?.maxSpeed || 0,
+        botBaseAcceleration: difficulty?.acceleration || 0,
+        botJumpForce: difficulty?.jumpForce || 0,
+
+        nitroTimer: 0,
+        nitroCooldown: 150 + botIndex * 65,
+
+        shieldActiveTimer: 0,
+
+        finishFrame: null
+    };
+}
+
+// =========================================
+// ГЕНЕРАЦИЯ ОБЩЕЙ ТРАССЫ И ПРЕПЯТСТВИЙ
+// =========================================
+
+function createObstacles() {
+    let typePool = Array.isArray(currentTrack?.obstacleTypes)
+        ? currentTrack.obstacleTypes.filter(
+            type => OBSTACLE_TYPES[type]
+        )
+        : Object.keys(OBSTACLE_TYPES);
+
+    if (currentTrackLevel === 5) {
+        typePool = [
+            ...typePool,
+            'ramp',
+            'ramp',
+            'rock'
+        ];
+    } else if (currentTrackLevel === 8) {
+        typePool = [
+            ...typePool,
+            'pit',
+            'pit',
+            'barrier',
+            'ramp'
+        ];
+    } else if (currentTrackLevel === 10) {
+        typePool = [
+            ...typePool,
+            'pit',
+            'pit',
+            'rock',
+            'barrier',
+            'ramp',
+            'ramp'
+        ];
+    }
+
+    typePool = typePool.filter(
+        type => OBSTACLE_TYPES[type]
+    );
+
+    const obstacleMultiplier = currentTrackLevel === 5
+        ? 3.25
+        : currentTrackLevel === 8
+            ? 3.45
+            : currentTrackLevel === 10
+                ? 3.65
+                : OBSTACLE_MULTIPLIER;
+
+    const obstacleCount = Math.max(
+        8,
+        Math.floor(
+            (Number(currentTrack?.obstacles) || 8) *
+            obstacleMultiplier
+        )
+    );
+
+    const usableLength = Math.max(1000, finishX - 1800);
+    const spacing = usableLength / (obstacleCount + 1);
+
+    const generated = [];
+
+    for (let i = 0; i < obstacleCount; i++) {
+        const type = randomItem(typePool) || 'rock';
+        const definition = OBSTACLE_TYPES[type];
+
+        const x =
+            900 +
+            spacing * (i + 1) +
+            (Math.random() - 0.5) * spacing * 0.35;
+
+        const specialRampScale = type === 'ramp'
+            ? (
+                currentTrackLevel === 5
+                    ? 1.18
+                    : currentTrackLevel === 8
+                        ? 1.32
+                        : currentTrackLevel === 10
+                            ? 1.45
+                            : 1
+            )
+            : 1;
+
+        const specialObstacleScale =
+            currentTrackLevel === 10 && type !== 'ramp'
+                ? 1.12
+                : 1;
+
+        generated.push({
+            id: `${type}-${i}`,
+
+            type,
+            x,
+
+            width: Math.round(
+                (Number(definition.width) || 40) *
+                specialRampScale
+            ),
+
+            height: Math.round(
+                (Number(definition.height) || 25) *
+                specialRampScale *
+                specialObstacleScale
+            ),
+
+            color: definition.color || '#777777',
+
+            playerHit: false,
+            botHit: false,
+
+            playerRampUsed: false,
+            botRampUsed: false,
+
+            botRampUsedBy: new Set(),
+            botJumpAttemptedBy: new Set(),
+            botHitBy: new Set()
+        });
+    }
+
+    return generated.sort((a, b) => a.x - b.x);
+}
+
+// =========================================
+// ЗАВЕРШЕНИЕ ГОНКИ
+// =========================================
+
+function finishRace(playerWon, reason = 'finish') {
+    if (raceFinished) return;
+
+    raceFinished = true;
+    raceRunning = false;
+
+    input.accelerating = false;
+    input.braking = false;
+    input.reversing = false;
+    input.jumpRequested = false;
+
+    if (animationId !== null) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+    }
+
+    if (typeof callbackOnRaceEnd === 'function') {
+        callbackOnRaceEnd(Boolean(playerWon), reason);
+    }
+}
+
+// =========================================
+// ФИЗИКА ПРЫЖКА
+// =========================================
+
+function updateJumpPhysics(bike) {
+    if (bike.grounded) return;
+
+    bike.jumpHeight += bike.jumpVelocity;
+
+    bike.jumpVelocity -= bike.jumpGravity || GRAVITY;
+
+    if (bike.jumpHeight <= 0) {
+        bike.jumpHeight = 0;
+        bike.jumpVelocity = 0;
+        bike.jumpGravity = GRAVITY;
+        bike.grounded = true;
+        bike.rampLift = 0;
+        bike.currentRamp = null;
+    }
+}
+
+function startJump(bike, force, gravity = GRAVITY) {
+    if (!bike || !bike.grounded) return false;
+
+    bike.grounded = false;
+
+    bike.jumpVelocity = Math.max(
+        4,
+        Number(force) || 9
+    );
+
+    bike.jumpGravity = clamp(
+        Number(gravity) || GRAVITY,
+        0.36,
+        GRAVITY
+    );
+
+    bike.jumpHeight = 1;
+    bike.rampLift = 0;
+    bike.currentRamp = null;
+
+    return true;
+}
+
+// =========================================
+// РАМПА
+// =========================================
+
+function updateRamp(bike, isBot) {
+    const rampAlreadyUsed = ramp => isBot
+        ? ramp.botRampUsedBy.has(bike.botIndex)
+        : ramp.playerRampUsed;
+
+    if (!bike.grounded) {
+        bike.rampLift = 0;
+        return;
+    }
+
+    const previousX = Number.isFinite(bike.previousX)
+        ? bike.previousX
+        : bike.x;
+
+    let ramp = bike.currentRamp
+        ? obstacles.find(obstacle =>
+            obstacle.id === bike.currentRamp &&
+            obstacle.type === 'ramp' &&
+            !rampAlreadyUsed(obstacle)
+        )
+        : null;
+
+    if (!ramp) {
+        ramp = obstacles.find(obstacle => {
+            if (obstacle.type !== 'ramp') return false;
+            if (rampAlreadyUsed(obstacle)) return false;
+            if (bike.velocityX <= 0) return false;
+
+            const rampStart = obstacle.x;
+            const rampEnd = obstacle.x + obstacle.width;
+
+            return bike.x >= rampStart - 4 &&
+                previousX <= rampEnd;
+        }) || null;
+    }
+
+    if (!ramp) {
+        bike.rampLift = 0;
+        bike.currentRamp = null;
+        return;
+    }
+
+    bike.currentRamp = ramp.id;
+
+    const progress = clamp(
+        (bike.x - ramp.x) / Math.max(1, ramp.width),
+        0,
+        1
+    );
+
+    bike.rampLift = ramp.height * progress;
+
+    const rampEnd = ramp.x + ramp.width;
+
+    const crossedRampEnd =
+        previousX < rampEnd &&
+        bike.x >= rampEnd;
+
+    const reachedRampEnd = progress >= 1;
+
+    if (
+        bike.velocityX > 0.4 &&
+        (crossedRampEnd || reachedRampEnd)
+    ) {
+        if (isBot) {
+            ramp.botRampUsedBy.add(bike.botIndex);
+        } else {
+            ramp.playerRampUsed = true;
+        }
+
+        const jumpStat = isBot
+            ? clamp(
+                (Number(bike.botJumpForce) || 10.5) - 10.5,
+                0,
+                3
+            ) * 4 + (bike.abilities?.superJumpUnlocked ? 6 : 0)
+            : clamp(
+                Number(player.totalJump) || 0,
+                0,
+                30
+            );
+
+        const extraJump = jumpStat * 0.045;
+
+        bike.jumpHeight = Math.max(
+            bike.rampLift,
+            ramp.height * 0.85
+        );
+
+        bike.rampLift = 0;
+        bike.grounded = false;
+        bike.jumpVelocity = 12 + extraJump;
+
+        bike.jumpGravity = isBot && bike.abilities?.superJumpUnlocked
+            ? 0.355
+            : isBot
+                ? clamp(
+                    0.38 - (Number(bike.botJumpForce) - 10.5) * 0.002,
+                    0.36,
+                    0.38
+                )
+                : clamp(
+                    0.38 - jumpStat * 0.0007,
+                    0.36,
+                    0.38
+                );
+
+        bike.currentRamp = null;
+    }
+
+    if (bike.velocityX <= 0.05 && progress < 1) {
+        bike.rampLift = 0;
+        bike.currentRamp = null;
+    }
+}
+
+// =========================================
+// ФИЗИКА ИГРОКА
+// =========================================
+
+function updatePlayerPhysics() {
+    const speed = Math.max(
+        0,
+        Number(player.totalSpeed) || 0
+    );
+
+    const accel = Math.max(
+        0,
+        Number(player.totalAccel) || 0
+    );
+
+    const jump = clamp(
+        Number(player.totalJump) || 0,
+        0,
+        30
+    );
+
+    const brake = clamp(
+        Number(player.totalBrake) || 0,
+        0,
+        26
+    );
+
+    const maxSpeed =
+        3.2 + Math.min(speed, 70) * 0.12;
+
+    const acceleration =
+        0.05 + Math.min(accel, 70) * 0.002;
+
+    const brakePower = clamp(
+        0.14 + brake * 0.025,
+        0.14,
+        0.82
+    );
+
+    const jumpForce =
+        8.5 + jump * 0.12;
+
+    const jumpGravity = clamp(
+        GRAVITY - jump * 0.001,
+        0.39,
+        GRAVITY
+    );
+
+    if (input.accelerating) {
+        playerBike.velocityX += acceleration;
+    }
+
+    if (input.reversing) {
+        playerBike.velocityX -= acceleration * 0.9;
+    }
+
+    if (input.braking) {
+        if (playerBike.velocityX > 0) {
+            playerBike.velocityX = Math.max(
+                0,
+                playerBike.velocityX - brakePower
+            );
+        } else if (playerBike.velocityX < 0) {
+            playerBike.velocityX = Math.min(
+                0,
+                playerBike.velocityX + brakePower
+            );
+        }
+    }
+
+    if (
+        !input.accelerating &&
+        !input.reversing &&
+        !input.braking
+    ) {
+        playerBike.velocityX *= 0.992;
+    }
+
+    let allowedSpeed = maxSpeed;
+
+    if (playerBike.impactSlowTimer > 0) {
+        playerBike.impactSlowTimer--;
+
+        allowedSpeed = Math.min(
+            allowedSpeed,
+            playerBike.impactSpeedLimit
+        );
+    }
+
+    playerBike.velocityX = clamp(
+        playerBike.velocityX,
+        -maxSpeed * 0.65,
+        allowedSpeed
+    );
+
+    playerBike.previousX = playerBike.x;
+
+    playerBike.x = Math.max(
+        0,
+        playerBike.x + playerBike.velocityX
+    );
+
+    if (input.jumpRequested) {
+        startJump(
+            playerBike,
+            jumpForce,
+            jumpGravity
+        );
+
+        input.jumpRequested = false;
+    }
+
+    updateJumpPhysics(playerBike);
+    updateRamp(playerBike, false);
+}
+
+// =========================================
+// ИИ БОТА: ПОИСК БЛИЖАЙШЕГО ПРЕПЯТСТВИЯ
+// =========================================
+
+function findBotJumpTarget(bike) {
+    const jumpableTypes = new Set([
+        'pit',
+        'log',
+        'barrier'
+    ]);
+
+    const front = bike.x + BIKE_WIDTH * 0.35;
+
+    return obstacles.find(obstacle => {
+        if (!jumpableTypes.has(obstacle.type)) return false;
+
+        if (obstacle.x + obstacle.width < front - 8) {
+            return false;
+        }
+
+        if (
+            obstacle.botJumpAttemptedBy.has(
+                bike.botIndex
+            )
+        ) {
+            return false;
+        }
+
+        return true;
+    }) || null;
+}
+
+function updateBotAI(bike) {
+    if (!bike.grounded || bike.jumpHeight > 0) return;
+
+    const obstacle = findBotJumpTarget(bike);
+
+    if (!obstacle) return;
+
+    const front = bike.x + BIKE_WIDTH * 0.35;
+    const distance = obstacle.x - front;
+
+    const speed = Math.max(
+        1.2,
+        bike.velocityX
+    );
+
+    const reactionDistance = obstacle.type === 'pit'
+        ? clamp(
+            speed * 12 + obstacle.width * 0.22 + 12,
+            50,
+            100
+        )
+        : clamp(
+            speed * 8 + obstacle.width * 0.16 + 10,
+            38,
+            74
+        );
+
+    if (
+        distance <= reactionDistance &&
+        distance >= -BIKE_WIDTH * 0.2
+    ) {
+        // Теперь сила прыжка учитывает индивидуальный уровень бота.
+        const baseForce =
+            Number(bike.botJumpForce) ||
+            getTrackBalance(currentTrack.id).jumpForce;
+
+        const superJumpBonus =
+            bike.abilities?.superJumpUnlocked
+                ? 2.5
+                : 0;
+
+        const force =
+            (obstacle.type === 'pit'
+                ? baseForce + 0.8
+                : baseForce) + superJumpBonus;
+
+        obstacle.botJumpAttemptedBy.add(
+            bike.botIndex
+        );
+
+        startJump(
+            bike,
+            force,
+            bike.abilities?.superJumpUnlocked
+                ? 0.355
+                : GRAVITY
+        );
+    }
+}
+
+// =========================================
+// ПОДХОД БОТА К КАМНЮ
+// =========================================
+
+function updateBotRockApproach(bike, maxSpeed) {
+    const front = bike.x + BIKE_WIDTH * 0.35;
+
+    const rock = obstacles.find(obstacle => {
+        if (obstacle.type !== 'rock') return false;
+
+        if (
+            obstacle.botHitBy.has(bike.botIndex)
+        ) {
+            return false;
+        }
+
+        return obstacle.x + obstacle.width >= front - 8;
+    });
+
+    if (!rock) return;
+
+    const distance = rock.x - front;
+
+    const speed = Math.max(
+        1,
+        bike.velocityX
+    );
+
+    const brakingDistance = clamp(
+        speed * 12 + rock.width * 0.25 + 15,
+        55,
+        110
+    );
+
+    if (
+        distance <= brakingDistance &&
+        distance >= -rock.width
+    ) {
+        const approachLimit = Math.max(
+            0.65,
+            maxSpeed * 0.62
+        );
+
+        bike.velocityX = Math.min(
+            bike.velocityX,
+            approachLimit
+        );
+    }
+}
+
+// =========================================
+// СПОСОБНОСТИ БОТА
+// =========================================
+
+function updateBotAbilities(bike) {
+    if (bike.nitroTimer > 0) {
+        bike.nitroTimer--;
+    } else if (bike.nitroCooldown > 0) {
+        bike.nitroCooldown--;
+    }
+
+    if (bike.shieldActiveTimer > 0) {
+        bike.shieldActiveTimer--;
+    }
+
+    // Нитро у первого бота открывается на трассе 5.
+    if (
+        bike.abilities?.nitroUnlocked &&
+        bike.nitroTimer <= 0 &&
+        bike.nitroCooldown <= 0 &&
+        bike.grounded &&
+        bike.impactSlowTimer <= 0
+    ) {
+        const front = bike.x + BIKE_WIDTH * 0.35;
+
+        const obstacleAhead = obstacles.some(obstacle =>
+            obstacle.x >= front &&
+            obstacle.x - front < 230
+        );
+
+        if (!obstacleAhead) {
+            bike.nitroTimer = 48;
+            bike.nitroCooldown = 430;
+        }
+    }
+}
+
+// =========================================
+// ФИЗИКА БОТА
+// =========================================
+
+function updateBotPhysics(bike) {
+    updateBotAbilities(bike);
+
+    // Используем индивидуальную скорость конкретного бота.
+    const baseMaxSpeed = Math.max(
+        1.5,
+        Number(bike.botBaseMaxSpeed) ||
+        3
+    );
+
+    const nitroMultiplier =
+        bike.nitroTimer > 0
+            ? 1.28
+            : 1;
+
+    const maxSpeed =
+        baseMaxSpeed * nitroMultiplier;
+
+    // У каждого бота собственное ускорение.
+    const baseAcceleration = Math.max(
+        0.012,
+        Number(bike.botBaseAcceleration) || 0.02
+    ) * (
+        bike.nitroTimer > 0
+            ? 1.55
+            : 1
+    );
+
+    bike.velocityX += baseAcceleration;
+
+    let allowedSpeed = maxSpeed;
+
+    if (bike.impactSlowTimer > 0) {
+        bike.impactSlowTimer--;
+
+        allowedSpeed = Math.min(
+            allowedSpeed,
+            bike.impactSpeedLimit
+        );
+    }
+
+    bike.velocityX = Math.min(
+        bike.velocityX,
+        allowedSpeed
+    );
+
+    updateBotRockApproach(
+        bike,
+        maxSpeed
+    );
+
+    updateBotAI(bike);
+
+    bike.previousX = bike.x;
+
+    bike.x = Math.max(
+        0,
+        bike.x + bike.velocityX
+    );
+
+    if (
+        bike.x >= finishX &&
+        bike.finishFrame === null
+    ) {
+        bike.finishFrame = frameCounter;
+    }
+
+    updateJumpPhysics(bike);
+    updateRamp(bike, true);
+}
+
+// =========================================
+// СТОЛКНОВЕНИЯ ИГРОКА
+// =========================================
+
+function applyPlayerImpact(obstacle, speedLimit = 1.0) {
+    if (
+        playerBike.collidedObstacles.has(obstacle.id)
+    ) {
+        return;
+    }
+
+    playerBike.collidedObstacles.add(obstacle.id);
+
+    playerBike.impactSlowTimer = 42;
+    playerBike.impactSpeedLimit = speedLimit;
+
+    playerBike.velocityX = Math.min(
+        playerBike.velocityX,
+        speedLimit
+    );
+}
+
+function updatePlayerCollisions() {
+    for (const obstacle of obstacles) {
+        if (
+            obstacle.x + obstacle.width <
+            playerBike.x - BIKE_WIDTH
+        ) {
+            continue;
+        }
+
+        if (
+            obstacle.x >
+            playerBike.x + BIKE_WIDTH
+        ) {
+            break;
+        }
+
+        if (!isTouchingObstacle(playerBike, obstacle)) {
+            continue;
+        }
+
+        if (obstacle.type === 'pit') {
+            if (
+                playerBike.grounded &&
+                playerBike.jumpHeight < 8
+            ) {
+                finishRace(false, 'pit');
+                return;
+            }
+
+            continue;
+        }
+
+        if (obstacle.type === 'ramp') continue;
+
+        if (obstacle.type === 'rock') {
+            if (
+                playerBike.jumpHeight <
+                obstacle.height * 0.65
+            ) {
+                applyPlayerImpact(obstacle, 1.15);
+            }
+
+            continue;
+        }
+
+        if (
+            obstacle.type === 'log' ||
+            obstacle.type === 'barrier'
+        ) {
+            const requiredJump =
+                obstacle.height + 9;
+
+            if (
+                playerBike.jumpHeight < requiredJump
+            ) {
+                applyPlayerImpact(obstacle, 0.85);
+            }
+        }
+    }
+}
+
+// =========================================
+// СТОЛКНОВЕНИЯ БОТОВ
+// =========================================
+
+function applyBotImpact(
+    bike,
+    obstacle,
+    speedFactor = 0.5,
+    duration = 34
+) {
+    if (
+        obstacle.botHitBy.has(bike.botIndex)
+    ) {
+        return;
+    }
+
+    obstacle.botHitBy.add(bike.botIndex);
+
+    bike.impactSlowTimer = duration;
+
+    // Щит на трассе 10 поглощает часть последствий удара.
+    if (
+        bike.abilities?.shieldCharges > 0
+    ) {
+        bike.abilities.shieldCharges--;
+
+        bike.shieldActiveTimer = 52;
+
+        speedFactor = Math.max(
+            speedFactor,
+            0.78
+        );
+
+        duration = Math.min(
+            duration,
+            18
+        );
+
+        bike.impactSlowTimer = duration;
+    }
+
+    const reducedSpeed = Math.max(
+        0.35,
+        bike.velocityX * speedFactor
+    );
+
+    bike.impactSpeedLimit = reducedSpeed;
+
+    bike.velocityX = Math.min(
+        bike.velocityX,
+        reducedSpeed
+    );
+}
+
+function updateBotCollisions(bike) {
+    for (const obstacle of obstacles) {
+        if (
+            obstacle.x + obstacle.width <
+            bike.x - BIKE_WIDTH
+        ) {
+            continue;
+        }
+
+        if (
+            obstacle.x >
+            bike.x + BIKE_WIDTH
+        ) {
+            break;
+        }
+
+        if (!isTouchingObstacle(bike, obstacle)) {
+            continue;
+        }
+
+        if (obstacle.type === 'pit') {
+            if (
+                bike.jumpHeight <
+                Math.max(22, obstacle.height * 0.75)
+            ) {
+                applyBotImpact(
+                    bike,
+                    obstacle,
+                    0.28,
+                    54
+                );
+            }
+
+            continue;
+        }
+
+        if (obstacle.type === 'ramp') continue;
+
+        if (obstacle.type === 'rock') {
+            if (
+                bike.jumpHeight <
+                Math.max(10, obstacle.height * 0.65)
+            ) {
+                applyBotImpact(
+                    bike,
+                    obstacle,
+                    0.38,
+                    46
+                );
+            }
+
+            continue;
+        }
+
+        if (
+            obstacle.type === 'log' ||
+            obstacle.type === 'barrier'
+        ) {
+            if (
+                bike.jumpHeight <
+                obstacle.height + 9
+            ) {
+                applyBotImpact(
+                    bike,
+                    obstacle,
+                    0.45,
+                    38
+                );
+            }
+        }
+    }
+}
+
+// =========================================
+// ПРОВЕРКА ФИНИША
+// =========================================
+
+function checkFinish() {
+    const playerFinished =
+        playerBike.x >= finishX;
+
+    const finishedBots = activeBots.filter(
+        bike => bike.x >= finishX
+    );
+
+    if (
+        !playerFinished &&
+        finishedBots.length === 0
+    ) {
+        return;
+    }
+
+    if (
+        playerFinished &&
+        finishedBots.length === 0
+    ) {
+        finishRace(true, 'finish');
+        return;
+    }
+
+    if (
+        !playerFinished &&
+        finishedBots.length > 0
+    ) {
+        finishRace(false, 'bot-finish');
+        return;
+    }
+
+    const furthestBot = Math.max(
+        ...finishedBots.map(bike => bike.x)
+    );
+
+    finishRace(
+        playerBike.x >= furthestBot,
+        'photo-finish'
+    );
+}
+
+// =========================================
+// ОТРИСОВКА ФОНА
+// =========================================
+
+function drawBackground() {
+    const palette = getTrackPalette();
+
+    const gradient = ctx.createLinearGradient(
+        0,
+        0,
+        0,
+        viewHeight
+    );
+
+    gradient.addColorStop(0, palette.skyTop);
+    gradient.addColorStop(0.58, palette.skyMid);
+    gradient.addColorStop(1, palette.skyBottom);
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, viewWidth, viewHeight);
+
+    const drawMountainLayer = (
+        color,
+        parallax,
+        heightFactor,
+        phase
+    ) => {
+        ctx.beginPath();
+        ctx.moveTo(0, viewHeight * 0.58);
+
+        for (let x = 0; x <= viewWidth + 24; x += 18) {
+            const wx = x + cameraX * parallax;
+
+            const y =
+                viewHeight * 0.52 +
+                Math.sin(wx * 0.0021 + phase) * heightFactor +
+                Math.sin(wx * 0.0053 + phase * 1.8) * heightFactor * 0.28 +
+                Math.sin(wx * 0.0008 + phase) * heightFactor * 0.45;
+
+            ctx.lineTo(x, y);
+        }
+
+        ctx.lineTo(viewWidth, viewHeight);
+        ctx.lineTo(0, viewHeight);
+
+        ctx.closePath();
+
+        ctx.fillStyle = color;
+        ctx.fill();
+    };
+
+    drawMountainLayer(
+        palette.far,
+        0.12,
+        34 + getTrackTerrain().amplitude * 0.22,
+        0.6
+    );
+
+    drawMountainLayer(
+        palette.near,
+        0.22,
+        22 + getTrackTerrain().amplitude * 0.16,
+        2.1
+    );
+
+    if ([5, 8, 10].includes(currentTrackLevel)) {
+        ctx.fillStyle = currentTrackLevel === 5
+            ? 'rgba(235,248,255,0.48)'
+            : currentTrackLevel === 8
+                ? 'rgba(190,190,225,0.28)'
+                : 'rgba(255,190,140,0.25)';
+
+        for (let i = 0; i < 5; i++) {
+            const x =
+                (
+                    (i * 190 - cameraX * 0.16) %
+                    (viewWidth + 220) +
+                    viewWidth +
+                    220
+                ) %
+                (viewWidth + 220) - 100;
+
+            const peakY =
+                viewHeight * 0.42 +
+                Math.sin(i * 2.4 + currentTrackLevel) * 18;
+
+            const peakHeight =
+                32 +
+                (i % 3) * 13 +
+                currentTrackLevel * 1.2;
+
+            ctx.beginPath();
+            ctx.moveTo(x - 42, peakY + peakHeight);
+            ctx.lineTo(x, peakY - peakHeight * 0.35);
+            ctx.lineTo(x + 48, peakY + peakHeight);
+
+            ctx.closePath();
+            ctx.fill();
+        }
+    }
+}
+
+// =========================================
+// ОБЩАЯ ЛИНИЯ ТРАССЫ
+// =========================================
+
+function drawTrack() {
+    ctx.beginPath();
+
+    for (let x = 0; x <= viewWidth + 10; x += 8) {
+        const worldX = cameraX + x;
+        const y = getGroundY(worldX, 0);
+
+        if (x === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
+        }
+    }
+
+    const palette = getTrackPalette();
+
+    ctx.strokeStyle = palette.road;
+    ctx.lineWidth = 28;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    ctx.strokeStyle = palette.edge;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.strokeStyle = palette.accent;
+    ctx.lineWidth = 1;
+
+    ctx.setLineDash([14, 12]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+}
+
+// =========================================
+// ОТРИСОВКА ПРЕПЯТСТВИЙ
+// =========================================
+
+function drawObstacle(obstacle) {
+    const screenX = obstacle.x - cameraX;
+
+    if (
+        screenX < -100 ||
+        screenX > viewWidth + 100
+    ) {
+        return;
+    }
+
+    const groundY = getGroundY(obstacle.x, 0);
+
+    const width = obstacle.width;
+    const height = obstacle.height;
+
+    if (obstacle.type === 'pit') {
+        ctx.fillStyle = '#020617';
+
+        ctx.beginPath();
+
+        ctx.ellipse(
+            screenX + width / 2,
+            groundY + 2,
+            width / 2,
+            10,
+            0,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = 2;
+
+        ctx.beginPath();
+
+        ctx.moveTo(screenX, groundY - 1);
+        ctx.lineTo(screenX + 8, groundY + 7);
+
+        ctx.moveTo(screenX + width - 8, groundY + 7);
+        ctx.lineTo(screenX + width, groundY - 1);
+
+        ctx.stroke();
+
+        return;
+    }
+
+    if (obstacle.type === 'ramp') {
+        ctx.fillStyle = obstacle.color;
+
+        ctx.beginPath();
+
+        ctx.moveTo(screenX, groundY);
+        ctx.lineTo(screenX + width, groundY - height);
+        ctx.lineTo(screenX + width, groundY);
+
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        return;
+    }
+
+    if (obstacle.type === 'rock') {
+        ctx.fillStyle = obstacle.color;
+
+        ctx.beginPath();
+
+        ctx.moveTo(screenX, groundY);
+        ctx.lineTo(screenX + width * 0.18, groundY - height * 0.7);
+        ctx.lineTo(screenX + width * 0.55, groundY - height);
+        ctx.lineTo(screenX + width * 0.92, groundY - height * 0.6);
+        ctx.lineTo(screenX + width, groundY);
+
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = '#a8a29e';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        return;
+    }
+
+    if (obstacle.type === 'log') {
+        ctx.fillStyle = obstacle.color;
+
+        ctx.fillRect(
+            screenX,
+            groundY - height,
+            width,
+            height
+        );
+
+        ctx.strokeStyle = '#451a03';
+        ctx.lineWidth = 2;
+
+        ctx.strokeRect(
+            screenX,
+            groundY - height,
+            width,
+            height
+        );
+
+        ctx.strokeStyle = '#d97706';
+
+        ctx.beginPath();
+
+        ctx.arc(
+            screenX + 5,
+            groundY - height / 2,
+            5,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.stroke();
+
+        return;
+    }
+
+    if (obstacle.type === 'barrier') {
+        ctx.fillStyle = obstacle.color;
+
+        ctx.fillRect(
+            screenX,
+            groundY - height,
+            width,
+            height
+        );
+
+        ctx.fillStyle = '#fecaca';
+
+        for (let i = 0; i < 3; i++) {
+            ctx.fillRect(
+                screenX + 5 + i * 14,
+                groundY - height + 6,
+                7,
+                height - 12
+            );
+        }
+
+        ctx.strokeStyle = '#7f1d1d';
+        ctx.lineWidth = 2;
+
+        ctx.strokeRect(
+            screenX,
+            groundY - height,
+            width,
+            height
+        );
+    }
+}
+
+function drawObstacles() {
+    obstacles.forEach(drawObstacle);
+}
+
+// =========================================
+// ОТРИСОВКА ВЕЛОСИПЕДА
+// =========================================
+
+function drawBike(bike, label, color) {
+    const x = bike.x - cameraX;
+
+    const groundY = getGroundY(bike.x, 0);
+
+    const y =
+        groundY -
+        bike.jumpHeight -
+        bike.rampLift;
+
+    const wheelY = y - 8;
+
+    const rearWheelX = x - 17;
+    const frontWheelX = x + 17;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        x,
+        groundY - 1,
+        25,
+        4,
+        0,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#0f172a';
+
+    ctx.beginPath();
+
+    ctx.arc(rearWheelX, wheelY, 8, 0, Math.PI * 2);
+    ctx.arc(frontWheelX, wheelY, 8, 0, Math.PI * 2);
+
+    ctx.stroke();
+
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 1.5;
+
+    ctx.beginPath();
+
+    ctx.arc(rearWheelX, wheelY, 5, 0, Math.PI * 2);
+    ctx.arc(frontWheelX, wheelY, 5, 0, Math.PI * 2);
+
+    ctx.stroke();
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+
+    ctx.beginPath();
+
+    ctx.moveTo(rearWheelX, wheelY);
+    ctx.lineTo(x - 3, wheelY - 10);
+    ctx.lineTo(frontWheelX, wheelY);
+    ctx.lineTo(rearWheelX, wheelY);
+
+    ctx.moveTo(x - 3, wheelY - 10);
+    ctx.lineTo(x + 5, wheelY);
+    ctx.lineTo(rearWheelX, wheelY);
+
+    ctx.stroke();
+
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 2;
+
+    ctx.beginPath();
+
+    ctx.moveTo(x + 5, wheelY);
+    ctx.lineTo(frontWheelX, wheelY);
+    ctx.lineTo(frontWheelX + 2, wheelY - 13);
+    ctx.lineTo(frontWheelX + 8, wheelY - 13);
+
+    ctx.stroke();
+
+    ctx.strokeStyle = '#f8fafc';
+    ctx.lineWidth = 3;
+
+    ctx.beginPath();
+
+    ctx.moveTo(x - 2, wheelY - 10);
+    ctx.lineTo(x - 6, wheelY - 21);
+    ctx.lineTo(x + 7, wheelY - 16);
+    ctx.lineTo(frontWheelX + 2, wheelY - 13);
+
+    ctx.moveTo(x - 6, wheelY - 21);
+    ctx.lineTo(x - 12, wheelY - 14);
+
+    ctx.stroke();
+
+    ctx.fillStyle = color;
+
+    ctx.beginPath();
+    ctx.arc(x - 6, wheelY - 25, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Нитро.
+    if (bike.nitroTimer > 0) {
+        ctx.fillStyle = '#fbbf24';
+
+        ctx.beginPath();
+
+        ctx.moveTo(rearWheelX - 8, wheelY - 2);
+
+        ctx.lineTo(
+            rearWheelX - 25 - Math.random() * 7,
+            wheelY - 7
+        );
+
+        ctx.lineTo(rearWheelX - 17, wheelY + 3);
+
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#fb7185';
+
+        ctx.beginPath();
+
+        ctx.moveTo(rearWheelX - 8, wheelY - 1);
+        ctx.lineTo(rearWheelX - 18, wheelY - 4);
+        ctx.lineTo(rearWheelX - 12, wheelY + 2);
+
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    // Защитный щит.
+    if (bike.shieldActiveTimer > 0) {
+        ctx.strokeStyle = 'rgba(56,189,248,0.8)';
+        ctx.lineWidth = 2;
+
+        ctx.beginPath();
+
+        ctx.ellipse(
+            x,
+            wheelY - 4,
+            34,
+            25,
+            0,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.stroke();
+    }
+
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#f8fafc';
+
+    ctx.fillText(
+        label,
+        x,
+        wheelY - 36
+    );
+}
+
+// =========================================
+// HUD ГОНКИ
+// =========================================
+
+function drawRaceHUD() {
+    const racers = [
+        {
+            bike: playerBike,
+            label: 'ТЫ',
+            color: '#22c55e'
+        },
+
+        ...activeBots.map((bike, index) => {
+            const icon = bike.nitroTimer > 0
+                ? ' ⚡'
+                : bike.abilities?.superJumpUnlocked
+                    ? ' ✦'
+                    : bike.abilities?.shieldCharges > 0 ||
+                      bike.shieldActiveTimer > 0
+                        ? ' 🛡'
+                        : '';
+
+            return {
+                bike,
+                label: `БОТ ${index + 1}${icon}`,
+                color: bike.color
+            };
+        })
+    ];
+
+    const panelWidth = Math.min(
+        390,
+        viewWidth - 28
+    );
+
+    const rowHeight = 19;
+
+    const panelHeight =
+        35 + racers.length * rowHeight;
+
+    ctx.fillStyle = 'rgba(15,23,42,0.84)';
+
+    ctx.fillRect(
+        14,
+        12,
+        panelWidth,
+        panelHeight
+    );
+
+    ctx.font = 'bold 13px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#e2e8f0';
+
+    ctx.fillText(
+        currentTrack.name,
+        25,
+        30
+    );
+
+    const labelWidth = 53;
+    const percentWidth = 38;
+
+    const barX = 25 + labelWidth;
+
+    const barWidth = Math.max(
+        55,
+        panelWidth - labelWidth - percentWidth - 24
+    );
+
+    racers.forEach((racer, index) => {
+        const progress = clamp(
+            racer.bike.x / finishX,
+            0,
+            1
+        );
+
+        const y = 43 + index * rowHeight;
+
+        ctx.font = 'bold 10px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = racer.color;
+
+        ctx.fillText(
+            racer.label,
+            25,
+            y + 7
+        );
+
+        ctx.fillStyle = '#334155';
+
+        ctx.fillRect(
+            barX,
+            y,
+            barWidth,
+            7
+        );
+
+        ctx.fillStyle = racer.color;
+
+        ctx.fillRect(
+            barX,
+            y,
+            barWidth * progress,
+            7
+        );
+
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#e2e8f0';
+
+        ctx.fillText(
+            `${Math.round(progress * 100)}%`,
+            panelWidth + 14,
+            y + 7
+        );
+    });
+}
+
+// =========================================
+// ФИНИШНАЯ ЛИНИЯ
+// =========================================
+
+function drawFinishLine() {
+    const screenX = finishX - cameraX;
+
+    if (
+        screenX < -30 ||
+        screenX > viewWidth + 40
+    ) {
+        return;
+    }
+
+    const ground = getGroundY(finishX, 0);
+    const topY = ground - 65;
+
+    ctx.strokeStyle = '#f8fafc';
+    ctx.lineWidth = 3;
+
+    ctx.beginPath();
+
+    ctx.moveTo(screenX, topY);
+    ctx.lineTo(screenX, ground);
+
+    ctx.stroke();
+
+    const tile = 10;
+
+    for (let row = 0; row < 6; row++) {
+        for (let col = 0; col < 2; col++) {
+            ctx.fillStyle = (row + col) % 2 === 0
+                ? '#f8fafc'
+                : '#0f172a';
+
+            ctx.fillRect(
+                screenX + col * tile,
+                topY + row * tile,
+                tile,
+                tile
+            );
+        }
+    }
+}
+
+// =========================================
+// ОТРИСОВКА КАДРА
+// =========================================
+
+function render() {
+    if (
+        !ctx ||
+        !canvas ||
+        !playerBike ||
+        !botBike
+    ) {
+        return;
+    }
+
+    drawBackground();
+    drawTrack();
+    drawObstacles();
+    drawFinishLine();
+
+    activeBots.forEach((bike, index) => {
+        const label = bike.nitroTimer > 0
+            ? `БОТ ${index + 1} ⚡`
+            : bike.abilities?.superJumpUnlocked
+                ? `БОТ ${index + 1} ✦`
+                : bike.abilities?.shieldCharges > 0 ||
+                  bike.shieldActiveTimer > 0
+                    ? `БОТ ${index + 1} 🛡`
+                    : `БОТ ${index + 1}`;
+
+        drawBike(
+            bike,
+            label,
+            bike.color
+        );
+    });
+
+    drawBike(
+        playerBike,
+        'ТЫ',
+        '#22c55e'
+    );
+
+    drawRaceHUD();
+}
+
+// =========================================
+// ОБНОВЛЕНИЕ ГОНКИ
+// =========================================
+
+function update() {
+    if (!raceRunning || raceFinished) return;
+
+    frameCounter++;
+
+    updatePlayerPhysics();
+
+    if (raceFinished) return;
+
+    if (
+        playerBike.x >= finishX &&
+        playerBike.finishFrame === null
+    ) {
+        playerBike.finishFrame = frameCounter;
+    }
+
+    // Все активные боты обновляются независимо.
+    activeBots.forEach(bike => {
+        updateBotPhysics(bike);
+    });
+
+    updatePlayerCollisions();
+
+    if (raceFinished) return;
+
+    activeBots.forEach(bike => {
+        updateBotCollisions(bike);
+    });
+
+    const targetCamera = Math.max(
+        0,
+        playerBike.x - viewWidth * 0.34
+    );
+
+    cameraX +=
+        (targetCamera - cameraX) * 0.12;
+
+    checkFinish();
+}
+
+function gameLoop() {
+    if (!raceRunning || raceFinished) return;
+
+    update();
+    render();
+
+    if (raceRunning && !raceFinished) {
+        animationId = requestAnimationFrame(gameLoop);
+    }
+}
+
+// =========================================
+// РАЗМЕР CANVAS
+// =========================================
+
+function resizeCanvas() {
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+
+    const dpr = Math.max(
+        1,
+        Math.min(2, window.devicePixelRatio || 1)
+    );
+
+    viewWidth = Math.max(
+        320,
+        rect.width || canvas.clientWidth || 800
+    );
+
+    viewHeight = Math.max(
+        220,
+        rect.height || canvas.clientHeight || 420
+    );
+
+    canvas.width = Math.round(viewWidth * dpr);
+    canvas.height = Math.round(viewHeight * dpr);
+
+    ctx = canvas.getContext('2d');
+
+    if (ctx) {
+        ctx.setTransform(
+            dpr,
+            0,
+            0,
+            dpr,
+            0,
+            0
+        );
+    }
+}
+
+// =========================================
+// ЗАПУСК / ПЕРЕЗАПУСК ГОНКИ
+// =========================================
+
+export function initRace(onRaceEnd) {
+    if (animationId !== null) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+    }
+
+    canvas = document.getElementById('raceCanvas');
+
+    if (!canvas) {
+        console.error(
+            'Не найден canvas с id="raceCanvas".'
+        );
+
+        return;
+    }
+
+    callbackOnRaceEnd = onRaceEnd;
+
+    currentTrack = TRACKS_DB.find(
+        track => track.id === player.selectedTrack
+    ) || TRACKS_DB[0];
+
+    if (!currentTrack) {
+        console.error(
+            'В TRACKS_DB нет ни одной трассы.'
+        );
+
+        return;
+    }
+
+    // Сначала определяем уровень.
+    currentTrackLevel = getTrackLevel();
+
+    resizeCanvas();
+
+    finishX = Math.max(
+        6000,
+        (Number(currentTrack.length) || 15000) *
+        TRACK_MULTIPLIER - 1500
+    );
+
+    // Создаём игрока.
+    playerBike = createBike(false);
+
+    // Первый бот — текущий уровень.
+    botBike = createBike(true, 1);
+
+    // Начиная с трассы 3 появляется второй соперник.
+    // Его параметры берутся с предыдущей трассы.
+    additionalBots = currentTrackLevel >= 3
+        ? [createBike(true, 2)]
+        : [];
+
+    activeBots = [
+        botBike,
+        ...additionalBots
+    ];
+
+    cameraX = 0;
+    frameCounter = 0;
+
+    raceFinished = false;
+    raceRunning = true;
+
+    input = {
+        accelerating: false,
+        braking: false,
+        reversing: false,
+        jumpRequested: false
+    };
+
+    obstacles = createObstacles();
+
+    if (!resizeHandlerAttached) {
+        window.addEventListener(
+            'resize',
+            resizeCanvas
+        );
+
+        resizeHandlerAttached = true;
+    }
+
+    render();
+
+    animationId = requestAnimationFrame(gameLoop);
+}
+
+// =========================================
+// УПРАВЛЕНИЕ ИГРОКОМ ИЗ MAIN.JS
+// =========================================
+
+export function setAccelerating(value) {
+    input.accelerating = Boolean(value);
+}
+
+export function setBraking(value) {
+    input.braking = Boolean(value);
+}
+
+export function setReversing(value) {
+    input.reversing = Boolean(value);
+}
+
+export function triggerJump() {
+    if (!raceRunning || raceFinished) return;
+
+    input.jumpRequested = true;
+}
