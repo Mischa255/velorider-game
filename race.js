@@ -12,9 +12,20 @@ const BIKE_WIDTH = 46;
 const BIKE_HEIGHT = 24;
 const TRACK_MULTIPLIER = 3;
 const OBSTACLE_MULTIPLIER = 3;
-const RACE_ZOOM = 0.86;
+const RACE_ZOOM_DESKTOP = 0.86;
+const RACE_ZOOM_MOBILE_PORTRAIT = 0.60;
+const RACE_ZOOM_MOBILE_LANDSCAPE = 0.70;
 const PLAYER_LANE_OFFSET = 0;
 const BOT_LANE_OFFSET = 0;
+
+function getCameraZoom() {
+    const w = window.innerWidth || 800;
+    const h = window.innerHeight || 600;
+    if (w <= 520) return RACE_ZOOM_MOBILE_PORTRAIT;
+    if (w <= 920 && h <= 540) return RACE_ZOOM_MOBILE_LANDSCAPE;
+    if (w <= 768) return 0.68;
+    return RACE_ZOOM_DESKTOP;
+}
 
 const TRACK_BALANCE = {
     t1:  { speed: 0.70, accel: 0.65, jumpForce: 10.5 },
@@ -129,18 +140,6 @@ function getTrackLevel() {
 // НОВАЯ СИСТЕМА СЛОЖНОСТИ БОТОВ
 // =========================================
 
-// Первый бот использует характеристики текущей трассы.
-// Второй бот использует характеристики предыдущей трассы.
-//
-// Например:
-// Трасса 5:
-// Бот 1 = сложность трассы 5.
-// Бот 2 = сложность трассы 4.
-//
-// Трасса 8:
-// Бот 1 = сложность трассы 8.
-// Бот 2 = сложность трассы 7.
-
 function getBotDifficultyTrack(botIndex) {
     const currentIndex = TRACKS_DB.findIndex(
         track => track.id === currentTrack?.id
@@ -150,12 +149,10 @@ function getBotDifficultyTrack(botIndex) {
         return currentTrack;
     }
 
-    // Первый бот — текущий уровень.
     if (botIndex === 1) {
         return TRACKS_DB[currentIndex];
     }
 
-    // Второй бот — предыдущий уровень.
     if (botIndex === 2) {
         return TRACKS_DB[Math.max(0, currentIndex - 1)];
     }
@@ -163,7 +160,6 @@ function getBotDifficultyTrack(botIndex) {
     return TRACKS_DB[currentIndex];
 }
 
-// Получаем индивидуальные характеристики конкретного бота.
 function getBotDifficultyStats(botIndex) {
     const difficultyTrack = getBotDifficultyTrack(botIndex);
 
@@ -345,7 +341,6 @@ function createBike(isBot = false, botIndex = 1) {
         ? (botIndex === 2 ? 145 : 245)
         : 350;
 
-    // Получаем индивидуальный профиль сложности.
     const difficulty = isBot
         ? getBotDifficultyStats(botIndex)
         : null;
@@ -363,6 +358,7 @@ function createBike(isBot = false, botIndex = 1) {
         jumpHeight: 0,
         jumpVelocity: 0,
         jumpGravity: GRAVITY,
+        airY: null,
 
         grounded: true,
 
@@ -381,7 +377,6 @@ function createBike(isBot = false, botIndex = 1) {
 
         abilities: isBot ? getBotAbilities(botIndex) : getPlayerPartAbilities(),
 
-        // Индивидуальные характеристики бота.
         botDifficultyTrackId: difficulty?.trackId || null,
         botBaseMaxSpeed: difficulty?.maxSpeed || 0,
         botBaseAcceleration: difficulty?.acceleration || 0,
@@ -557,17 +552,31 @@ function finishRace(playerWon, reason = 'finish') {
 
 function updateJumpPhysics(bike) {
     if (!bike.isBot && bike.landingBoostCooldown > 0) bike.landingBoostCooldown--;
-    if (bike.grounded) return;
+    if (bike.grounded) {
+        bike.airY = null;
+        return;
+    }
 
-    bike.jumpHeight += bike.jumpVelocity;
+    const groundY = getGroundY(bike.x, 0);
 
+    if (!Number.isFinite(bike.airY)) {
+        bike.airY = groundY - bike.jumpHeight;
+    }
+
+    // Двигаем байк по честной баллистической параболе в мировых координатах
+    bike.airY -= bike.jumpVelocity;
     bike.jumpVelocity -= bike.jumpGravity || GRAVITY;
 
+    // Высота над текущей точкой рельефа (используется для коллизий и отрисовки)
+    bike.jumpHeight = groundY - bike.airY;
+
+    // Приземление, когда траектория пересекла линию рельефа
     if (bike.jumpHeight <= 0) {
         bike.jumpHeight = 0;
         bike.jumpVelocity = 0;
         bike.jumpGravity = GRAVITY;
         bike.grounded = true;
+        bike.airY = null;
         bike.rampLift = 0;
         bike.currentRamp = null;
         if (!bike.isBot && bike.abilities?.landingFrame && bike.landingBoostCooldown <= 0) {
@@ -581,12 +590,18 @@ function updateJumpPhysics(bike) {
 function startJump(bike, force, gravity = GRAVITY) {
     if (!bike || !bike.grounded) return false;
 
+    const groundY = getGroundY(bike.x, 0);
+    const prevGroundY = getGroundY(bike.previousX ?? bike.x, 0);
+
+    // Плавный учет уклона рельефа при отрыве, чтобы не втыкаться в крутой подъем
+    const terrainSlopeVy = clamp((prevGroundY - groundY) * 0.35, -1.5, 2.5);
+
     bike.grounded = false;
 
     bike.jumpVelocity = Math.max(
         4,
         Number(force) || 9
-    );
+    ) + terrainSlopeVy;
 
     bike.jumpGravity = clamp(
         Number(gravity) || GRAVITY,
@@ -594,7 +609,8 @@ function startJump(bike, force, gravity = GRAVITY) {
         GRAVITY
     );
 
-    bike.jumpHeight = 1;
+    bike.jumpHeight = 1 + (bike.rampLift || 0);
+    bike.airY = groundY - bike.jumpHeight;
     bike.rampLift = 0;
     bike.currentRamp = null;
 
@@ -693,6 +709,7 @@ function updateRamp(bike, isBot) {
             bike.rampLift,
             ramp.height * 0.85
         );
+        bike.airY = getGroundY(bike.x, 0) - bike.jumpHeight;
 
         bike.rampLift = 0;
         bike.grounded = false;
@@ -914,7 +931,6 @@ function updateBotAI(bike) {
         distance <= reactionDistance &&
         distance >= -BIKE_WIDTH * 0.2
     ) {
-        // Теперь сила прыжка учитывает индивидуальный уровень бота.
         const baseForce =
             Number(bike.botJumpForce) ||
             getTrackBalance(currentTrack.id).jumpForce;
@@ -1008,7 +1024,6 @@ function updateBotAbilities(bike) {
         bike.shieldActiveTimer--;
     }
 
-    // Нитро у первого бота открывается на трассе 5.
     if (
         bike.abilities?.nitroUnlocked &&
         bike.nitroTimer <= 0 &&
@@ -1038,7 +1053,6 @@ function updateBotPhysics(bike) {
     updateBotAbilities(bike);
     if (bike.springBoostTimer > 0) bike.springBoostTimer--;
 
-    // Используем индивидуальную скорость конкретного бота.
     const baseMaxSpeed = Math.max(
         1.5,
         Number(bike.botBaseMaxSpeed) ||
@@ -1054,7 +1068,6 @@ function updateBotPhysics(bike) {
     const maxSpeed =
         baseMaxSpeed * nitroMultiplier * springBoostMultiplier;
 
-    // У каждого бота собственное ускорение.
     const baseAcceleration = Math.max(
         0.012,
         Number(bike.botBaseAcceleration) || 0.02
@@ -1248,7 +1261,6 @@ function applyBotImpact(
 
     bike.impactSlowTimer = duration;
 
-    // Щит на трассе 10 поглощает часть последствий удара.
     if (
         bike.abilities?.shieldCharges > 0
     ) {
@@ -1840,7 +1852,6 @@ function drawBike(bike, label, color) {
         ctx.restore();
     }
 
-    // Compress only the frame and rider vertically; wheel circles stay round.
     ctx.save();
     ctx.translate(0, wheelY);
     ctx.scale(1, 0.78);
@@ -1925,7 +1936,6 @@ function drawBike(bike, label, color) {
     ctx.lineTo(seatX + 6, wheelY - 33);
     ctx.stroke();
 
-    // A compact rider leans forward and pedals with alternating legs.
     const hip = { x: seatX + 1, y: wheelY - 35 };
     const shoulder = { x: x + 1, y: wheelY - 46 };
     const head = { x: x + 4, y: wheelY - 53 };
@@ -1933,7 +1943,6 @@ function drawBike(bike, label, color) {
     const kneeB = { x: (hip.x + rightPedal.x) / 2 - 3, y: (hip.y + rightPedal.y) / 2 - 3 };
     const jersey = bike.isBot ? color : '#16a34a';
 
-    // Far leg, then near leg; knees and shoes follow the turning pedals.
     ctx.lineCap = 'round';
     ctx.strokeStyle = '#172033';
     ctx.lineWidth = 3.4;
@@ -1959,7 +1968,6 @@ function drawBike(bike, label, color) {
     ctx.fillStyle = '#cbd5e1';
     ctx.fillRect(rightPedal.x - 2, rightPedal.y - 1.2, 5, 2.4);
 
-    // Jersey has a clear shoulder and waist shape instead of a single stick line.
     ctx.fillStyle = jersey;
     ctx.beginPath();
     ctx.moveTo(shoulder.x - 4, shoulder.y - 1);
@@ -1978,7 +1986,6 @@ function drawBike(bike, label, color) {
     ctx.lineTo(hip.x, hip.y - 1);
     ctx.stroke();
 
-    // Arms bend toward the grips; the hands meet the handlebar.
     const elbow = { x: x + 10, y: wheelY - 42 };
     const hand = { x: headX + 13, y: wheelY - 37 };
     ctx.strokeStyle = jersey;
@@ -1998,7 +2005,6 @@ function drawBike(bike, label, color) {
     ctx.arc(hand.x, hand.y, 1.8, 0, Math.PI * 2);
     ctx.fill();
 
-    // Neck, face and helmet are drawn as separate shapes for a readable rider.
     ctx.strokeStyle = '#f1c9a5';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -2020,7 +2026,6 @@ function drawBike(bike, label, color) {
     ctx.lineTo(head.x + 3.5, head.y - 2.2);
     ctx.stroke();
 
-    // Handlebar is above the saddle and the rider's hands reach it.
     ctx.strokeStyle = visuals.handlebarColor || '#f8fafc';
     ctx.lineWidth = visuals.handlebarWidth || 2;
     ctx.beginPath();
@@ -2311,7 +2316,6 @@ function update() {
         playerBike.finishFrame = frameCounter;
     }
 
-    // Все активные боты обновляются независимо.
     activeBots.forEach(bike => {
         updateBotPhysics(bike);
     });
@@ -2324,9 +2328,12 @@ function update() {
         updateBotCollisions(bike);
     });
 
+    const isMobileScreen = (window.innerWidth || 800) <= 768;
+    const cameraLead = isMobileScreen ? 0.24 : 0.34;
+
     const targetCamera = Math.max(
         0,
-        playerBike.x - viewWidth * 0.34
+        playerBike.x - viewWidth * cameraLead
     );
 
     cameraX +=
@@ -2360,10 +2367,12 @@ function resizeCanvas() {
         Math.min(2, window.devicePixelRatio || 1)
     );
 
+    const zoom = getCameraZoom();
+
     const canvasWidth = Math.max(320, rect.width || canvas.clientWidth || 800);
     const canvasHeight = Math.max(220, rect.height || canvas.clientHeight || 420);
-    viewWidth = canvasWidth / RACE_ZOOM;
-    viewHeight = canvasHeight / RACE_ZOOM;
+    viewWidth = canvasWidth / zoom;
+    viewHeight = canvasHeight / zoom;
 
     canvas.width = Math.round(canvasWidth * dpr);
     canvas.height = Math.round(canvasHeight * dpr);
@@ -2372,10 +2381,10 @@ function resizeCanvas() {
 
     if (ctx) {
         ctx.setTransform(
-            dpr * RACE_ZOOM,
+            dpr * zoom,
             0,
             0,
-            dpr * RACE_ZOOM,
+            dpr * zoom,
             0,
             0
         );
@@ -2416,10 +2425,10 @@ export function initRace(onRaceEnd) {
         return;
     }
 
-    // Сначала определяем уровень.
     currentTrackLevel = getTrackLevel();
 
     resizeCanvas();
+    setTimeout(resizeCanvas, 50);
 
     finishX = Math.max(
         6000,
@@ -2427,14 +2436,10 @@ export function initRace(onRaceEnd) {
         TRACK_MULTIPLIER - 1500
     );
 
-    // Создаём игрока.
     playerBike = createBike(false);
 
-    // Первый бот — текущий уровень.
     botBike = createBike(true, 1);
 
-    // Начиная с трассы 3 появляется второй соперник.
-    // Его параметры берутся с предыдущей трассы.
     additionalBots = currentTrackLevel >= 3
         ? [createBike(true, 2)]
         : [];
@@ -2501,7 +2506,10 @@ export function setReversing(value) {
 }
 
 export function triggerJump() {
-    if (!raceRunning || raceFinished) return;
+    if (!raceRunning || raceFinished || !playerBike) return;
 
-    input.jumpRequested = true;
+    // Разрешаем прыжок только на земле или за мгновение до приземления
+    if (playerBike.grounded || (playerBike.jumpVelocity < 0 && playerBike.jumpHeight < 6)) {
+        input.jumpRequested = true;
+    }
 }

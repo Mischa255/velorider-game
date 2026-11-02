@@ -1,146 +1,239 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
     <title>VeloRider: Custom Garage</title>
 
+
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
     <script>
         if (window.Telegram && window.Telegram.WebApp) {
-            window.Telegram.WebApp.ready();
-            window.Telegram.WebApp.expand();
+            const tg = window.Telegram.WebApp;
+
+            tg.ready();
+            tg.expand();
+
+            // Отключение свайпа вниз для сворачивания Mini App
+            if (typeof tg.disableVerticalSwipes === 'function') {
+                tg.disableVerticalSwipes();
+            }
+
+            // Полноэкранный режим на мобильных устройствах
+            if (typeof tg.requestFullscreen === 'function' && window.innerWidth <= 768) {
+                try {
+                    tg.requestFullscreen();
+                } catch (e) {
+                    console.warn('Fullscreen недоступен:', e);
+                }
+            }
         }
     </script>
 
+
     <script src="https://cdn.tailwindcss.com"></script>
+
 
     <link rel="stylesheet" href="style.css?v=13">
     <link rel="stylesheet" href="tracks-overrides.css?v=13">
     <link rel="stylesheet" href="mobile-fix.css?v=13">
+
 </head>
+
 
 <body class="bg-gray-900 text-white font-sans h-screen flex flex-col select-none overflow-hidden">
 
-    <!-- =====================================
-         ВЕРХНЯЯ ПАНЕЛЬ
-    ====================================== -->
 
-    <header class="bg-gray-800 p-4 flex justify-between items-center shadow-lg border-b border-gray-700 z-10">
+<!-- =====================================
+     ВЕРХНЯЯ ПАНЕЛЬ
+====================================== -->
 
-        <div class="text-2xl font-black tracking-wider text-green-500 italic">
-            VELO<span class="text-white">RIDER</span>
+
+<header class="bg-gray-800 p-4 flex justify-between items-center shadow-lg border-b border-gray-700 z-10">
+
+
+    <div class="text-2xl font-black tracking-wider text-green-500 italic">
+
+        VELO<span class="text-white">RIDER</span>
+
+    </div>
+
+
+
+    <div class="flex flex-wrap gap-6 text-lg font-medium bg-gray-900 px-4 py-2 rounded-lg border border-gray-700 shadow-inner">
+
+
+        <!-- Монеты -->
+
+        <div class="flex items-center gap-2">
+
+            <span>🪙</span>
+
+            <span class="text-gray-400 text-sm uppercase tracking-wide">
+                Монеты:
+            </span>
+
+            <span id="coins-count" class="font-bold text-yellow-400">
+                1000
+            </span>
+
         </div>
 
-        <div class="flex flex-wrap gap-6 text-lg font-medium bg-gray-900 px-4 py-2 rounded-lg border border-gray-700 shadow-inner">
 
-            <!-- Монеты -->
-            <div class="flex items-center gap-2">
-                <span>🪙</span>
-                <span class="text-gray-400 text-sm uppercase tracking-wide">
-                    Монеты:
-                </span>
-                <span id="coins-count" class="font-bold text-yellow-400">
-                    1000
-                </span>
-            </div>
 
-            <!-- Велокупоны -->
-            <div class="flex items-center gap-2">
-                <span>🎁</span>
-                <span class="text-gray-400 text-sm uppercase tracking-wide">
-                    Велокупоны:
-                </span>
-                <span id="coupons-count" class="font-bold text-emerald-400">
-                    0
-                </span>
-            </div>
+        <!-- Велокупоны -->
+
+        <div class="flex items-center gap-2">
+
+            <span>🎁</span>
+
+            <span class="text-gray-400 text-sm uppercase tracking-wide">
+                Велокупоны:
+            </span>
+
+            <span id="coupons-count" class="font-bold text-emerald-400">
+                0
+            </span>
 
         </div>
 
-    </header>
+
+    </div>
 
 
-    <!-- =====================================
-         ОСНОВНОЙ КОНТЕЙНЕР
-    ====================================== -->
-
-    <div class="flex flex-1 overflow-hidden">
-
-        <!-- =================================
-             БОКОВОЕ МЕНЮ
-        ================================== -->
-
-        <aside class="w-64 shrink-0 bg-gray-800 p-4 flex flex-col gap-3 border-r border-gray-700 z-10 shadow-xl overflow-y-auto">
-
-            <div class="text-xs text-gray-500 font-bold uppercase tracking-wider mb-2 px-2">
-                Меню управления
-            </div>
-
-            <!-- Гараж -->
-            <button
-                onclick="showScreen('garage')"
-                class="nav-btn bg-gray-700 hover:bg-gray-600 active:bg-gray-500 p-4 rounded-xl text-left transition duration-200 flex items-center gap-3 border border-gray-600">
-
-                <span class="text-xl">🔧</span>
-                Гараж
-            </button>
-
-            <!-- Модернизация -->
-            <button
-                onclick="showScreen('upgrade')"
-                class="nav-btn bg-gray-700 hover:bg-gray-600 active:bg-gray-500 p-4 rounded-xl text-left transition duration-200 flex items-center gap-3 border border-gray-600">
-
-                <span class="text-xl">🔩</span>
-                Модернизация
-            </button>
-
-            <!-- Магазин -->
-            <button
-                onclick="showScreen('shop')"
-                class="nav-btn bg-gray-700 hover:bg-gray-600 active:bg-gray-500 p-4 rounded-xl text-left transition duration-200 flex items-center gap-3 border border-gray-600">
-
-                <span class="text-xl">📦</span>
-                Магазин
-            </button>
-
-            <!-- Трассы -->
-            <button
-                onclick="showScreen('tracks')"
-                class="nav-btn bg-gray-700 hover:bg-gray-600 active:bg-gray-500 p-4 rounded-xl text-left transition duration-200 flex items-center gap-3 border border-gray-600">
-
-                <span class="text-xl">🗺️</span>
-                Трассы
-            </button>
-
-            <!-- Гонка и сброс прогресса -->
-            <div class="mt-auto pt-4">
-
-                <button
-                    onclick="showScreen('race')"
-                    class="nav-btn bg-green-600 hover:bg-green-500 active:bg-green-400 p-4 rounded-xl text-center w-full transition duration-200 flex items-center justify-center gap-2 font-bold shadow-[0_0_15px_rgba(22,163,74,0.4)]">
-
-                    <span class="text-xl">🏁</span>
-                    В ГОНКУ
-
-                </button>
-
-                <button
-                    type="button"
-                    onclick="resetProgressRequest()"
-                    class="w-full mt-3 px-4 py-3 rounded-xl border border-red-800 bg-red-950/50 hover:bg-red-900/70 active:bg-red-800 text-red-300 text-sm font-bold transition flex items-center justify-center gap-2">
-
-                    <span>↻</span>
-                    Сбросить прогресс
-
-                </button>
-
-            </div>
-
-        </aside>
+</header>
 
 
+
+
+<!-- =====================================
+     ОСНОВНОЙ КОНТЕЙНЕР
+====================================== -->
+
+
+<div class="flex flex-1 overflow-hidden">
+
+
+
+<!-- =================================
+     БОКОВОЕ МЕНЮ
+================================== -->
+
+
+<aside class="w-64 shrink-0 bg-gray-800 p-4 flex flex-col gap-3 border-r border-gray-700 z-10 shadow-xl overflow-y-auto">
+
+
+    <div class="text-xs text-gray-500 font-bold uppercase tracking-wider mb-2 px-2">
+
+        Меню управления
+
+    </div>
+
+
+
+    <!-- Гараж -->
+
+    <button
+        onclick="showScreen('garage')"
+        class="nav-btn bg-gray-700 hover:bg-gray-600 active:bg-gray-500 p-4 rounded-xl text-left transition duration-200 flex items-center gap-3 border border-gray-600">
+
+        <span class="text-xl">🔧</span>
+
+        Гараж
+
+    </button>
+
+
+
+
+    <!-- Модернизация -->
+
+
+    <button
+        onclick="showScreen('upgrade')"
+        class="nav-btn bg-gray-700 hover:bg-gray-600 active:bg-gray-500 p-4 rounded-xl text-left transition duration-200 flex items-center gap-3 border border-gray-600">
+
+        <span class="text-xl">🔩</span>
+
+        Модернизация
+
+    </button>
+
+
+
+
+    <!-- Магазин -->
+
+
+    <button
+        onclick="showScreen('shop')"
+        class="nav-btn bg-gray-700 hover:bg-gray-600 active:bg-gray-500 p-4 rounded-xl text-left transition duration-200 flex items-center gap-3 border border-gray-600">
+
+        <span class="text-xl">📦</span>
+
+        Магазин
+
+    </button>
+
+
+
+
+    <!-- Трассы -->
+
+
+    <button
+        onclick="showScreen('tracks')"
+        class="nav-btn bg-gray-700 hover:bg-gray-600 active:bg-gray-500 p-4 rounded-xl text-left transition duration-200 flex items-center gap-3 border border-gray-600">
+
+        <span class="text-xl">🗺️</span>
+
+        Трассы
+
+    </button>
+
+
+
+
+    <!-- Гонка + сброс -->
+
+
+    <div class="mt-auto pt-4">
+
+
+        <button
+            onclick="showScreen('race')"
+            class="nav-btn bg-green-600 hover:bg-green-500 active:bg-green-400 p-4 rounded-xl text-center w-full transition duration-200 flex items-center justify-center gap-2 font-bold shadow-[0_0_15px_rgba(22,163,74,0.4)]">
+
+            <span class="text-xl">🏁</span>
+
+            В ГОНКУ
+
+        </button>
+
+
+
+
+        <button
+            type="button"
+            onclick="resetProgressRequest()"
+            class="w-full mt-3 px-4 py-3 rounded-xl border border-red-800 bg-red-950/50 hover:bg-red-900/70 active:bg-red-800 text-red-300 text-sm font-bold transition flex items-center justify-center gap-2">
+
+
+            <span>↻</span>
+
+            Сбросить прогресс
+
+
+        </button>
+
+
+    </div>
+
+
+</aside>
         <!-- =================================
              ОСНОВНОЙ ЭКРАН
         ================================== -->
@@ -154,212 +247,443 @@
 
             <div id="screen-garage" class="screen flex gap-6 h-full">
 
+
                 <div class="flex-1 flex flex-col bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-2xl relative overflow-hidden">
+
 
                     <div class="absolute -right-20 -bottom-20 text-gray-700 opacity-20 text-[200px] leading-none">
                         🚲
                     </div>
 
+
+
                     <h2 class="text-3xl font-bold mb-6 border-b border-gray-700 pb-4 text-gray-100 relative z-10">
+
                         Мой Байк
+
                     </h2>
 
+
+
                     <!-- Установленные детали -->
-                    <div id="equipped-parts" class="flex flex-col gap-3 relative z-10 overflow-y-auto">
+
+                    <div 
+                        id="equipped-parts" 
+                        class="flex flex-col gap-3 relative z-10 overflow-y-auto">
                     </div>
 
+
+
+
                     <!-- Характеристики -->
+
                     <div class="mt-auto pt-6 border-t border-gray-700 relative z-10">
 
+
                         <h3 class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">
+
                             Характеристики
+
                         </h3>
+
+
 
                         <div class="flex gap-4">
 
+
+
                             <div class="flex-1 bg-gray-900 p-4 rounded-xl border border-gray-700 flex flex-col items-center justify-center">
 
+
                                 <span class="text-gray-400 text-sm mb-1">
+
                                     Макс. Скорость
+
                                 </span>
 
-                                <span id="stat-speed" class="text-3xl font-black text-blue-400">
+
+                                <span 
+                                    id="stat-speed" 
+                                    class="text-3xl font-black text-blue-400">
+
                                     0
+
                                 </span>
+
 
                             </div>
+
+
+
 
                             <div class="flex-1 bg-gray-900 p-4 rounded-xl border border-gray-700 flex flex-col items-center justify-center">
 
+
                                 <span class="text-gray-400 text-sm mb-1">
+
                                     Ускорение
+
                                 </span>
 
-                                <span id="stat-accel" class="text-3xl font-black text-orange-400">
+
+                                <span 
+                                    id="stat-accel" 
+                                    class="text-3xl font-black text-orange-400">
+
                                     0
+
                                 </span>
+
 
                             </div>
+
 
                         </div>
 
+
                     </div>
+
 
                 </div>
 
+
             </div>
+
+
+
+
 
 
             <!-- =================================
                  ЭКРАН МОДЕРНИЗАЦИИ
             ================================== -->
 
-            <div id="screen-upgrade" class="screen hidden flex flex-col h-full gap-5">
 
-                <!-- Заголовок -->
+            <div 
+                id="screen-upgrade" 
+                class="screen hidden flex flex-col h-full gap-5">
+
+
+
                 <div class="flex flex-wrap justify-between items-center gap-3">
 
+
+
                     <div>
+
                         <h2 class="text-3xl font-black text-gray-100">
+
                             🔩 Модернизация велосипеда
+
                         </h2>
 
+
+
                         <p class="text-gray-400 mt-2">
+
                             Улучшай компоненты и собирай мощный велосипед.
+
                         </p>
+
+
                     </div>
+
+
+
 
                     <div class="bg-gray-800 border border-gray-700 rounded-xl px-5 py-3">
+
+
                         <div class="text-xs text-gray-400 uppercase">
+
                             Баланс
+
                         </div>
 
+
+
                         <div class="text-xl font-black text-yellow-400">
-                            🪙 <span id="upgrade-coins">1000</span>
+
+                            🪙 
+                            <span id="upgrade-coins">
+
+                                1000
+
+                            </span>
+
                         </div>
+
+
                     </div>
+
 
                 </div>
 
 
-                <!-- Основная область -->
+
+
+
+
                 <div class="flex flex-1 min-h-0 gap-5">
 
 
+
                     <!-- Категории деталей -->
+
+
                     <div class="w-56 shrink-0 bg-gray-800 border border-gray-700 rounded-2xl p-3 overflow-y-auto">
 
+
                         <h3 class="text-xs text-gray-400 font-bold uppercase tracking-wider mb-4 px-2">
+
                             Компоненты
+
                         </h3>
 
-                        <div id="upgrade-categories" class="flex flex-col gap-2">
 
-                            <!-- Заполняется через main.js -->
+
+                        <div 
+                            id="upgrade-categories" 
+                            class="flex flex-col gap-2">
 
                         </div>
+
 
                     </div>
 
 
-                    <!-- Список комплектующих -->
+
+
+
+
+                    <!-- Список деталей -->
+
+
                     <div class="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-2xl p-5 overflow-y-auto">
+
+
 
                         <div class="flex justify-between items-center mb-5 gap-3">
 
+
+
                             <div>
-                                <h3 id="upgrade-category-title" class="text-2xl font-black">
+
+
+                                <h3 
+                                    id="upgrade-category-title" 
+                                    class="text-2xl font-black">
+
                                     Рамы
+
                                 </h3>
 
+
+
                                 <p class="text-sm text-gray-400 mt-1">
+
                                     Выбери подходящую деталь.
+
                                 </p>
+
+
                             </div>
 
+
+
                             <div class="text-3xl">
+
                                 ⚙️
+
                             </div>
+
 
                         </div>
 
 
-                        <!-- Карточки компонентов -->
+
+
+
                         <div
                             id="upgrade-parts"
                             class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
 
-                            <!-- Заполняется через main.js -->
 
                         </div>
 
+
+
                     </div>
+
 
                 </div>
 
+
+
             </div>
+
+
+
+
 
 
             <!-- =================================
                  ЭКРАН МАГАЗИНА
             ================================== -->
 
-            <div id="screen-shop" class="screen hidden flex flex-col items-center justify-start h-full overflow-y-auto py-4">
+
+            <div 
+                id="screen-shop" 
+                class="screen hidden flex flex-col items-center justify-start h-full overflow-y-auto py-4">
+
+
 
                 <h2 class="text-4xl font-black mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">
+
                     Магазин Контейнеров
+
                 </h2>
 
+
+
+
                 <p class="text-gray-400 text-sm mb-4 text-center">
+
                     Открывай контейнеры за монеты или велокупоны и получай детали доступных редкостей
+
                 </p>
 
-                <!-- Сетка контейнеров из CONTAINERS_DB -->
+
+
+
+
                 <div
                     id="container-shop-list"
                     class="w-full max-w-6xl grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mt-4 px-4">
+
+
                 </div>
 
-                <!-- Результат открытия -->
+
+
+
+
                 <div
                     id="loot-result"
                     class="mt-8 text-2xl font-black min-h-12 text-center drop-shadow-md">
+
+
                 </div>
 
+
+
             </div>
-
-
-            <!-- =================================
+                        <!-- =================================
                  ЭКРАН ТРАСС
             ================================== -->
 
-            <div id="screen-tracks" class="screen tracks-screen hidden flex flex-col h-full">
+
+            <div 
+                id="screen-tracks" 
+                class="screen tracks-screen hidden flex flex-col h-full">
+
+
 
                 <div class="tracks-heading">
+
+
                     <div class="tracks-heading__text">
-                        <span class="tracks-kicker">VELO RIDER / MAP SELECT</span>
-                        <h2>Выбор трассы</h2>
-                        <p>Выбери доступный маршрут и проверь награды перед стартом.</p>
+
+
+                        <span class="tracks-kicker">
+
+                            VELO RIDER / MAP SELECT
+
+                        </span>
+
+
+
+                        <h2>
+
+                            Выбор трассы
+
+                        </h2>
+
+
+
+                        <p>
+
+                            Выбери доступный маршрут и проверь награды перед стартом.
+
+                        </p>
+
+
                     </div>
+
+
+
 
                     <div class="tracks-total-box">
-                        <strong id="tracks-total">10</strong>
-                        <span>локаций</span>
+
+
+                        <strong id="tracks-total">
+
+                            10
+
+                        </strong>
+
+
+                        <span>
+
+                            локаций
+
+                        </span>
+
+
                     </div>
+
+
+
                 </div>
 
-                <div id="tracks-list" class="tracks-grid" aria-label="Список трасс"></div>
+
+
+
+                <div 
+                    id="tracks-list" 
+                    class="tracks-grid" 
+                    aria-label="Список трасс">
+
+                </div>
+
+
 
             </div>
+
+
+
+
+
+
 
 
             <!-- =================================
                  ЭКРАН ГОНКИ
             ================================== -->
 
-            <div id="screen-race" class="screen hidden flex flex-col h-full gap-4">
 
-                <div class="flex-1 min-h-0 bg-gray-900 rounded-2xl relative overflow-hidden border-2 border-gray-700 shadow-2xl">
+            <div 
+                id="screen-race" 
+                class="screen hidden flex flex-col h-full gap-4">
+
+
+
+                <div 
+                    class="flex-1 min-h-0 bg-gray-900 rounded-2xl relative overflow-hidden border-2 border-gray-700 shadow-2xl">
+
+
+
+
 
                     <canvas
                         id="raceCanvas"
@@ -367,115 +691,271 @@
                     </canvas>
 
 
+
+
+
+
+
                     <!-- ОКНО РЕЗУЛЬТАТА -->
+
+
                     <div
                         id="race-ui"
                         class="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm hidden z-20">
 
-                        <div class="text-center bg-gray-800 p-10 rounded-3xl border border-gray-700 shadow-2xl">
+
+
+
+
+                        <div 
+                            class="text-center bg-gray-800 p-10 rounded-3xl border border-gray-700 shadow-2xl">
+
+
+
+
 
                             <h3
                                 id="race-result-title"
                                 class="text-5xl font-black mb-4 tracking-wide">
+
                                 Победа!
+
                             </h3>
+
+
+
+
 
                             <p
                                 id="race-reward"
                                 class="text-2xl mb-8 font-bold text-yellow-400">
+
                                 +500 🪙
+
                             </p>
+
+
+
+
+
+
 
                             <button
                                 onclick="resetRace()"
                                 class="bg-green-600 hover:bg-green-500 px-10 py-4 rounded-xl font-bold text-xl shadow-lg transition-transform hover:scale-105 active:scale-95">
 
+
+
                                 В Гараж
+
+
 
                             </button>
 
+
+
+
                         </div>
+
+
 
                     </div>
 
+
+
+
+
+
                 </div>
+
+
+
+
+
+
+
 
 
                 <!-- =================================
                      КНОПКИ УПРАВЛЕНИЯ
                 ================================== -->
 
-                <div id="race-controls" class="grid grid-cols-4 gap-3 h-24 shrink-0">
+
+
+                <div 
+                    id="race-controls" 
+                    class="grid grid-cols-4 gap-3 h-24 shrink-0">
+
+
+
+
+
 
                     <!-- Назад -->
+
+
                     <button
                         id="btn-reverse"
                         class="bg-purple-700 active:bg-purple-800 rounded-2xl font-black text-sm md:text-xl shadow-[0_8px_0_#581c87] active:shadow-[0_0px_0_#581c87] active:translate-y-2 transition-all flex flex-col items-center justify-center text-purple-100 border-t-2 border-purple-500/50">
 
-                        <span>⏪ НАЗАД</span>
+
+
+                        <span>
+
+                            ⏪ НАЗАД
+
+                        </span>
+
+
 
                         <span class="text-xs font-normal opacity-70 mt-1">
+
                             (A / ⬅️)
+
                         </span>
+
+
 
                     </button>
 
 
+
+
+
+
+
+
+
                     <!-- Тормоз -->
+
+
                     <button
                         id="btn-brake"
                         class="bg-red-700 active:bg-red-800 rounded-2xl font-black text-sm md:text-xl shadow-[0_8px_0_#7f1d1d] active:shadow-[0_0px_0_#7f1d1d] active:translate-y-2 transition-all flex flex-col items-center justify-center text-red-100 border-t-2 border-red-500/50">
 
-                        <span>🛑 ТОРМОЗ</span>
 
-                        <span class="text-xs font-normal opacity-70 mt-1">
-                            (S / ⬇️)
+
+                        <span>
+
+                            🛑 ТОРМОЗ
+
                         </span>
 
+
+
+                        <span class="text-xs font-normal opacity-70 mt-1">
+
+                            (S / ⬇️)
+
+                        </span>
+
+
+
                     </button>
+
+
+
+
+
+
+
 
 
                     <!-- Прыжок -->
+
+
                     <button
                         id="btn-jump"
-                        class="bg-blue-600 active:bg-blue-700 rounded-2xl font-black text-sm md:text-xl shadow-[0_8px_0_#1e3a8a] active:shadow-[0_0px_0_#1e3a8a] active:translate-y-2 transition-all flex flex-col items-center justify-center text-blue-50 border-t-2 border-blue-400/50">
+                        class="bg-blue-600 active:bg-blue-700 rounded-2xl font-black text-sm md:text-xl shadow-[0_8_0_#1e3a8a] active:shadow-[0_0px_0_#1e3a8a] active:translate-y-2 transition-all flex flex-col items-center justify-center text-blue-50 border-t-2 border-blue-400/50">
 
-                        <span>⬆️ ПРЫЖОК</span>
 
-                        <span class="text-xs font-normal opacity-70 mt-1">
-                            (W / ПРОБЕЛ)
+
+                        <span>
+
+                            ⬆️ ПРЫЖОК
+
                         </span>
 
+
+
+                        <span class="text-xs font-normal opacity-70 mt-1">
+
+                            (W / ПРОБЕЛ)
+
+                        </span>
+
+
+
                     </button>
+
+
+
+
+
+
 
 
                     <!-- Газ -->
+
+
                     <button
                         id="btn-accelerate"
-                        class="bg-green-600 active:bg-green-700 rounded-2xl font-black text-sm md:text-xl shadow-[0_8px_0_#14532d] active:shadow-[0_0px_0_#14532d] active:translate-y-2 transition-all flex flex-col items-center justify-center text-green-50 border-t-2 border-green-400/50">
+                        class="bg-green-600 active:bg-green-700 rounded-2xl font-black text-sm md:text-xl shadow-[0_8_0_#14532d] active:shadow-[0_0px_0_#14532d] active:translate-y-2 transition-all flex flex-col items-center justify-center text-green-50 border-t-2 border-green-400/50">
 
-                        <span>ГАЗ ⏩</span>
+
+
+                        <span>
+
+                            ГАЗ ⏩
+
+                        </span>
+
+
 
                         <span class="text-xs font-normal opacity-70 mt-1">
+
                             (D / ➡️)
+
                         </span>
+
+
 
                     </button>
 
+
+
+
                 </div>
+
+
+
+
 
             </div>
 
+
+
+
+
         </main>
 
+
     </div>
+
+
+
+
 
 
     <!-- =====================================
          ГЛАВНЫЙ JAVASCRIPT
     ====================================== -->
 
+
     <script type="module" src="main.js?v=13"></script>
 
+
+
 </body>
+
 </html>

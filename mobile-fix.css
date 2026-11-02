@@ -1,6 +1,6 @@
 /* =========================================
    VeloRider — MOBILE FIX
-   Исправление кнопок управления на телефонах
+   Исправление кнопок управления и полноэкранный режим гонки на телефонах
 ========================================= */
 
 
@@ -74,6 +74,21 @@
 
 
     /* =====================================
+       ПОЛНОЭКРАННЫЙ РЕЖИМ ВО ВРЕМЯ ГОНКИ
+       Скрываем шапку и нижнее меню, чтобы карта занимала весь экран
+    ===================================== */
+
+    body:has(#screen-race.active) > header,
+    body:has(#screen-race.active) > .flex.flex-1.overflow-hidden > aside {
+        display: none !important;
+    }
+
+    body:has(#screen-race.active) > .flex.flex-1.overflow-hidden > main {
+        padding: 4px !important;
+    }
+
+
+    /* =====================================
        ЭКРАН ГОНКИ
     ===================================== */
 
@@ -85,10 +100,10 @@
         height: 100%;
         min-height: 0;
 
-        gap: 8px !important;
+        gap: 6px !important;
 
         padding-bottom:
-            calc(82px + env(safe-area-inset-bottom, 0px));
+            calc(68px + env(safe-area-inset-bottom, 0px)) !important;
     }
 
     /* Игровое поле */
@@ -96,6 +111,7 @@
         flex: 1 1 auto;
         min-height: 0;
         width: 100%;
+        border-radius: 12px;
     }
 
     #raceCanvas {
@@ -113,17 +129,18 @@
     #race-controls {
         position: fixed !important;
 
-        left: 8px !important;
-        right: 8px !important;
+        left: 6px !important;
+        right: 6px !important;
 
         bottom:
-            calc(env(safe-area-inset-bottom, 0px) + 8px) !important;
+            calc(env(safe-area-inset-bottom, 0px) + 6px) !important;
 
         width: auto !important;
-        height: 66px !important;
+        height: 58px !important;
 
         display: grid !important;
         grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        grid-template-rows: 1fr !important;
 
         gap: 6px !important;
         padding: 0 !important;
@@ -142,11 +159,12 @@
 
         width: 100% !important;
         min-width: 0 !important;
-        height: 64px !important;
+        height: 56px !important;
+        min-height: 56px !important;
 
         padding: 4px 2px !important;
 
-        font-size: clamp(9px, 2.8vw, 13px) !important;
+        font-size: clamp(10px, 2.9vw, 13px) !important;
         line-height: 1.1;
 
         border-radius: 12px !important;
@@ -165,7 +183,7 @@
 
     /* Основная надпись */
     #race-controls button span:first-child {
-        font-size: clamp(9px, 2.8vw, 13px);
+        font-size: clamp(10px, 2.9vw, 13px);
         white-space: normal;
         text-align: center;
     }
@@ -173,8 +191,7 @@
 
     /* Подсказки клавиш */
     #race-controls button span:last-child {
-        font-size: 8px;
-        margin-top: 3px;
+        display: none !important;
     }
 
 
@@ -208,17 +225,23 @@
     and (max-height: 520px)
     and (orientation: landscape) {
 
+    body:has(#screen-race.active) > header,
+    body:has(#screen-race.active) > .flex.flex-1.overflow-hidden > aside {
+        display: none !important;
+    }
+
     #screen-race.active {
-        padding-bottom: 68px;
+        padding-bottom: 58px !important;
     }
 
     #race-controls {
-        height: 54px !important;
-        bottom: 5px !important;
+        height: 48px !important;
+        bottom: 4px !important;
     }
 
     #race-controls button {
-        height: 52px !important;
+        height: 46px !important;
+        min-height: 46px !important;
     }
 
 }
