@@ -1,1220 +1,583 @@
-// ============================================
-// VELORIDER AUDIO SYSTEM
-// Browser + Telegram Mini App
-// ============================================
+// ============================================================
+// VeloRider — Audio System
+// Telegram Mini Apps / iOS Safari / Android / Desktop
+// ============================================================
 
-const AUDIO_STORAGE_KEY = 'velorider_audio_settings_v3';
-
-const THEMES = {
-    garage: {
-        bpm: 92,
-        root: 48,
-
-        bass: [36, 36, 38, 36],
-
-        chords: [
-            [48, 55, 60],
-            [45, 52, 57],
-            [43, 50, 55],
-            [40, 47, 52]
-        ],
-
-        melody: [
-            [0, 2, 3, 5, 3, 2, null, 0],
-            [0, null, 2, 3, 5, 3, 2, null],
-            [0, 0, 3, 5, 7, 5, 3, 2],
-            [2, 3, 5, 7, 5, 3, 2, null]
-        ],
-
-        melodyWave: 'triangle',
-        bassVolume: 0.12,
-        melodyVolume: 0.08,
-        chordVolume: 0.06,
-        drumVolume: 0.08
-    },
-
-    race: {
-        bpm: 132,
-        root: 52,
-
-        bass: [40, 40, 43, 38],
-
-        chords: [
-            [52, 59, 64],
-            [50, 57, 62],
-            [47, 55, 59],
-            [45, 52, 57]
-        ],
-
-        melody: [
-            [0, 3, 5, 7, 10, 7, 5, 3],
-            [0, 2, 5, 7, 9, 7, 5, 2],
-            [0, 3, 5, 10, 12, 10, 7, 5],
-            [2, 5, 7, 9, 10, 9, 7, 5]
-        ],
-
-        melodyWave: 'square',
-        bassVolume: 0.15,
-        melodyVolume: 0.09,
-        chordVolume: 0.07,
-        drumVolume: 0.10
-    }
-};
-
-
-// ============================================
-// СОСТОЯНИЕ
-// ============================================
+const AUDIO_STORAGE_KEY = 'velorider_audio_settings_v2';
 
 let audioContext = null;
-
 let masterGain = null;
 let musicGain = null;
 let sfxGain = null;
 
-let noiseBuffer = null;
-
 let enabled = false;
 let volume = 0.65;
-let panelHidden = false;
-
-let currentScene = 'garage';
-let currentStep = 0;
-let nextStepTime = 0;
-
-let sequencerTimer = null;
-let resultTimer = null;
-
 let audioUnlocked = false;
-let uiReady = false;
-let listenersReady = false;
-
-
-// ============================================
-// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-// ============================================
+let currentScene = 'garage';
+let musicTimer = null;
+let nextStepTime = 0;
+let currentStep = 0;
+let panelHidden = false;
+let resumePromise = null;
 
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
 }
 
-function midiToFrequency(note) {
-    return 440 * Math.pow(2, (note - 69) / 12);
+function setStatus(message) {
+    const status = document.getElementById('audio-status');
+    if (status) status.textContent = message;
 }
 
-
-// ============================================
-// ЗАГРУЗКА НАСТРОЕК
-// ============================================
+// ------------------------------------------------------------
+// Settings
+// ------------------------------------------------------------
 
 function loadSettings() {
+    // iOS may require a fresh user gesture after the Mini App opens.
+    // Therefore, audio is deliberately not auto-enabled on reload.
+    enabled = false;
+
     try {
         const raw = localStorage.getItem(AUDIO_STORAGE_KEY);
-
         if (!raw) return;
 
         const data = JSON.parse(raw);
-
-        if (typeof data.enabled === 'boolean') {
-            enabled = data.enabled;
-        }
-
         if (typeof data.volume === 'number') {
             volume = clamp(data.volume, 0, 1);
         }
-
         if (typeof data.panelHidden === 'boolean') {
             panelHidden = data.panelHidden;
         }
-
     } catch (error) {
-        console.warn('Ошибка загрузки аудионастроек:', error);
+        console.warn('Не удалось загрузить настройки звука:', error);
     }
 }
-
 
 function saveSettings() {
     try {
-        localStorage.setItem(
-            AUDIO_STORAGE_KEY,
-            JSON.stringify({
-                enabled,
-                volume,
-                panelHidden
-            })
-        );
-
+        localStorage.setItem(AUDIO_STORAGE_KEY, JSON.stringify({
+            volume,
+            panelHidden
+        }));
     } catch (error) {
-        console.warn('Ошибка сохранения аудионастроек:', error);
+        console.warn('Не удалось сохранить настройки звука:', error);
     }
 }
 
-
-// ============================================
-// СОЗДАНИЕ ШУМОВОГО БУФЕРА
-// ============================================
-
-function createNoiseBuffer(ctx) {
-    const length = Math.floor(ctx.sampleRate * 0.5);
-
-    const buffer = ctx.createBuffer(
-        1,
-        length,
-        ctx.sampleRate
-    );
-
-    const data = buffer.getChannelData(0);
-
-    for (let i = 0; i < length; i++) {
-        data[i] = Math.random() * 2 - 1;
-    }
-
-    return buffer;
-}
-
-
-// ============================================
-// СОЗДАНИЕ AUDIO CONTEXT
-// ============================================
+// ------------------------------------------------------------
+// AudioContext
+// ------------------------------------------------------------
 
 function ensureAudioContext() {
-    if (audioContext) {
+    if (audioContext && audioContext.state !== 'closed') {
         return audioContext;
     }
 
-    const AudioCtx =
-        window.AudioContext ||
-        window.webkitAudioContext;
-
-    if (!AudioCtx) {
-        console.warn('Web Audio API не поддерживается.');
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+        console.error('Web Audio API не поддерживается.');
+        setStatus('Этот браузер не поддерживает Web Audio API.');
         return null;
     }
 
     try {
-        audioContext = new AudioCtx();
+        audioContext = new AudioContextClass({ latencyHint: 'interactive' });
 
         masterGain = audioContext.createGain();
         musicGain = audioContext.createGain();
         sfxGain = audioContext.createGain();
 
         masterGain.gain.value = 0;
-        musicGain.gain.value = 0;
+        musicGain.gain.value = 0.72;
         sfxGain.gain.value = 0.8;
 
         musicGain.connect(masterGain);
         sfxGain.connect(masterGain);
-
         masterGain.connect(audioContext.destination);
 
-        noiseBuffer = createNoiseBuffer(audioContext);
-
+        audioContext.addEventListener('statechange', handleAudioStateChange);
         return audioContext;
-
     } catch (error) {
-        console.error('Ошибка создания аудиосистемы:', error);
-
-        audioContext = null;
-        masterGain = null;
-        musicGain = null;
-        sfxGain = null;
-
+        console.error('Не удалось создать AudioContext:', error);
+        setStatus('Не удалось создать аудиосистему.');
         return null;
     }
 }
 
+function handleAudioStateChange() {
+    if (!audioContext) return;
 
-// ============================================
-// РАЗБЛОКИРОВКА ЗВУКА
-// Вызывается после действия пользователя
-// ============================================
-
-async function unlockAudio() {
-    const ctx = ensureAudioContext();
-
-    if (!ctx) return false;
-
-    try {
-        if (ctx.state === 'suspended') {
-            await ctx.resume();
-        }
-
-        if (ctx.state !== 'running') {
-            return false;
-        }
-
+    if (audioContext.state === 'running') {
         audioUnlocked = true;
-
         applyVolume();
 
-        if (enabled) {
-            startMusic();
+        if (enabled && !document.hidden) {
+            startMusic(true);
         }
+        setStatus(enabled ? 'Звук работает' : 'Звук готов');
+        return;
+    }
 
-        return true;
+    // Не сбрасываем enabled автоматически: iOS может временно
+    // приостановить/прервать контекст при сворачивании Telegram.
+    audioUnlocked = false;
+    stopMusic();
 
-    } catch (error) {
-        console.warn('Не удалось разблокировать звук:', error);
-
-        return false;
+    if (enabled) {
+        setStatus('Аудио приостановлено iOS. Вернись в игру или нажми звук ещё раз.');
     }
 }
-
-
-// ============================================
-// ГРОМКОСТЬ
-// ============================================
 
 function applyVolume() {
     if (!audioContext || !masterGain) return;
 
-    const now = audioContext.currentTime;
-
-    const target = enabled ? volume : 0;
-
+    const targetVolume = enabled ? volume : 0;
     try {
-        masterGain.gain.cancelScheduledValues(now);
-
-        masterGain.gain.setValueAtTime(
-            masterGain.gain.value,
-            now
+        masterGain.gain.cancelScheduledValues(audioContext.currentTime);
+        masterGain.gain.setTargetAtTime(
+            targetVolume,
+            audioContext.currentTime,
+            0.04
         );
-
-        masterGain.gain.linearRampToValueAtTime(
-            target,
-            now + 0.08
-        );
-
-    } catch {
-        masterGain.gain.value = target;
+    } catch (error) {
+        console.warn('Не удалось изменить громкость:', error);
     }
 }
 
+// ------------------------------------------------------------
+// iOS / Telegram audio unlock
+// IMPORTANT: call from a real button tap.
+// ------------------------------------------------------------
 
-function setVolume(value) {
-    volume = clamp(
-        Number(value) || 0,
-        0,
-        1
-    );
+async function unlockAudio() {
+    if (resumePromise) return resumePromise;
 
-    applyVolume();
+    resumePromise = (async () => {
+        const context = ensureAudioContext();
+        if (!context) return false;
 
-    saveSettings();
-    updateUI();
-}
+        try {
+            if (context.state !== 'running') {
+                // resume() is invoked immediately in the button's tap flow.
+                await context.resume();
+            }
 
+            if (context.state !== 'running') {
+                console.warn('AudioContext state:', context.state);
+                return false;
+            }
 
-// ============================================
-// ВКЛЮЧЕНИЕ / ВЫКЛЮЧЕНИЕ ЗВУКА
-// ============================================
-
-async function setEnabled(value) {
-    enabled = Boolean(value);
-
-    saveSettings();
-    updateUI();
-
-    if (enabled) {
-        const success = await unlockAudio();
-
-        if (!success) {
-            enabled = false;
-
-            stopMusic();
+            audioUnlocked = true;
             applyVolume();
 
-            saveSettings();
-            updateUI();
+            if (enabled) startMusic(true);
 
-            console.warn(
-                'Telegram не разрешил воспроизведение звука.'
-            );
+            console.info('VeloRider AudioContext:', context.state);
+            setStatus('Звук работает');
+            return true;
+        } catch (error) {
+            console.error('Не удалось запустить звук:', error);
+            setStatus('iPhone не запустил аудио. Нажми кнопку звука ещё раз.');
+            return false;
         }
+    })();
 
-    } else {
-        stopMusic();
-        applyVolume();
+    try {
+        return await resumePromise;
+    } finally {
+        resumePromise = null;
     }
 }
 
+async function setEnabled(value) {
+    if (!value) {
+        enabled = false;
+        stopMusic();
+        applyVolume();
+        saveSettings();
+        updateUI();
+        setStatus('Звук выключен');
+        return true;
+    }
 
-// ============================================
-// СКРЫТИЕ ПАНЕЛИ
-// ============================================
+    enabled = true;
+    updateUI();
 
-function setPanelHidden(value) {
-    panelHidden = Boolean(value);
+    const success = await unlockAudio();
+    if (!success) {
+        enabled = false;
+        stopMusic();
+        applyVolume();
+        updateUI();
+        setStatus('Не получилось включить звук. Нажми кнопку ещё раз.');
+        return false;
+    }
 
+    applyVolume();
+    startMusic(true);
     saveSettings();
     updateUI();
+    setStatus('Звук работает');
+    return true;
 }
 
-
-// ============================================
-// ГЕНЕРАЦИЯ ЗВУКОВ
-// ============================================
+// ------------------------------------------------------------
+// Synthesizer
+// ------------------------------------------------------------
 
 function scheduleTone(
     frequency,
-    time,
+    startTime,
     duration,
-    options = {},
+    waveform = 'triangle',
+    gainValue = 0.1,
     destination = musicGain
 ) {
-    if (
-        !audioContext ||
-        !enabled ||
-        !audioUnlocked ||
-        !destination
-    ) {
-        return;
-    }
+    if (!audioContext || !destination || audioContext.state !== 'running') return;
 
     try {
         const oscillator = audioContext.createOscillator();
         const envelope = audioContext.createGain();
-        const filter = audioContext.createBiquadFilter();
+        const start = Math.max(startTime, audioContext.currentTime);
+        const end = start + duration;
 
-        oscillator.type = options.type || 'sine';
+        oscillator.type = waveform;
+        oscillator.frequency.setValueAtTime(frequency, start);
 
-        oscillator.frequency.setValueAtTime(
-            Math.max(1, frequency),
-            time
-        );
-
-        filter.type = 'lowpass';
-
-        filter.frequency.setValueAtTime(
-            options.cutoff || 3000,
-            time
-        );
-
-        filter.Q.value = 0.8;
-
-        const gain = Math.max(
-            0.0001,
-            options.gain ?? 0.08
-        );
-
-        const attack = Math.max(
-            0.001,
-            options.attack ?? 0.01
-        );
-
-        const release = Math.max(
-            0.02,
-            options.release ?? 0.05
-        );
-
-        envelope.gain.setValueAtTime(
-            0.0001,
-            time
-        );
-
-        envelope.gain.linearRampToValueAtTime(
-            gain,
-            time + attack
-        );
-
+        envelope.gain.setValueAtTime(0.0001, start);
         envelope.gain.exponentialRampToValueAtTime(
-            0.0001,
-            time + duration + release
+            Math.max(0.0001, gainValue),
+            start + 0.015
         );
+        envelope.gain.exponentialRampToValueAtTime(0.0001, end);
 
-        oscillator.connect(filter);
-        filter.connect(envelope);
+        oscillator.connect(envelope);
         envelope.connect(destination);
+        oscillator.start(start);
+        oscillator.stop(end + 0.03);
 
-        oscillator.start(time);
-
-        oscillator.stop(
-            time + duration + release + 0.03
-        );
-
+        oscillator.addEventListener('ended', () => {
+            oscillator.disconnect();
+            envelope.disconnect();
+        }, { once: true });
     } catch (error) {
-        console.warn('Ошибка генерации звука:', error);
+        console.warn('Ошибка генерации ноты:', error);
     }
 }
 
+const GARAGE_MELODY = [
+    0, null, 2, null, 4, null, 2, null,
+    5, null, 4, null, 2, null, 1, null
+];
 
-// ============================================
-// БАС
-// ============================================
+const RACE_MELODY = [
+    0, 2, 4, 2, 5, 4, 2, 4,
+    7, 5, 4, 5, 2, 4, 1, 2
+];
 
-function playBass(note, time, theme) {
-    scheduleTone(
-        midiToFrequency(note),
-        time,
-        0.35,
-        {
-            type: 'triangle',
-            gain: theme.bassVolume,
-            attack: 0.01,
-            release: 0.12,
-            cutoff: 1400
-        }
-    );
-}
+const NOTE_FREQUENCIES = [
+    220.00, 246.94, 293.66, 329.63,
+    392.00, 440.00, 493.88, 587.33
+];
 
-
-// ============================================
-// УДАРНЫЕ
-// ============================================
-
-function playKick(time, gain = 0.1) {
-    scheduleTone(
-        145,
-        time,
-        0.12,
-        {
-            type: 'sine',
-            gain,
-            attack: 0.005,
-            release: 0.06,
-            cutoff: 500
-        }
-    );
-}
-
-
-function playNoise(time, duration, cutoff, gainValue) {
-    if (
-        !audioContext ||
-        !noiseBuffer ||
-        !enabled ||
-        !audioUnlocked
-    ) {
-        return;
-    }
-
-    try {
-        const source = audioContext.createBufferSource();
-        const filter = audioContext.createBiquadFilter();
-        const envelope = audioContext.createGain();
-
-        source.buffer = noiseBuffer;
-
-        filter.type = 'highpass';
-
-        filter.frequency.setValueAtTime(
-            cutoff,
-            time
-        );
-
-        envelope.gain.setValueAtTime(
-            0.0001,
-            time
-        );
-
-        envelope.gain.linearRampToValueAtTime(
-            gainValue,
-            time + 0.005
-        );
-
-        envelope.gain.exponentialRampToValueAtTime(
-            0.0001,
-            time + duration
-        );
-
-        source.connect(filter);
-        filter.connect(envelope);
-        envelope.connect(musicGain);
-
-        source.start(time);
-        source.stop(time + duration + 0.02);
-
-    } catch (error) {
-        console.warn('Ошибка генерации шума:', error);
-    }
-}
-
-
-// ============================================
-// АККОРДЫ
-// ============================================
-
-function playChord(notes, time, duration, theme) {
-    notes.forEach((note, index) => {
-        scheduleTone(
-            midiToFrequency(note),
-            time,
-            duration,
-            {
-                type: index === 0 ? 'triangle' : 'sine',
-
-                gain: theme.chordVolume *
-                    (index === 0 ? 1 : 0.7),
-
-                attack: 0.025,
-                release: 0.15,
-                cutoff: 1500 + index * 300
-            }
-        );
-    });
-}
-
-
-// ============================================
-// МУЗЫКАЛЬНЫЙ ШАГ
-// ============================================
+const GARAGE_BASS = [110.00, 130.81, 146.83, 130.81];
+const RACE_BASS = [110.00, 146.83, 164.81, 146.83];
 
 function playMusicStep(time) {
-    if (
-        !audioContext ||
-        !enabled ||
-        !audioUnlocked
-    ) {
-        return;
-    }
+    if (!audioContext || !musicGain || audioContext.state !== 'running') return;
 
-    const theme = THEMES[currentScene] || THEMES.garage;
+    const step = currentStep % 16;
+    const isRace = currentScene === 'race';
+    const melody = isRace ? RACE_MELODY : GARAGE_MELODY;
+    const bass = isRace ? RACE_BASS : GARAGE_BASS;
+    const noteIndex = melody[step];
 
-    const localStep = currentStep % 8;
-
-    const bar = Math.floor(currentStep / 8) % 4;
-
-    const beatSeconds = 60 / theme.bpm;
-
-    const stepSeconds = beatSeconds / 2;
-
-    // Аккорды.
-
-    if (localStep === 0) {
-        playChord(
-            theme.chords[bar],
-            time,
-            beatSeconds * 3.5,
-            theme
-        );
-    }
-
-    // Бас.
-
-    if (localStep === 0 || localStep === 4) {
-        playBass(
-            theme.bass[bar],
-            time,
-            theme
-        );
-    }
-
-    // Мелодия.
-
-    const melodyNote = theme.melody[bar][localStep];
-
-    if (
-        melodyNote !== null &&
-        melodyNote !== undefined
-    ) {
+    if (noteIndex !== null) {
         scheduleTone(
-            midiToFrequency(theme.root + melodyNote),
+            NOTE_FREQUENCIES[noteIndex],
             time,
-            stepSeconds * 0.8,
-            {
-                type: theme.melodyWave,
-                gain: theme.melodyVolume,
-                attack: 0.015,
-                release: 0.08,
-                cutoff: 2800
-            }
+            isRace ? 0.16 : 0.22,
+            isRace ? 'sawtooth' : 'triangle',
+            isRace ? 0.07 : 0.055,
+            musicGain
         );
     }
 
-    // Ударные.
-
-    if (localStep === 0 || localStep === 4) {
-        playKick(
+    if (step % 4 === 0) {
+        const bassIndex = Math.floor(step / 4) % bass.length;
+        scheduleTone(
+            bass[bassIndex],
             time,
-            theme.drumVolume
+            0.28,
+            'sine',
+            isRace ? 0.12 : 0.09,
+            musicGain
         );
     }
 
-    if (localStep === 2 || localStep === 6) {
-        playNoise(
+    if (isRace && step % 4 === 2) {
+        scheduleTone(
+            NOTE_FREQUENCIES[3],
             time,
-            0.09,
-            1000,
-            theme.drumVolume * 0.5
+            0.07,
+            'square',
+            0.025,
+            musicGain
         );
     }
 
-    // Хай-хэт.
-
-    playNoise(
-        time,
-        0.025,
-        6500,
-        theme.drumVolume * 0.13
-    );
-
-    currentStep = (currentStep + 1) % 32;
+    currentStep++;
 }
 
-
-// ============================================
-// ПЛАНИРОВЩИК
-// ============================================
+function getStepDuration() {
+    const bpm = currentScene === 'race' ? 138 : 105;
+    return 60 / bpm / 2;
+}
 
 function scheduleMusic() {
-    if (
-        !audioContext ||
-        !enabled ||
-        !audioUnlocked ||
-        sequencerTimer === null
-    ) {
-        return;
-    }
+    if (!audioContext || !enabled || !audioUnlocked) return;
+    if (audioContext.state !== 'running') return;
 
     const now = audioContext.currentTime;
-
-    const theme = THEMES[currentScene] || THEMES.garage;
-
-    const stepSeconds = (60 / theme.bpm) / 2;
-
-    const scheduleAhead = 0.12;
-
-    // Не воспроизводим пропущенные шаги после паузы.
-
     if (nextStepTime < now - 0.2) {
         nextStepTime = now + 0.03;
     }
 
-    while (nextStepTime < now + scheduleAhead) {
+    while (nextStepTime < now + 0.12) {
         playMusicStep(nextStepTime);
-
-        nextStepTime += stepSeconds;
+        nextStepTime += getStepDuration();
     }
 }
 
+function startMusic(forceRestart = false) {
+    if (!enabled || !audioUnlocked || !audioContext) return;
+    if (audioContext.state !== 'running' || document.hidden) return;
 
-// ============================================
-// ЗАПУСК МУЗЫКИ
-// ============================================
+    if (musicTimer && !forceRestart) return;
 
-function startMusic() {
-    if (
-        !audioContext ||
-        !enabled ||
-        !audioUnlocked ||
-        audioContext.state !== 'running'
-    ) {
-        return;
+    if (musicTimer) {
+        clearInterval(musicTimer);
+        musicTimer = null;
     }
-
-    stopMusic();
 
     currentStep = 0;
-
     nextStepTime = audioContext.currentTime + 0.04;
 
-    const now = audioContext.currentTime;
-
-    try {
-        musicGain.gain.cancelScheduledValues(now);
-
-        musicGain.gain.setValueAtTime(
-            musicGain.gain.value,
-            now
-        );
-
-        musicGain.gain.linearRampToValueAtTime(
-            0.72,
-            now + 0.3
-        );
-
-    } catch {
-        musicGain.gain.value = 0.72;
-    }
-
-    sequencerTimer = window.setInterval(
-        scheduleMusic,
-        25
-    );
-
+    musicTimer = setInterval(scheduleMusic, 25);
     scheduleMusic();
 }
 
-
-// ============================================
-// ОСТАНОВКА МУЗЫКИ
-// ============================================
-
 function stopMusic() {
-    if (sequencerTimer !== null) {
-        window.clearInterval(sequencerTimer);
-        sequencerTimer = null;
-    }
-
-    if (!audioContext || !musicGain) return;
-
-    const now = audioContext.currentTime;
-
-    try {
-        musicGain.gain.cancelScheduledValues(now);
-
-        musicGain.gain.setValueAtTime(
-            musicGain.gain.value,
-            now
-        );
-
-        musicGain.gain.linearRampToValueAtTime(
-            0,
-            now + 0.08
-        );
-
-    } catch {
-        musicGain.gain.value = 0;
+    if (musicTimer) {
+        clearInterval(musicTimer);
+        musicTimer = null;
     }
 }
 
-
-// ============================================
-// СМЕНА СЦЕНЫ
-// ============================================
+// ------------------------------------------------------------
+// Public API used by main.js
+// ------------------------------------------------------------
 
 export function setAudioScene(scene) {
-    const nextScene = scene === 'race'
-        ? 'race'
-        : 'garage';
-
+    const nextScene = scene === 'race' ? 'race' : 'garage';
     if (currentScene === nextScene) return;
 
     currentScene = nextScene;
+    currentStep = 0;
 
     if (enabled && audioUnlocked) {
-        startMusic();
+        startMusic(true);
     }
 }
 
+export function playRaceResult(result) {
+    if (!enabled || !audioUnlocked || !audioContext) return;
+    if (audioContext.state !== 'running') return;
 
-// ============================================
-// ЗВУК ПОБЕДЫ
-// ============================================
+    const isWin = result === true || result === 'win' || result?.won === true;
+    const notes = isWin ? [523.25, 659.25, 783.99] : [392.00, 293.66];
+    const start = audioContext.currentTime + 0.03;
 
-function playSuccessJingle() {
-    if (
-        !audioContext ||
-        !audioUnlocked ||
-        !enabled
-    ) {
-        return;
-    }
-
-    const now = audioContext.currentTime;
-
-    const notes = [72, 76, 79, 84];
-
-    notes.forEach((note, index) => {
+    notes.forEach((frequency, index) => {
         scheduleTone(
-            midiToFrequency(note),
-            now + index * 0.09,
+            frequency,
+            start + index * 0.14,
+            0.2,
+            'triangle',
             0.16,
-            {
-                type: 'triangle',
-                gain: 0.12,
-                attack: 0.005,
-                release: 0.08,
-                cutoff: 4000
-            },
             sfxGain
         );
     });
 }
 
+// ------------------------------------------------------------
+// Audio controls UI
+// ------------------------------------------------------------
 
-// ============================================
-// ЗВУК ПОРАЖЕНИЯ
-// ============================================
-
-function playFailureBuzz() {
-    if (
-        !audioContext ||
-        !audioUnlocked ||
-        !enabled
-    ) {
-        return;
-    }
-
-    const now = audioContext.currentTime;
-
-    scheduleTone(
-        midiToFrequency(48),
-        now,
-        0.18,
-        {
-            type: 'sawtooth',
-            gain: 0.09,
-            attack: 0.01,
-            release: 0.08,
-            cutoff: 1200
-        },
-        sfxGain
-    );
-
-    scheduleTone(
-        midiToFrequency(43),
-        now + 0.15,
-        0.22,
-        {
-            type: 'sawtooth',
-            gain: 0.08,
-            attack: 0.01,
-            release: 0.08,
-            cutoff: 1100
-        },
-        sfxGain
-    );
-}
-
-
-// ============================================
-// РЕЗУЛЬТАТ ГОНКИ
-// ============================================
-
-export function playRaceResult(win) {
-    if (
-        !audioContext ||
-        !audioUnlocked ||
-        !enabled
-    ) {
-        return;
-    }
-
-    if (win) {
-        playSuccessJingle();
-    } else {
-        playFailureBuzz();
-    }
-}
-
-
-// ============================================
-// ОБНОВЛЕНИЕ ИНТЕРФЕЙСА
-// ============================================
-
-function updateUI() {
-    const panel = document.getElementById('audio-panel');
-
-    const toggle = document.getElementById('audio-panel-toggle');
-
-    const enabledButton = document.getElementById('audio-enabled');
-
-    const volumeInput = document.getElementById('audio-volume');
-
-    const volumeValue = document.getElementById('audio-volume-value');
-
-    if (enabledButton) {
-        enabledButton.textContent = enabled
-            ? '🔊 Звук: вкл'
-            : '🔇 Включить звук';
-    }
-
-    if (volumeInput) {
-        volumeInput.value = String(
-            Math.round(volume * 100)
-        );
-    }
-
-    if (volumeValue) {
-        volumeValue.textContent =
-            `${Math.round(volume * 100)}%`;
-    }
-
-    if (panel) {
-        panel.style.display = panelHidden ? 'none' : 'flex';
-    }
-
-    if (toggle) {
-        toggle.style.display = panelHidden ? 'flex' : 'none';
-    }
-}
-
-
-// ============================================
-// СОЗДАНИЕ ПАНЕЛИ
-// ============================================
-
-function injectUI() {
-    if (uiReady) {
-        updateUI();
-        return;
-    }
+function injectAudioStyles() {
+    if (document.getElementById('velorider-audio-style')) return;
 
     const style = document.createElement('style');
-
+    style.id = 'velorider-audio-style';
     style.textContent = `
         #audio-panel {
-            position:fixed;
-            top:12px;
-            left:50%;
-            transform:translateX(-50%);
-            z-index:999;
-            display:flex;
-            align-items:center;
-            gap:10px;
-            padding:10px 14px;
-            border-radius:999px;
-            background:rgba(17,24,39,.96);
-            border:1px solid rgba(75,85,99,.9);
-            box-shadow:0 10px 30px rgba(0,0,0,.3);
-            backdrop-filter:blur(10px);
-            color:white;
+            position: fixed;
+            top: calc(env(safe-area-inset-top, 0px) + 10px);
+            left: 50%;
+            right: auto;
+            transform: translateX(-50%);
+            z-index: 99999;
+            width: min(205px, calc(100vw - 20px));
+            box-sizing: border-box;
+            padding: 10px;
+            color: #fff;
+            background: rgba(20, 25, 35, .96);
+            border: 1px solid rgba(255, 255, 255, .18);
+            border-radius: 12px;
+            font-family: Arial, sans-serif;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, .35);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
         }
-
+        #audio-panel .audio-row { display: flex; align-items: center; gap: 7px; }
         #audio-panel button {
-            border:0;
-            border-radius:999px;
-            padding:8px 12px;
-            font-weight:700;
-            background:#1f2937;
-            color:white;
-            cursor:pointer;
+            border: 0; border-radius: 8px; padding: 9px 10px;
+            color: #fff; background: #333d50; font-size: 12px;
+            font-weight: 800; cursor: pointer; touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
-
-        #audio-panel button:hover {
-            background:#374151;
+        #audio-panel button:active { transform: scale(.97); }
+        #audio-enabled { flex: 1; background: #256b45 !important; }
+        #audio-enabled.audio-off { background: #8a3940 !important; }
+        #audio-hide { width: 32px; min-width: 32px; font-size: 15px !important; }
+        #audio-panel .audio-volume-row {
+            display: flex; align-items: center; gap: 7px;
+            margin-top: 10px; font-size: 11px;
         }
-
-        #audio-panel input[type="range"] {
-            width:130px;
-            accent-color:#22c55e;
+        #audio-volume { flex: 1; min-width: 0; accent-color: #55c889; }
+        #audio-volume-value { width: 32px; text-align: right; }
+        #audio-status { margin-top: 8px; font-size: 10px; line-height: 1.4; color: #c1cada; }
+        #audio-show {
+            display: none; position: fixed;
+            top: calc(env(safe-area-inset-top, 0px) + 10px);
+            left: 50%; right: auto;
+            transform: translateX(-50%);
+            z-index: 99999; width: 42px; height: 42px;
+            border: 1px solid rgba(255,255,255,.2); border-radius: 50%;
+            color: #fff; background: rgba(20,25,35,.96);
+            font-size: 19px; cursor: pointer;
+            touch-action: manipulation;
         }
-
-        #audio-panel-toggle {
-            position:fixed;
-            top:12px;
-            left:50%;
-            transform:translateX(-50%);
-            z-index:1000;
-            display:none;
-            align-items:center;
-            justify-content:center;
-            width:44px;
-            height:44px;
-            border-radius:50%;
-            background:rgba(17,24,39,.96);
-            border:1px solid #475569;
-            color:white;
-            font-size:22px;
-            cursor:pointer;
-        }
-
-        @media(max-width:600px) {
+        #audio-show.visible { display: block; }
+        @media (max-width: 480px) {
             #audio-panel {
-                gap:6px;
-                padding:7px 9px;
-                max-width:calc(100vw - 16px);
-                flex-wrap:wrap;
-                justify-content:center;
-            }
-
-            #audio-panel input[type="range"] {
-                width:85px;
-            }
-
-            #audio-panel button {
-                padding:8px 10px;
-                font-size:11px;
+                width: min(190px, calc(100vw - 20px));
+                left: 50%;
+                right: auto;
             }
         }
     `;
-
     document.head.appendChild(style);
+}
+
+function updateUI() {
+    const toggle = document.getElementById('audio-enabled');
+    const volumeInput = document.getElementById('audio-volume');
+    const volumeLabel = document.getElementById('audio-volume-value');
+    const panel = document.getElementById('audio-panel');
+    const showButton = document.getElementById('audio-show');
+
+    if (toggle) {
+        toggle.textContent = enabled ? 'Звук: вкл' : 'Звук: выкл';
+        toggle.classList.toggle('audio-off', !enabled);
+        toggle.setAttribute('aria-pressed', String(enabled));
+    }
+    if (volumeInput) volumeInput.value = String(Math.round(volume * 100));
+    if (volumeLabel) volumeLabel.textContent = `${Math.round(volume * 100)}%`;
+    if (panel) panel.style.display = panelHidden ? 'none' : 'block';
+    if (showButton) showButton.classList.toggle('visible', panelHidden);
+}
+
+function createAudioPanel() {
+    if (document.getElementById('audio-panel')) return;
+
+    injectAudioStyles();
 
     const panel = document.createElement('div');
-
     panel.id = 'audio-panel';
-
     panel.innerHTML = `
-        <button type="button" id="audio-enabled">
-            🔇 Включить звук
-        </button>
-
-        <button type="button" id="audio-hide-button">
-            Скрыть
-        </button>
-
-        <label style="display:flex;align-items:center;gap:7px;">
-            <span style="font-size:11px;opacity:.8;">
-                Громкость
-            </span>
-
-            <input
-                type="range"
-                id="audio-volume"
-                min="0"
-                max="100"
-                value="65"
-            >
-
-            <span
-                id="audio-volume-value"
-                style="font-size:11px;min-width:32px;"
-            >
-                65%
-            </span>
-        </label>
+        <div class="audio-row">
+            <button id="audio-enabled" type="button" aria-pressed="false">Звук: выкл</button>
+            <button id="audio-hide" type="button" aria-label="Скрыть настройки звука">×</button>
+        </div>
+        <div class="audio-volume-row">
+            <span>Громкость</span>
+            <input id="audio-volume" type="range" min="0" max="100" value="65" step="1" aria-label="Громкость">
+            <span id="audio-volume-value">65%</span>
+        </div>
+        <div id="audio-status" aria-live="polite">Нажми «Звук: выкл», чтобы включить музыку</div>
     `;
 
-    const toggle = document.createElement('button');
-
-    toggle.id = 'audio-panel-toggle';
-    toggle.type = 'button';
-    toggle.textContent = '♫';
-
-    toggle.setAttribute(
-        'aria-label',
-        'Настройки звука'
-    );
+    const showButton = document.createElement('button');
+    showButton.id = 'audio-show';
+    showButton.type = 'button';
+    showButton.textContent = '♫';
+    showButton.setAttribute('aria-label', 'Показать настройки звука');
 
     document.body.appendChild(panel);
-    document.body.appendChild(toggle);
+    document.body.appendChild(showButton);
 
-    // Кнопка включения звука.
-    panel.querySelector('#audio-enabled')?.addEventListener(
-        'click',
-        () => {
-            void setEnabled(!enabled);
-        }
-    );
-
-    // Скрытие панели.
-    panel.querySelector('#audio-hide-button')?.addEventListener(
-        'click',
-        () => {
-            setPanelHidden(true);
-        }
-    );
-
-    // Громкость.
-    panel.querySelector('#audio-volume')?.addEventListener(
-        'input',
-        event => {
-            setVolume(
-                Number(event.target.value) / 100
-            );
-        }
-    );
-
-    // Возвращение панели.
-    toggle.addEventListener('click', () => {
-        setPanelHidden(false);
+    document.getElementById('audio-enabled').addEventListener('click', () => {
+        // This click is the required user gesture on iOS.
+        void setEnabled(!enabled);
     });
 
-    uiReady = true;
+    document.getElementById('audio-volume').addEventListener('input', event => {
+        volume = clamp(Number(event.target.value) / 100, 0, 1);
+        applyVolume();
+        saveSettings();
+        updateUI();
+    });
+
+    document.getElementById('audio-hide').addEventListener('click', () => {
+        panelHidden = true;
+        saveSettings();
+        updateUI();
+    });
+
+    showButton.addEventListener('click', () => {
+        panelHidden = false;
+        saveSettings();
+        updateUI();
+    });
 
     updateUI();
 }
-
-
-// ============================================
-// ПЕРВОЕ ВЗАИМОДЕЙСТВИЕ
-// ============================================
-
-function setupAudioUnlock() {
-    if (listenersReady) return;
-
-    listenersReady = true;
-
-    const unlock = () => {
-        // Если контекст уже работает, ничего не делаем.
-        if (audioUnlocked) return;
-
-        void unlockAudio();
-    };
-
-    const removeListeners = () => {
-        window.removeEventListener('pointerdown', unlock);
-        window.removeEventListener('touchstart', unlock);
-        window.removeEventListener('keydown', unlock);
-    };
-
-    const unlockOnce = () => {
-        removeListeners();
-        unlock();
-    };
-
-    window.addEventListener(
-        'pointerdown',
-        unlockOnce,
-        { once: true }
-    );
-
-    window.addEventListener(
-        'touchstart',
-        unlockOnce,
-        {
-            once: true,
-            passive: true
-        }
-    );
-
-    window.addEventListener(
-        'keydown',
-        unlockOnce,
-        { once: true }
-    );
-}
-
-
-// ============================================
-// ИНИЦИАЛИЗАЦИЯ
-// ============================================
 
 export function initAudioControls() {
     loadSettings();
-
-    injectUI();
-
+    createAudioPanel();
     updateUI();
-
-    setupAudioUnlock();
-
-    // Автоматического запуска музыки нет.
-    // Первый запуск выполняется после взаимодействия.
+    console.info('VeloRider Audio System initialized');
 }
 
-
-// ============================================
-// ВОЗВРАЩЕНИЕ В ПРИЛОЖЕНИЕ
-// ============================================
-
-document.addEventListener(
-    'visibilitychange',
-    async () => {
-        if (document.hidden) {
-            stopMusic();
-            return;
-        }
-
-        if (
-            enabled &&
-            audioUnlocked &&
-            audioContext
-        ) {
-            try {
-                if (audioContext.state === 'suspended') {
-                    await audioContext.resume();
-                }
-
-                startMusic();
-
-            } catch (error) {
-                console.warn(
-                    'Ошибка возобновления музыки:',
-                    error
-                );
-            }
-        }
+// Recover the sequencer when Telegram/iOS returns the Mini App to foreground.
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        stopMusic();
+        return;
     }
-);
 
+    if (enabled && audioContext?.state === 'running') {
+        audioUnlocked = true;
+        startMusic(true);
+    }
+});
 
-// ============================================
-// СОХРАНЕНИЕ НАСТРОЕК
-// ============================================
-
-window.addEventListener('beforeunload', () => {
+window.addEventListener('pagehide', () => {
+    stopMusic();
     saveSettings();
 });
+
+window.addEventListener('beforeunload', saveSettings);

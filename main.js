@@ -1,5 +1,5 @@
 import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js';
-import { player, loadPlayerState, savePlayerState, clearSavedProgress, initTelegramApp } from './state.js';
+import { player } from './state.js';
 import {
     initRace,
     setAccelerating,
@@ -12,8 +12,7 @@ import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js';
-
+} from './audio.js?v=6';
 const CATEGORY_NAMES = {
     frames: 'Рамы',
     forks: 'Вилки',
@@ -41,7 +40,6 @@ const CATEGORY_NAMES = {
     tubes: 'Камеры',
     hubs: 'Втулки'
 };
-
 const CATEGORY_ICONS = {
     frames: '🚲', forks: '🔧', chains: '⛓️',
     drivetrain: '⚙️', drivetrains: '⚙️',
@@ -53,13 +51,11 @@ const CATEGORY_ICONS = {
     shifters: '🎚️', derailleurs: '⚙️', suspension: '〰️',
     tires: '⭕', tubes: '⭕', hubs: '⚙️'
 };
-
 const RARITY_NAMES = {
     common: 'Обычная',
     rare: 'Редкая',
     legendary: 'Легендарная'
 };
-
 const STAT_META = {
     speed: { label: 'Максимальная скорость', short: 'Скорость', icon: '🏁', color: 'blue' },
     accel: { label: 'Ускорение', short: 'Ускорение', icon: '⚡', color: 'orange' },
@@ -79,12 +75,13 @@ const STAT_META = {
     range: { label: 'Запас хода', short: 'Запас хода', icon: '📍', color: 'teal' },
     battery: { label: 'Ёмкость батареи', short: 'Батарея', icon: '🔋', color: 'green' }
 };
-
 const NON_STAT_NUMERIC_FIELDS = new Set([
     'price', 'cost', 'priceCoins', 'price_coins', 'year', 'id', 'level',
     'rarityLevel', 'rarity_level', 'stock', 'quantity', 'count'
 ]);
 
+// В разных деталях характеристики могут называться по-разному.
+// Приводим их к двум ключам, которые использует физика гонки.
 const STAT_KEY_ALIASES = {
     jump: new Set([
         'jump', 'jumppower', 'jumpforce', 'jumpstrength',
@@ -105,7 +102,6 @@ function normalizePartStatKey(key) {
 
     return key;
 }
-
 function getStatLabel(key) {
     if (STAT_META[key]) return STAT_META[key].label;
     return String(key)
@@ -113,14 +109,12 @@ function getStatLabel(key) {
         .replace(/[_-]+/g, ' ')
         .replace(/^./, letter => letter.toUpperCase());
 }
-
 function formatStatValue(value) {
     const number = Number(value) || 0;
     return Number.isInteger(number)
         ? number.toLocaleString('ru-RU')
         : number.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
 }
-
 function getPartNumericStats(part) {
     if (!part || typeof part !== 'object') return [];
 
@@ -142,13 +136,11 @@ function getPartNumericStats(part) {
             };
         });
 }
-
 function escapeHTML(value) {
     return String(value ?? '').replace(/[&<>"']/g, character => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     }[character]));
 }
-
 function ensureGarageStyles() {
     if (document.getElementById('garage-v2-styles')) return;
     const style = document.createElement('style');
@@ -235,7 +227,6 @@ function ensureGarageStyles() {
     `;
     document.head.appendChild(style);
 }
-
 function ensureGarageLayout() {
     const root = document.getElementById('screen-garage');
     if (!root) return null;
@@ -357,19 +348,16 @@ function ensureGarageLayout() {
     });
     return root;
 }
-
 const DUPLICATE_COMPENSATION = {
     common: 100,
     rare: 350,
     legendary: 1000
 };
-
 function getCategoryOrder() {
     return Object.keys(ITEMS_DB).filter(category =>
         Array.isArray(ITEMS_DB[category]) && ITEMS_DB[category].length > 0
     );
 }
-
 function getCategoryName(category) {
     if (CATEGORY_NAMES[category]) return CATEGORY_NAMES[category];
     return String(category)
@@ -377,18 +365,14 @@ function getCategoryName(category) {
         .replace(/[_-]+/g, ' ')
         .replace(/^./, letter => letter.toUpperCase());
 }
-
 function getCategoryIcon(category) {
     return CATEGORY_ICONS[category] || '🔩';
 }
-
 function getRarityName(rarity) {
     return RARITY_NAMES[rarity] || rarity || 'Не указана';
 }
-
 let selectedUpgradeCategory = getCategoryOrder()[0] || 'frames';
 let containerOpening = false;
-
 function normalizePlayerState() {
     if (!Array.isArray(player.inventory)) player.inventory = [];
     if (!Array.isArray(player.unlockedTracks)) player.unlockedTracks = ['t1'];
@@ -432,11 +416,9 @@ function normalizePlayerState() {
     ensureOwnedParts();
     syncProgression();
 }
-
 function partKey(category, id) {
     return `${category}:${id}`;
 }
-
 function hasPart(category, id) {
     const key = partKey(category, id);
     const idText = String(id);
@@ -448,7 +430,6 @@ function hasPart(category, id) {
             (!entry.category || entry.category === category);
     }) || String(player.equipped?.[category] ?? '') === idText;
 }
-
 function ensureOwnedParts() {
     getCategoryOrder().forEach(category => {
         const equippedId = player.equipped[category];
@@ -459,7 +440,6 @@ function ensureOwnedParts() {
         if (!player.inventory.includes(key)) player.inventory.push(key);
     });
 }
-
 function unlockComponentRarity(rarity) {
     if (!player.unlockedComponentRarities.includes(rarity)) {
         player.unlockedComponentRarities.push(rarity);
@@ -469,11 +449,9 @@ function unlockComponentRarity(rarity) {
     }
     player.componentProgression[rarity].unlocked = true;
 }
-
 function isRarityUnlocked(rarity) {
     return player.unlockedComponentRarities.includes(rarity);
 }
-
 function syncProgression() {
     if (player.completedTracks.includes('t1') || player.track1RewardClaimed) {
         unlockComponentRarity('rare');
@@ -483,7 +461,6 @@ function syncProgression() {
         unlockComponentRarity('legendary');
     }
 }
-
 function getRarityRequirement(rarity) {
     if (rarity === 'rare') {
         const track = TRACKS_DB.find(item => item.id === 't1');
@@ -499,7 +476,6 @@ function getRarityRequirement(rarity) {
     }
     return 'Выполните условие разблокировки.';
 }
-
 function canPlayTrack(trackId) {
     const index = TRACKS_DB.findIndex(track => track.id === trackId);
     if (index < 0 || !player.unlockedTracks.includes(trackId)) return false;
@@ -508,31 +484,6 @@ function canPlayTrack(trackId) {
     }
     return true;
 }
-
-function queueSave() {
-    void savePlayerState();
-}
-
-async function resetProgressRequest() {
-    const confirmed = confirm(
-        'Ты точно хочешь сбросить весь прогресс?\n\n' +
-        'Будут удалены монеты, купоны, детали, трассы и все открытия.'
-    );
-
-    if (!confirmed) return;
-
-    await clearSavedProgress();
-
-    normalizePlayerState();
-    calculateBikeStats();
-    updateHUD();
-    updateGarageUI();
-    updateTracksUI();
-    updateUpgradeUI();
-    renderContainerShop();
-    showScreen('garage');
-}
-
 function showScreen(screenName) {
     setAudioScene(screenName === 'race' ? 'race' : 'garage');
 
@@ -559,7 +510,6 @@ function showScreen(screenName) {
     }
     updateHUD();
 }
-
 function ensureCouponsHUD() {
     if (document.getElementById('coupons-count')) return;
     const coinsElement = document.getElementById('coins-count');
@@ -574,7 +524,6 @@ function ensureCouponsHUD() {
     `;
     hud.appendChild(couponBlock);
 }
-
 function updateHUD() {
     ensureCouponsHUD();
     const coinsEl = document.getElementById('coins-count');
@@ -598,7 +547,6 @@ function updateHUD() {
         trackButton.disabled = containerOpening || player.coins < 1000;
     }
 }
-
 function getContainerChanceText(container) {
     const chances = container.chances || {};
     return [
@@ -607,7 +555,6 @@ function getContainerChanceText(container) {
         `Легендарные: ${Number(chances.legendary) || 0}%`
     ].join(' · ');
 }
-
 function renderContainerShop() {
     const shopScreen = document.getElementById('screen-shop');
     const lootResult = document.getElementById('loot-result');
@@ -657,7 +604,6 @@ function renderContainerShop() {
     });
     updateHUD();
 }
-
 function calculateBikeStats() {
     const totals = {
         speed: 0,
@@ -686,13 +632,11 @@ function calculateBikeStats() {
         equippedParts
     };
 }
-
 function getRarityAccent(rarity) {
     if (rarity === 'legendary') return '#fbbf24';
     if (rarity === 'rare') return '#38bdf8';
     return '#94a3b8';
 }
-
 function getPartStatsHTML(part) {
     const stats = getPartNumericStats(part);
     if (!stats.length) {
@@ -707,7 +651,6 @@ function getPartStatsHTML(part) {
         `;
     }).join('');
 }
-
 function renderGarageStats(stats) {
     const grid = document.getElementById('garage-stat-grid');
     const extra = document.getElementById('garage-extra-stats');
@@ -745,7 +688,6 @@ function renderGarageStats(stats) {
         `;
     }).join('');
 }
-
 function updateGarageUI() {
     const root = ensureGarageLayout();
     if (!root) return;
@@ -828,7 +770,6 @@ function updateGarageUI() {
     if (oldSpeed) oldSpeed.textContent = formatStatValue(stats.speed || 0);
     if (oldAccel) oldAccel.textContent = formatStatValue(stats.accel || 0);
 }
-
 function updateUpgradeUI() {
     const upgradeRoot = document.getElementById('screen-upgrade');
     const categoriesDiv =
@@ -959,7 +900,6 @@ function updateUpgradeUI() {
     });
     updateHUD();
 }
-
 function buyPart(category, id) {
     const part = ITEMS_DB[category]?.find(item => item.id === id);
     if (!part) return;
@@ -982,9 +922,7 @@ function buyPart(category, id) {
     updateHUD();
     updateUpgradeUI();
     updateGarageUI();
-    queueSave();
 }
-
 function buyAndReplacePart(category, id) {
     const part = ITEMS_DB[category]?.find(item => item.id === id);
     if (!part) return;
@@ -1009,9 +947,7 @@ function buyAndReplacePart(category, id) {
     updateHUD();
     updateGarageUI();
     updateUpgradeUI();
-    queueSave();
 }
-
 function installPart(category, id) {
     const part = ITEMS_DB[category]?.find(item => item.id === id);
     if (!part) return;
@@ -1028,62 +964,148 @@ function installPart(category, id) {
     updateGarageUI();
     updateUpgradeUI();
     updateHUD();
-    queueSave();
 }
-
 function updateTracksUI() {
     const list = document.getElementById('tracks-list');
     if (!list) return;
-    list.innerHTML = '';
-    TRACKS_DB.forEach((track, index) => {
+
+    const safeText = value => String(value ?? '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    })[char]);
+
+    const trackCount = document.getElementById('tracks-total');
+    if (trackCount) trackCount.textContent = String(TRACKS_DB.length);
+
+    list.innerHTML = TRACKS_DB.map((track, index) => {
         const discovered = player.unlockedTracks.includes(track.id);
         const playable = canPlayTrack(track.id);
         const selected = player.selectedTrack === track.id;
+        const completed = player.completedTracks.includes(track.id);
         const previousTrack = TRACKS_DB[index - 1];
-        const winReward = Number(track.winReward) || (500 + index * 250);
-        const lossReward = Number(track.lossReward) || (50 + index * 10);
-        if (playable) {
-            const raceLength = Math.max(1000, Number(track.length) * 3 - 1500);
-            list.insertAdjacentHTML('beforeend', `
-                <div class="bg-gray-800 p-5 rounded-2xl border-2 ${selected ? 'border-green-500 bg-gray-750 scale-[1.02]' : 'border-gray-600 hover:border-green-400'} cursor-pointer transition-all shadow-lg flex flex-col"
-                    onclick="selectTrack('${track.id}')">
-                    <div class="font-black text-xl rarity-${track.rarity}">${track.name}</div>
-                    <div class="text-sm text-gray-400 mt-3 space-y-2 border-t border-gray-700 pt-3">
-                        <div class="flex justify-between"><span>Длина:</span><span>${raceLength.toLocaleString('ru-RU')} м</span></div>
-                        <div class="flex justify-between"><span>Препятствий:</span><span>${(Number(track.obstacles) || 0) * 3} шт.</span></div>
-                        <div class="flex justify-between"><span>Победа:</span><span class="text-green-400 font-bold">+${winReward} 🪙</span></div>
-                        <div class="flex justify-between"><span>Поражение:</span><span class="text-yellow-400">+${lossReward} 🪙</span></div>
-                        <div class="flex justify-between"><span>За победу:</span><span class="text-emerald-400">+${Math.max(1, Number(track.couponReward) || 1)} 🎟️</span></div>
-                        <div class="flex justify-between"><span>Скорость бота:</span><span class="text-red-400 font-bold">${track.botMaxSpeed}</span></div>
-                    </div>
-                    ${selected
-                        ? '<div class="mt-auto pt-4 text-green-400 font-bold text-center">✓ Текущая трасса</div>'
-                        : '<div class="mt-auto pt-4 text-blue-400 text-center">Выбрать трассу</div>'}
-                </div>
-            `);
+
+        const lengthValue = Number(track.length);
+        const raceLength = Number.isFinite(lengthValue) && lengthValue > 0
+            ? Math.max(1000, lengthValue * 3 - 1500)
+            : 1000;
+        const obstacleCount = Math.max(0, Number(track.obstacles) || 0) * 3;
+        const botSpeed = Number.isFinite(Number(track.botMaxSpeed))
+            ? Number(track.botMaxSpeed).toLocaleString('ru-RU')
+            : '—';
+        const winReward = Math.max(0, Number(track.winReward) || (500 + index * 250));
+        const lossReward = Math.max(0, Number(track.lossReward) || (50 + index * 10));
+        const couponReward = Math.max(1, Number(track.couponReward) || 1);
+
+        const trackName = safeText(track.name || `Трасса ${index + 1}`);
+        const previousName = safeText(previousTrack?.name || 'предыдущей трассе');
+        const rarityName = safeText(RARITY_NAMES[track.rarity] || 'Стандартная');
+        const trackId = safeText(track.id);
+
+        let statusText = 'Заблокирована';
+        let statusClass = 'track-status--locked';
+        if (playable && selected) {
+            statusText = 'Выбрана';
+            statusClass = 'track-status--selected';
+        } else if (playable && completed) {
+            statusText = 'Пройдена';
+            statusClass = 'track-status--completed';
+        } else if (playable) {
+            statusText = 'Доступна';
+            statusClass = 'track-status--available';
         } else if (discovered) {
-            list.insertAdjacentHTML('beforeend', `
-                <div class="bg-gray-900 p-5 rounded-2xl border-2 border-blue-900 opacity-75 flex flex-col justify-center items-center min-h-[200px]">
-                    <div class="font-bold text-blue-400 text-xl mb-2">🗺️ Карта найдена</div>
-                    <div class="font-bold text-gray-300 mb-2">${track.name}</div>
-                    <div class="text-sm text-gray-500 text-center">
-                        Победите на трассе «${previousTrack ? previousTrack.name : 'предыдущей трассе'}», чтобы получить доступ.
-                    </div>
-                </div>
-            `);
-        } else {
-            list.insertAdjacentHTML('beforeend', `
-                <div class="bg-gray-900 p-5 rounded-2xl border-2 border-gray-800 opacity-50 flex flex-col justify-center items-center min-h-[200px]">
-                    <div class="font-bold text-gray-500 text-xl mb-2">🔒 Заблокировано</div>
-                    <div class="font-bold text-gray-400 mb-2">${track.name}</div>
-                    <div class="text-sm text-gray-600 text-center">
-                        ${previousTrack
-                            ? `Победите на трассе «${previousTrack.name}», чтобы открыть эту трассу.`
-                            : 'Трасса заблокирована'}
-                    </div>
-                </div>
-            `);
+            statusText = 'Карта найдена';
+            statusClass = 'track-status--found';
         }
+
+        let actionMarkup = '';
+        if (playable) {
+            actionMarkup = `
+                <button
+                    type="button"
+                    class="track-card__action ${selected ? 'track-card__action--selected' : ''}"
+                    data-track-select="${trackId}"
+                    ${selected ? 'disabled aria-pressed="true"' : 'aria-pressed="false"'}>
+                    ${selected ? '✓ Текущая трасса' : 'Выбрать трассу'}
+                </button>
+            `;
+        } else {
+            const lockMessage = discovered
+                ? `Победи на трассе «${previousName}», чтобы получить доступ.`
+                : previousTrack
+                    ? `Сначала пройди трассу «${previousName}».`
+                    : 'Эта трасса пока недоступна.';
+
+            actionMarkup = `
+                <div class="track-card__locked-note">
+                    <strong>${discovered ? '🗺️ Карта уже найдена' : '🔒 Пока закрыта'}</strong>
+                    <span>${lockMessage}</span>
+                </div>
+            `;
+        }
+
+        return `
+            <article class="track-card ${playable ? 'track-card--playable' : 'track-card--locked-card'} ${selected ? 'track-card--selected' : ''}">
+                <div class="track-card__topline">
+                    <span class="track-card__number">ТРЕК ${String(index + 1).padStart(2, '0')}</span>
+                    <span class="track-status ${statusClass}">${statusText}</span>
+                </div>
+
+                <div class="track-card__title-row">
+                    <div class="track-card__icon" aria-hidden="true">${playable ? '🏁' : discovered ? '🗺️' : '🔒'}</div>
+                    <div class="track-card__title-wrap">
+                        <h3 class="track-card__title">${trackName}</h3>
+                        <span class="track-card__rarity">${rarityName}</span>
+                    </div>
+                </div>
+
+                <div class="track-card__stats">
+                    <div class="track-stat">
+                        <span>Дистанция</span>
+                        <strong>${raceLength.toLocaleString('ru-RU')} м</strong>
+                    </div>
+                    <div class="track-stat">
+                        <span>Препятствия</span>
+                        <strong>${obstacleCount} шт.</strong>
+                    </div>
+                    <div class="track-stat">
+                        <span>Скорость бота</span>
+                        <strong>${botSpeed}</strong>
+                    </div>
+                </div>
+
+                <div class="track-card__rewards">
+                    <div class="track-card__section-label">НАГРАДЫ</div>
+                    <div class="track-card__reward-grid">
+                        <div class="track-reward track-reward--win">
+                            <span>Победа</span>
+                            <strong>+${winReward.toLocaleString('ru-RU')} 🪙</strong>
+                        </div>
+                        <div class="track-reward">
+                            <span>Участие</span>
+                            <strong>+${lossReward.toLocaleString('ru-RU')} 🪙</strong>
+                        </div>
+                        <div class="track-reward track-reward--coupon">
+                            <span>Купоны за победу</span>
+                            <strong>+${couponReward} 🎟️</strong>
+                        </div>
+                    </div>
+                </div>
+
+                ${actionMarkup}
+            </article>
+        `;
+    }).join('');
+
+    list.querySelectorAll('[data-track-select]').forEach(button => {
+        button.addEventListener('click', () => {
+            const trackId = button.dataset.trackSelect;
+            if (typeof window.selectTrack === 'function') {
+                window.selectTrack(trackId);
+            }
+        });
     });
 }
 
@@ -1091,7 +1113,6 @@ function randomItem(items) {
     if (!items || !items.length) return null;
     return items[Math.floor(Math.random() * items.length)];
 }
-
 function getPartPools() {
     const pools = {
         common: [],
@@ -1111,7 +1132,6 @@ function getPartPools() {
     });
     return pools;
 }
-
 function chooseContainerRarity(container, pools) {
     const chances = container.chances || {};
     const rarities = ['common', 'rare', 'legendary'];
@@ -1131,14 +1151,12 @@ function chooseContainerRarity(container, pools) {
     }
     return available[available.length - 1];
 }
-
 function getPartLoot(container) {
     const pools = getPartPools();
     const rarity = chooseContainerRarity(container, pools);
     if (!rarity) return null;
     return randomItem(pools[rarity]);
 }
-
 function getTrackLoot() {
     const undiscovered = TRACKS_DB.filter(track =>
         !player.unlockedTracks.includes(track.id)
@@ -1153,14 +1171,12 @@ function getTrackLoot() {
     const matching = undiscovered.filter(track => track.rarity === rarity);
     return randomItem(matching.length ? matching : undiscovered);
 }
-
 function hasEnoughCurrency(container) {
     if (container.currency === 'coupon') {
         return player.coupons >= Number(container.price);
     }
     return player.coins >= Number(container.price);
 }
-
 function chargeContainer(container) {
     const price = Math.max(0, Number(container.price) || 0);
     if (!hasEnoughCurrency(container)) return false;
@@ -1171,7 +1187,6 @@ function chargeContainer(container) {
     }
     return true;
 }
-
 function refundContainer(container) {
     const price = Math.max(0, Number(container.price) || 0);
     if (container.currency === 'coupon') {
@@ -1180,7 +1195,6 @@ function refundContainer(container) {
         player.coins = (Number(player.coins) || 0) + price;
     }
 }
-
 function openContainer(containerId) {
     if (containerOpening) return;
     if (containerId === 'parts') containerId = 'basic';
@@ -1285,11 +1299,9 @@ function openContainer(containerId) {
             updateGarageUI();
             updateUpgradeUI();
             renderContainerShop();
-            queueSave();
         }
     }, 1200);
 }
-
 function openTrackContainer() {
     if (containerOpening) return;
     const cost = 1000;
@@ -1343,11 +1355,9 @@ function openTrackContainer() {
             containerOpening = false;
             updateHUD();
             updateTracksUI();
-            queueSave();
         }
     }, 1200);
 }
-
 function getRaceReward(track, win) {
     const index = Math.max(0, TRACKS_DB.findIndex(item => item.id === track?.id));
     if (win) {
@@ -1355,7 +1365,6 @@ function getRaceReward(track, win) {
     }
     return Math.max(50, Number(track?.lossReward) || (50 + index * 10));
 }
-
 function showRaceResult(win, reason, bonusText) {
     playRaceResult(Boolean(win));
 
@@ -1373,7 +1382,6 @@ function showRaceResult(win, reason, bonusText) {
         rewardText.innerHTML = bonusText;
     }
 }
-
 function handleRaceEnd(win, reason = 'finish') {
     const selectedId = player.selectedTrack;
     const trackIndex = TRACKS_DB.findIndex(track => track.id === selectedId);
@@ -1425,10 +1433,8 @@ function handleRaceEnd(win, reason = 'finish') {
     updateTracksUI();
     updateUpgradeUI();
     renderContainerShop();
-    queueSave();
     showRaceResult(result, reason, bonusText);
 }
-
 window.selectTrack = function (id) {
     if (!canPlayTrack(id)) {
         alert('Сначала победи на предыдущей трассе!');
@@ -1436,9 +1442,7 @@ window.selectTrack = function (id) {
     }
     player.selectedTrack = id;
     updateTracksUI();
-    queueSave();
 };
-
 window.showScreen = showScreen;
 window.openContainer = function (type, payment) {
     if (type === 'parts' && payment === 'coupon') {
@@ -1454,8 +1458,6 @@ window.openContainer = function (type, payment) {
 window.resetRace = function () {
     showScreen('garage');
 };
-window.resetProgressRequest = resetProgressRequest;
-
 function setupButton(id, startAction, stopAction) {
     const button = document.getElementById(id);
     if (!button) return;
@@ -1484,12 +1486,10 @@ function setupButton(id, startAction, stopAction) {
         stopAction();
     }, { passive: false });
 }
-
 setupButton('btn-accelerate', () => setAccelerating(true), () => setAccelerating(false));
 setupButton('btn-brake', () => setBraking(true), () => setBraking(false));
 setupButton('btn-reverse', () => setReversing(true), () => setReversing(false));
 setupButton('btn-jump', () => triggerJump(), () => {});
-
 window.addEventListener('keydown', event => {
     const raceScreen = document.getElementById('screen-race');
     if (!raceScreen?.classList.contains('active')) return;
@@ -1513,41 +1513,24 @@ window.addEventListener('keydown', event => {
         triggerJump();
     }
 });
-
 window.addEventListener('keyup', event => {
     if (event.code === 'KeyD' || event.code === 'ArrowRight') setAccelerating(false);
     if (event.code === 'KeyA' || event.code === 'ArrowLeft') setReversing(false);
     if (event.code === 'KeyS' || event.code === 'ArrowDown') setBraking(false);
 });
-
 window.addEventListener('blur', () => {
     setAccelerating(false);
     setBraking(false);
     setReversing(false);
 });
-
-async function bootstrapApp() {
-    initTelegramApp();
-
-    await loadPlayerState();
-    normalizePlayerState();
-    queueSave();
-
-    initAudioControls();
-    setAudioScene('garage');
-
-    calculateBikeStats();
-    ensureCouponsHUD();
-    renderContainerShop();
-    updateHUD();
-    updateGarageUI();
-    updateTracksUI();
-    updateUpgradeUI();
-    showScreen('garage');
-}
-
-bootstrapApp();
-
-window.addEventListener('beforeunload', () => {
-    void savePlayerState();
-});
+normalizePlayerState();
+initAudioControls();
+setAudioScene('garage');
+calculateBikeStats();
+ensureCouponsHUD();
+renderContainerShop();
+updateHUD();
+updateGarageUI();
+updateTracksUI();
+updateUpgradeUI();
+showScreen('garage');

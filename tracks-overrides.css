@@ -1,0 +1,414 @@
+/* ==========================================================
+   VeloRider — scoped track tab overrides
+   This file is loaded AFTER the project's existing style.css.
+   ========================================================== */
+
+:root {
+    --vr-line: rgba(148, 163, 184, .18);
+}
+
+#screen-tracks, #screen-tracks * { box-sizing: border-box; }
+
+/* Tracks screen: fixed heading + independently scrolling cards. */
+#screen-tracks.tracks-screen:not(.hidden) {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.tracks-heading {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-width: 0;
+    padding: 2px 2px 14px;
+    border-bottom: 1px solid var(--vr-line);
+}
+
+.tracks-heading__text { min-width: 0; }
+
+.tracks-kicker {
+    display: inline-block;
+    margin-bottom: 7px;
+    color: #5ee0a2;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: .18em;
+}
+
+.tracks-heading h2 {
+    margin: 0;
+    color: #f8fafc;
+    font-size: clamp(23px, 3vw, 32px);
+    line-height: 1.15;
+    font-weight: 900;
+    letter-spacing: -.035em;
+}
+
+.tracks-heading p {
+    margin: 7px 0 0;
+    color: #9aa9bd;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.tracks-total-box {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 70px;
+    padding: 9px 13px;
+    border: 1px solid rgba(94, 224, 162, .28);
+    border-radius: 13px;
+    background: rgba(16, 185, 129, .08);
+}
+
+.tracks-total-box strong {
+    color: #6ee7b7;
+    font-size: 24px;
+    line-height: 1;
+    font-weight: 900;
+}
+
+.tracks-total-box span {
+    margin-top: 5px;
+    color: #9aa9bd;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+}
+
+#tracks-list.tracks-grid {
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: max-content;
+    align-content: start;
+    gap: 15px;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    padding: 2px 5px 18px 2px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: #40516a transparent;
+}
+
+.tracks-grid::-webkit-scrollbar { width: 6px; }
+.tracks-grid::-webkit-scrollbar-thumb {
+    border-radius: 20px;
+    background: #40516a;
+}
+
+.track-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+    min-height: 300px;
+    padding: 16px;
+    overflow: hidden;
+    border: 1px solid rgba(148, 163, 184, .2);
+    border-radius: 18px;
+    background:
+        radial-gradient(circle at 100% 0%, rgba(45, 212, 191, .08), transparent 38%),
+        linear-gradient(155deg, #192638 0%, #111b29 100%);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, .16);
+    transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+
+.track-card--playable { border-color: rgba(148, 163, 184, .23); }
+.track-card--playable:hover {
+    border-color: rgba(74, 222, 128, .65);
+    transform: translateY(-2px);
+    box-shadow: 0 12px 26px rgba(0, 0, 0, .24);
+}
+
+.track-card--selected {
+    border-color: rgba(74, 222, 128, .85);
+    background:
+        radial-gradient(circle at 100% 0%, rgba(34, 197, 94, .18), transparent 42%),
+        linear-gradient(155deg, #1b332e 0%, #13251f 100%);
+    box-shadow: 0 0 0 1px rgba(74, 222, 128, .12), 0 10px 26px rgba(0, 0, 0, .22);
+}
+
+.track-card--locked-card {
+    background: linear-gradient(155deg, #192231 0%, #121a26 100%);
+    border-color: rgba(100, 116, 139, .16);
+}
+
+.track-card__topline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.track-card__number {
+    color: #8292a9;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: .16em;
+}
+
+.track-status {
+    display: inline-flex;
+    align-items: center;
+    max-width: 65%;
+    padding: 5px 8px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 10px;
+    line-height: 1.1;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.track-status--available {
+    color: #86efac;
+    background: rgba(34, 197, 94, .11);
+    border-color: rgba(34, 197, 94, .22);
+}
+.track-status--selected {
+    color: #bbf7d0;
+    background: rgba(34, 197, 94, .2);
+    border-color: rgba(74, 222, 128, .36);
+}
+.track-status--completed {
+    color: #a5f3fc;
+    background: rgba(6, 182, 212, .11);
+    border-color: rgba(6, 182, 212, .2);
+}
+.track-status--found {
+    color: #bfdbfe;
+    background: rgba(59, 130, 246, .11);
+    border-color: rgba(59, 130, 246, .22);
+}
+.track-status--locked {
+    color: #a1a1aa;
+    background: rgba(100, 116, 139, .12);
+    border-color: rgba(100, 116, 139, .18);
+}
+
+.track-card__title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.track-card__icon {
+    display: grid;
+    flex: 0 0 46px;
+    width: 46px;
+    height: 46px;
+    place-items: center;
+    border: 1px solid rgba(148, 163, 184, .18);
+    border-radius: 13px;
+    background: rgba(8, 15, 25, .62);
+    font-size: 22px;
+}
+
+.track-card--selected .track-card__icon {
+    border-color: rgba(74, 222, 128, .32);
+    background: rgba(34, 197, 94, .1);
+}
+
+.track-card__title-wrap { min-width: 0; }
+.track-card__title {
+    margin: 0;
+    color: #f8fafc;
+    font-size: 17px;
+    line-height: 1.25;
+    font-weight: 900;
+    overflow-wrap: anywhere;
+}
+
+.track-card__rarity {
+    display: inline-block;
+    margin-top: 5px;
+    color: #9eafc4;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+}
+
+.track-card__stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+}
+
+.track-stat {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    min-width: 0;
+    min-height: 57px;
+    padding: 9px 8px;
+    border: 1px solid rgba(148, 163, 184, .12);
+    border-radius: 11px;
+    background: rgba(7, 13, 22, .48);
+}
+
+.track-stat span {
+    color: #8fa0b6;
+    font-size: 9px;
+    line-height: 1.2;
+    font-weight: 700;
+}
+
+.track-stat strong {
+    color: #e6edf6;
+    font-size: 13px;
+    line-height: 1.2;
+    font-weight: 900;
+    overflow-wrap: anywhere;
+}
+
+.track-card__rewards {
+    margin-top: auto;
+    padding-top: 11px;
+    border-top: 1px solid rgba(148, 163, 184, .13);
+}
+
+.track-card__section-label {
+    margin-bottom: 9px;
+    color: #8292a9;
+    font-size: 9px;
+    font-weight: 900;
+    letter-spacing: .16em;
+}
+
+.track-card__reward-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+}
+
+.track-reward {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    padding: 8px 9px;
+    border-radius: 10px;
+    background: rgba(7, 13, 22, .38);
+}
+
+.track-reward span {
+    color: #8fa0b6;
+    font-size: 9px;
+    line-height: 1.2;
+}
+
+.track-reward strong {
+    color: #facc15;
+    font-size: 12px;
+    line-height: 1.25;
+    font-weight: 900;
+}
+
+.track-reward--win strong { color: #86efac; }
+.track-reward--coupon strong { color: #6ee7b7; }
+
+.track-card__action {
+    width: 100%;
+    min-height: 42px;
+    margin-top: 1px;
+    padding: 10px 12px;
+    border: 1px solid rgba(74, 222, 128, .34);
+    border-radius: 11px;
+    background: linear-gradient(135deg, #16834d, #11613e);
+    color: #f0fdf4;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 900;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: filter .15s ease, transform .15s ease;
+}
+
+.track-card__action:not(:disabled):hover { filter: brightness(1.12); }
+.track-card__action:not(:disabled):active { transform: scale(.985); }
+.track-card__action:disabled {
+    cursor: default;
+    opacity: .88;
+    background: rgba(34, 197, 94, .14);
+    color: #a7f3d0;
+}
+
+.track-card__locked-note {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 52px;
+    margin-top: 1px;
+    padding: 10px 11px;
+    border: 1px solid rgba(100, 116, 139, .18);
+    border-radius: 11px;
+    background: rgba(7, 13, 22, .42);
+}
+
+.track-card__locked-note strong {
+    color: #cbd5e1;
+    font-size: 11px;
+}
+
+.track-card__locked-note span {
+    color: #8796aa;
+    font-size: 10px;
+    line-height: 1.35;
+}
+
+/* Keep all screens scroll-safe on mobile, without changing their design. */
+@media (max-width: 1100px) {
+    #tracks-list.tracks-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 700px) {
+    #screen-tracks.tracks-screen:not(.hidden) { gap: 12px; }
+    .tracks-heading { gap: 10px; padding-bottom: 11px; }
+    .tracks-heading p { max-width: 250px; font-size: 11px; }
+    .tracks-total-box { min-width: 58px; padding: 8px 10px; }
+    .tracks-total-box strong { font-size: 21px; }
+    #tracks-list.tracks-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 11px;
+        padding: 1px 2px 16px 1px;
+    }
+    .track-card {
+        min-height: 0;
+        gap: 11px;
+        padding: 14px;
+        border-radius: 15px;
+    }
+    .track-card__title { font-size: 16px; }
+    .track-card__stats { gap: 6px; }
+    .track-stat { min-height: 52px; padding: 8px 7px; }
+    .track-stat span { font-size: 8px; }
+    .track-stat strong { font-size: 12px; }
+    .track-card__reward-grid { gap: 6px; }
+    .track-reward { padding: 7px 8px; }
+}
+
+@media (max-width: 360px) {
+    .track-card__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .track-stat:last-child { grid-column: 1 / -1; }
+    .tracks-heading h2 { font-size: 22px; }
+}

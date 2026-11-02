@@ -1,36 +1,22 @@
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#111827">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
     <title>VeloRider: Custom Garage</title>
 
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script>
-        window.addEventListener('DOMContentLoaded', () => {
-            const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
-
-            if (tg) {
-                tg.ready();
-                tg.expand();
-
-                const applyTelegramTheme = () => {
-                    const isDark = tg.colorScheme === 'dark';
-                    document.documentElement.style.setProperty('--tg-theme-bg-color', isDark ? '#111827' : '#ffffff');
-                    document.documentElement.style.setProperty('--tg-theme-text-color', isDark ? '#ffffff' : '#111111');
-                };
-
-                applyTelegramTheme();
-
-                tg.onEvent('themeChanged', applyTelegramTheme);
-            }
-        });
+        if (window.Telegram && window.Telegram.WebApp) {
+            window.Telegram.WebApp.ready();
+            window.Telegram.WebApp.expand();
+        }
     </script>
-
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=5">
+    <link rel="stylesheet" href="tracks-overrides.css?v=5">
 </head>
 
 <body class="bg-gray-900 text-white font-sans h-screen flex flex-col select-none overflow-hidden">
@@ -99,7 +85,7 @@
                 Гараж
             </button>
 
-            <!-- Модернизация -->
+            <!-- НОВАЯ МОДЕРНИЗАЦИЯ -->
             <button
                 onclick="showScreen('upgrade')"
                 class="nav-btn bg-gray-700 hover:bg-gray-600 active:bg-gray-500 p-4 rounded-xl text-left transition duration-200 flex items-center gap-3 border border-gray-600">
@@ -136,14 +122,6 @@
                     <span class="text-xl">🏁</span>
                     В ГОНКУ
 
-                </button>
-
-                <button
-                    onclick="resetProgressRequest()"
-                    class="nav-btn mt-3 bg-red-700 hover:bg-red-600 active:bg-red-500 p-4 rounded-xl text-center w-full transition duration-200 flex items-center justify-center gap-2 font-bold border border-red-500/50">
-
-                    <span class="text-xl">🧹</span>
-                    Сбросить прогресс
                 </button>
 
             </div>
@@ -267,6 +245,9 @@
                         </h3>
 
                         <div id="upgrade-categories" class="flex flex-col gap-2">
+
+                            <!-- Заполняется через main.js -->
+
                         </div>
 
                     </div>
@@ -296,10 +277,14 @@
 
                         </div>
 
+
                         <!-- Карточки компонентов -->
                         <div
                             id="upgrade-parts"
                             class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+
+                            <!-- Заполняется через main.js -->
+
                         </div>
 
                     </div>
@@ -402,16 +387,21 @@
                  ЭКРАН ТРАСС
             ================================== -->
 
-            <div id="screen-tracks" class="screen hidden flex flex-col h-full">
+            <div id="screen-tracks" class="screen tracks-screen hidden flex flex-col h-full">
 
-                <h2 class="text-3xl font-bold mb-6 text-gray-100">
-                    Выбор локации
-                </h2>
-
-                <div
-                    id="tracks-list"
-                    class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto pr-2 pb-2">
+                <div class="tracks-heading">
+                    <div class="tracks-heading__text">
+                        <span class="tracks-kicker">VELO RIDER / MAP SELECT</span>
+                        <h2>Выбор трассы</h2>
+                        <p>Выбери доступный маршрут и проверь награды перед стартом.</p>
+                    </div>
+                    <div class="tracks-total-box">
+                        <strong id="tracks-total">10</strong>
+                        <span>локаций</span>
+                    </div>
                 </div>
+
+                <div id="tracks-list" class="tracks-grid" aria-label="Список трасс"></div>
 
             </div>
 
@@ -464,7 +454,10 @@
                 </div>
 
 
-                <!-- КНОПКИ УПРАВЛЕНИЯ -->
+                <!-- =================================
+                     КНОПКИ УПРАВЛЕНИЯ
+                ================================== -->
+
                 <div class="grid grid-cols-4 gap-3 h-24 shrink-0">
 
                     <!-- Назад -->
@@ -535,7 +528,7 @@
          ГЛАВНЫЙ JAVASCRIPT
     ====================================== -->
 
-    <script type="module" src="main.js"></script>
+    <script type="module" src="main.js?v=6"></script>
 
 </body>
 </html>
