@@ -319,6 +319,22 @@ function getBikeVisualProfile() {
     };
 }
 
+function getPlayerPartAbilities() {
+    const equippedParts = Object.entries(player.equipped || {}).map(([category, id]) =>
+        ITEMS_DB[category]?.find(item => item.id === id)
+    ).filter(Boolean);
+    return {
+        nitroUnlocked: equippedParts.some(item => item.ability?.id === 'nitro'),
+        superJumpUnlocked: equippedParts.some(item => item.ability?.id === 'superJump'),
+        frameGuard: equippedParts.some(item => item.ability?.id === 'frameGuard'),
+        shockFrame: equippedParts.some(item => item.ability?.id === 'shockFrame'),
+        flowFrame: equippedParts.some(item => item.ability?.id === 'flowFrame'),
+        landingFrame: equippedParts.some(item => item.ability?.id === 'landingFrame'),
+        mudGrip: equippedParts.some(item => item.ability?.id === 'mudGrip'),
+        impactBrake: equippedParts.some(item => item.ability?.id === 'impactBrake')
+    };
+}
+
 function createBike(isBot = false, botIndex = 1) {
     const botColor = botIndex === 2
         ? '#38bdf8'
@@ -362,9 +378,7 @@ function createBike(isBot = false, botIndex = 1) {
 
         color: isBot ? botColor : '#22c55e',
 
-        abilities: isBot
-            ? getBotAbilities(botIndex)
-            : null,
+        abilities: isBot ? getBotAbilities(botIndex) : getPlayerPartAbilities(),
 
         // Индивидуальные характеристики бота.
         botDifficultyTrackId: difficulty?.trackId || null,
@@ -373,7 +387,11 @@ function createBike(isBot = false, botIndex = 1) {
         botJumpForce: difficulty?.jumpForce || 0,
 
         nitroTimer: 0,
+        springBoostTimer: 0,
         nitroCooldown: 150 + botIndex * 65,
+        lastGasTap: 0,
+        frameGuardUsed: false,
+        landingBoostCooldown: 0,
 
         shieldActiveTimer: 0,
 
@@ -537,6 +555,7 @@ function finishRace(playerWon, reason = 'finish') {
 // =========================================
 
 function updateJumpPhysics(bike) {
+    if (!bike.isBot && bike.landingBoostCooldown > 0) bike.landingBoostCooldown--;
     if (bike.grounded) return;
 
     bike.jumpHeight += bike.jumpVelocity;
@@ -550,6 +569,11 @@ function updateJumpPhysics(bike) {
         bike.grounded = true;
         bike.rampLift = 0;
         bike.currentRamp = null;
+        if (!bike.isBot && bike.abilities?.landingFrame && bike.landingBoostCooldown <= 0) {
+            bike.velocityX += 0.45;
+            bike.springBoostTimer = Math.max(bike.springBoostTimer || 0, 24);
+            bike.landingBoostCooldown = 300;
+        }
     }
 }
 
@@ -726,6 +750,10 @@ function updatePlayerPhysics() {
     const maxSpeed =
         3.2 + Math.min(speed, 70) * 0.12;
 
+    if (playerBike.nitroTimer > 0) playerBike.nitroTimer--;
+    if (playerBike.nitroCooldown > 0) playerBike.nitroCooldown--;
+    const nitroMultiplier = playerBike.nitroTimer > 0 ? 1.32 : 1;
+
     const acceleration =
         0.05 + Math.min(accel, 70) * 0.002;
 
@@ -774,7 +802,15 @@ function updatePlayerPhysics() {
         playerBike.velocityX *= 0.992;
     }
 
-    let allowedSpeed = maxSpeed;
+    let allowedSpeed = maxSpeed * nitroMultiplier;
+    if (playerBike.nitroTimer > 0 && input.accelerating) {
+        playerBike.velocityX += acceleration * 0.55;
+    }
+
+    if (playerBike.springBoostTimer > 0) {
+        playerBike.springBoostTimer--;
+        allowedSpeed *= 1.18;
+    }
 
     if (playerBike.impactSlowTimer > 0) {
         playerBike.impactSlowTimer--;
@@ -799,10 +835,11 @@ function updatePlayerPhysics() {
     );
 
     if (input.jumpRequested) {
+        const superJumpMultiplier = playerBike.abilities?.superJumpUnlocked ? 1.15 : 1;
         startJump(
             playerBike,
-            jumpForce,
-            jumpGravity
+            jumpForce * superJumpMultiplier,
+            jumpGravity * (playerBike.abilities?.superJumpUnlocked ? 0.98 : 1)
         );
 
         input.jumpRequested = false;
@@ -997,6 +1034,7 @@ function updateBotAbilities(bike) {
 
 function updateBotPhysics(bike) {
     updateBotAbilities(bike);
+    if (bike.springBoostTimer > 0) bike.springBoostTimer--;
 
     // Используем индивидуальную скорость конкретного бота.
     const baseMaxSpeed = Math.max(
@@ -1010,8 +1048,9 @@ function updateBotPhysics(bike) {
             ? 1.28
             : 1;
 
+    const springBoostMultiplier = bike.springBoostTimer > 0 ? 1.18 : 1;
     const maxSpeed =
-        baseMaxSpeed * nitroMultiplier;
+        baseMaxSpeed * nitroMultiplier * springBoostMultiplier;
 
     // У каждого бота собственное ускорение.
     const baseAcceleration = Math.max(
@@ -1079,7 +1118,18 @@ function applyPlayerImpact(obstacle, speedLimit = 1.0) {
 
     playerBike.collidedObstacles.add(obstacle.id);
 
-    playerBike.impactSlowTimer = 42;
+    let impactDuration = playerBike.abilities?.shockFrame ? 36 : 42;
+    if (playerBike.abilities?.impactBrake) impactDuration = Math.round(impactDuration * 0.85);
+    if (playerBike.abilities?.frameGuard && !playerBike.frameGuardUsed &&
+        ['rock', 'rolling_boulder', 'log', 'barrier', 'fallen_branch', 'cone'].includes(obstacle.type)) {
+        playerBike.frameGuardUsed = true;
+        speedLimit = Math.max(speedLimit, playerBike.velocityX * 0.78);
+    }
+    if (playerBike.abilities?.flowFrame && ['ice_patch', 'wind_fan'].includes(obstacle.type)) {
+        speedLimit = Math.max(speedLimit, Math.min(playerBike.velocityX, speedLimit * 1.15));
+    }
+
+    playerBike.impactSlowTimer = impactDuration;
     playerBike.impactSpeedLimit = speedLimit;
 
     playerBike.velocityX = Math.min(
@@ -1127,14 +1177,17 @@ function updatePlayerCollisions() {
         }
         if (obstacle.type === 'spring_pad') {
             if (!obstacle.playerHit && playerBike.grounded) {
-                obstacle.playerHit = true; playerBike.velocityX += 1.6;
-                playerBike.nitroTimer = Math.max(playerBike.nitroTimer, 34);
+                obstacle.playerHit = true;
+                playerBike.velocityX += 1.6;
+                playerBike.springBoostTimer = 36;
             }
             continue;
         }
         if (obstacle.type === 'mud' || obstacle.type === 'water_splash' || obstacle.type === 'ice_patch' || obstacle.type === 'wind_fan') {
             if (playerBike.grounded) {
-                if (obstacle.type === 'ice_patch') {
+                if (playerBike.abilities?.mudGrip && ['mud', 'water_splash'].includes(obstacle.type)) {
+                    applyPlayerImpact(obstacle, Math.max(0.8, playerBike.velocityX * 0.82));
+                } else if (obstacle.type === 'ice_patch') {
                     applyPlayerImpact(obstacle, Math.max(0.8, playerBike.velocityX * 0.58));
                 } else if (obstacle.type === 'wind_fan') {
                     applyPlayerImpact(obstacle, Math.max(0.6, playerBike.velocityX * 0.42));
@@ -1270,8 +1323,9 @@ function updateBotCollisions(bike) {
         }
         if (obstacle.type === 'spring_pad') {
             if (!obstacle.botHitBy.has(bike.botIndex) && bike.grounded) {
-                obstacle.botHitBy.add(bike.botIndex); bike.velocityX += 1.6;
-                bike.nitroTimer = Math.max(bike.nitroTimer, 34);
+                obstacle.botHitBy.add(bike.botIndex);
+                bike.velocityX += 1.6;
+                bike.springBoostTimer = 36;
             }
             continue;
         }
@@ -1976,6 +2030,16 @@ function drawBike(bike, label, color) {
 
     ctx.restore();
 
+    if (bike.springBoostTimer > 0) {
+        ctx.fillStyle = '#4ade80';
+        ctx.beginPath();
+        ctx.moveTo(rearWheelX - 4, wheelY - 2);
+        ctx.lineTo(rearWheelX - 14 - Math.random() * 4, wheelY - 5);
+        ctx.lineTo(rearWheelX - 10, wheelY + 2);
+        ctx.closePath();
+        ctx.fill();
+    }
+
     if (bike.nitroTimer > 0) {
         ctx.fillStyle = '#fbbf24';
         ctx.beginPath();
@@ -2018,7 +2082,9 @@ function drawRaceHUD() {
         ...activeBots.map((bike, index) => {
             const icon = bike.nitroTimer > 0
                 ? ' ⚡'
-                : bike.abilities?.superJumpUnlocked
+                : bike.springBoostTimer > 0
+                    ? ' ↗'
+                    : bike.abilities?.superJumpUnlocked
                     ? ' ✦'
                     : bike.abilities?.shieldCharges > 0 ||
                       bike.shieldActiveTimer > 0
@@ -2187,7 +2253,9 @@ function render() {
     activeBots.forEach((bike, index) => {
         const label = bike.nitroTimer > 0
             ? `${bike.displayName} ⚡`
-            : bike.abilities?.superJumpUnlocked
+            : bike.springBoostTimer > 0
+                ? `${bike.displayName} ↗`
+                : bike.abilities?.superJumpUnlocked
                 ? `${bike.displayName} ✦`
                 : bike.abilities?.shieldCharges > 0 ||
                   bike.shieldActiveTimer > 0
@@ -2402,7 +2470,18 @@ export function initRace(onRaceEnd) {
 // =========================================
 
 export function setAccelerating(value) {
-    input.accelerating = Boolean(value);
+    const nextValue = Boolean(value);
+    if (nextValue && !input.accelerating && raceRunning && !raceFinished && playerBike?.abilities?.nitroUnlocked) {
+        const now = performance.now();
+        if (now - playerBike.lastGasTap < 320 && playerBike.nitroCooldown <= 0) {
+            playerBike.nitroTimer = 120;
+            playerBike.nitroCooldown = 480;
+            playerBike.lastGasTap = 0;
+        } else {
+            playerBike.lastGasTap = now;
+        }
+    }
+    input.accelerating = nextValue;
 }
 
 export function setBraking(value) {

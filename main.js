@@ -701,6 +701,25 @@ function ensureGarageStyles() {
             border-radius:14px !important;
         }
 
+        .upgrade-part-title-row { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+        .upgrade-part-title { min-width:0; overflow-wrap:anywhere; }
+        .upgrade-part-info { position:relative; flex:0 0 auto; }
+        .upgrade-part-info-button {
+            display:grid; place-items:center; width:25px; height:25px; padding:0 !important;
+            border:1px solid #fbbf24 !important; border-radius:50% !important;
+            color:#fde68a !important; background:#78350f !important;
+            font-size:14px !important; font-weight:900; line-height:1;
+        }
+        .upgrade-part-info-panel {
+            display:none; position:absolute; z-index:20; top:31px; right:0;
+            width:min(260px, calc(100vw - 48px)); padding:11px;
+            border:1px solid #a16207; border-radius:10px; color:#fef3c7;
+            background:#1c1917; box-shadow:0 8px 24px #0009;
+            font-size:11px; font-weight:500; line-height:1.5;
+        }
+        .upgrade-part-info-panel.is-open { display:block; }
+        .upgrade-part-info-panel .garage-part-stats { margin-top:8px; }
+
         #garage-upgrade-parts button {
             border-radius:10px;
             font-size:11px;
@@ -1356,6 +1375,35 @@ function getPartStatsHTML(part) {
     }).join('');
 }
 
+function getPartInfoHTML(category, part) {
+    const ability = part.ability;
+    const description = typeof ability === 'string' ? ability : ability?.description;
+    if (part.rarity !== 'legendary' || !description) return '';
+
+    return `
+        <div class="upgrade-part-info">
+            <button type="button" class="upgrade-part-info-button" aria-expanded="false" aria-label="Суперспособность: ${escapeHTML(part.name)}">?</button>
+            <div class="upgrade-part-info-panel" role="note">
+                <strong>Суперспособность</strong><br>
+                ${escapeHTML(description)}
+            </div>
+        </div>
+    `;
+}
+
+function attachPartInfoToggle(card) {
+    const button = card.querySelector('.upgrade-part-info-button');
+    const panel = card.querySelector('.upgrade-part-info-panel');
+    if (!button || !panel) return;
+
+    button.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        const isOpen = panel.classList.toggle('is-open');
+        button.setAttribute('aria-expanded', String(isOpen));
+    });
+}
+
 function renderGarageStats(stats) {
     const grid = document.getElementById('garage-stat-grid');
     const extra = document.getElementById('garage-extra-stats');
@@ -1674,8 +1722,9 @@ function updateUpgradeUI() {
                     ${getCategoryName(category)}
                 </div>
 
-                <div class="text-xl font-black rarity-${part.rarity}">
-                    ${part.name}
+                <div class="upgrade-part-title-row">
+                    <div class="upgrade-part-title text-xl font-black rarity-${part.rarity}">${escapeHTML(part.name)}</div>
+                    ${getPartInfoHTML(category, part)}
                 </div>
 
                 <div class="text-xs text-gray-400">
@@ -1695,6 +1744,7 @@ function updateUpgradeUI() {
                 </div>
             `;
 
+            attachPartInfoToggle(card);
             partsDiv.appendChild(card);
             return;
         }
@@ -1739,8 +1789,9 @@ function updateUpgradeUI() {
                 ${getCategoryName(category)}
             </div>
 
-            <div class="text-xl font-black rarity-${part.rarity}">
-                ${part.name}
+            <div class="upgrade-part-title-row">
+                <div class="upgrade-part-title text-xl font-black rarity-${part.rarity}">${escapeHTML(part.name)}</div>
+                ${getPartInfoHTML(category, part)}
             </div>
 
             <div class="text-xs text-gray-400">
@@ -1759,6 +1810,8 @@ function updateUpgradeUI() {
                 ${actionHTML}
             </div>
         `;
+
+        attachPartInfoToggle(card);
 
         card.querySelector('.buy-part-button')?.addEventListener('click', () => {
             buyPart(category, part.id);

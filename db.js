@@ -8,16 +8,22 @@ const part = (
     jump,
     brake,
     price
-) => ({
-    id,
-    name,
-    rarity,
-    speed,
-    accel,
-    jump,
-    brake,
-    price
-});
+) => {
+    const partData = { id, name, rarity, speed, accel, jump, brake, price };
+    const legendaryAbilities = {
+        f3: { id: 'frameGuard', name: 'Карбоновый монокок', description: 'Первое столкновение с твёрдым препятствием за гонку наносит меньше потери скорости.' },
+        f8: { id: 'shockFrame', name: 'Гибкая рама', description: 'После удара велосипед восстанавливает скорость на 15% быстрее.' },
+        f9: { id: 'flowFrame', name: 'Трассовый баланс', description: 'На льду и сильном ветре теряется на 15% меньше скорости.' },
+        f10: { id: 'landingFrame', name: 'Мягкая посадка', description: 'После успешного прыжка кратко ускоряет велосипед. Срабатывает не чаще раза в 5 секунд.' },
+        e4: { id: 'nitro', name: 'Импульсный разгон', description: 'Дважды нажми газ, чтобы включить нитро: скорость и разгон повышаются на 2 секунды. Перезарядка — 8 секунд.' },
+        e5: { id: 'nitro', name: 'Импульсный разгон', description: 'Дважды нажми газ, чтобы включить нитро: скорость и разгон повышаются на 2 секунды. Перезарядка — 8 секунд.' },
+        fk8: { id: 'superJump', name: 'Пружинный прыжок', description: 'Прыжок становится на 35% выше и дольше держит велосипед в воздухе.' },
+        ti5: { id: 'mudGrip', name: 'Грязевой протектор', description: 'В грязи и воде теряется на 20% меньше скорости.' },
+        b7: { id: 'impactBrake', name: 'Контроль торможения', description: 'После столкновения замедление длится на 15% меньше.' }
+    };
+    if (legendaryAbilities[id]) partData.ability = legendaryAbilities[id];
+    return partData;
+};
 
 
 // =========================================
