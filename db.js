@@ -325,8 +325,8 @@ export const CONTAINERS_DB = [
         currency: 'coins',
         price: 500,
         chances: {
-            common: 88,
-            rare: 11,
+            common: 60,
+            rare: 39,
             legendary: 1
         }
     },
@@ -339,9 +339,9 @@ export const CONTAINERS_DB = [
         currency: 'coins',
         price: 1500,
         chances: {
-            common: 65,
-            rare: 30,
-            legendary: 5
+            common: 45,
+            rare: 45,
+            legendary: 10
         }
     },
 
@@ -351,26 +351,35 @@ export const CONTAINERS_DB = [
         description: 'Высокий шанс на редкие и легендарные детали',
         icon: '🏆',
         currency: 'coins',
-        price: 3500,
+        price: 4000,
         chances: {
-            common: 40,
-            rare: 42,
-            legendary: 18
+            common: 10,
+            rare: 60,
+            legendary: 30
         }
     },
 
     {
         id: 'coupon',
         name: 'Велоконтейнер',
-        description: 'Контейнер средней ценности за 1 Велокупон',
+        description: 'Сбалансированные шансы за 2 Велокупона',
         icon: '🎁',
         currency: 'coupon',
-        price: 1,
+        price: 2,
         chances: {
             common: 60,
             rare: 35,
             legendary: 5
         }
+    },
+    {
+        id: 'winner',
+        name: 'Контейнер Победителя',
+        description: 'Только редкие и легендарные детали',
+        icon: '🏅',
+        currency: 'coupon',
+        price: 20,
+        chances: { common: 0, rare: 60, legendary: 40 }
     }
 ];
 
@@ -513,7 +522,7 @@ export const TRACKS_DB = [
         obstacleTypes: ['log', 'spring_pad', 'wind_fan', 'water_splash', 'cone', 'fallen_branch'],
         winReward: 1200,
         lossReward: 90,
-        couponReward: 1
+        couponReward: 2
     },
 
     {
@@ -529,7 +538,7 @@ export const TRACKS_DB = [
         obstacleTypes: ['rock', 'rolling_boulder', 'mud', 'bridge_gap', 'wind_fan', 'spring_pad'],
         winReward: 1450,
         lossReward: 100,
-        couponReward: 1
+        couponReward: 2
     },
 
     {
@@ -545,7 +554,7 @@ export const TRACKS_DB = [
         obstacleTypes: ['ice_patch', 'water_splash', 'bridge_gap', 'fallen_branch', 'pulse_gate', 'wind_fan'],
         winReward: 1700,
         lossReward: 115,
-        couponReward: 1
+        couponReward: 2
     },
 
     {
@@ -561,7 +570,7 @@ export const TRACKS_DB = [
         obstacleTypes: ['barrier', 'pulse_gate', 'rolling_boulder', 'mud', 'cone', 'bridge_gap'],
         winReward: 2000,
         lossReward: 130,
-        couponReward: 1
+        couponReward: 2
     },
 
     {
@@ -577,7 +586,7 @@ export const TRACKS_DB = [
         obstacleTypes: ['rock', 'pit', 'ramp', 'log', 'ice_patch', 'pulse_gate', 'rolling_boulder', 'wind_fan'],
         winReward: 2350,
         lossReward: 145,
-        couponReward: 1
+        couponReward: 3
     },
 
     {
@@ -593,6 +602,6 @@ export const TRACKS_DB = [
         obstacleTypes: ['rock', 'log', 'pit', 'ramp', 'barrier', 'cone', 'mud', 'fallen_branch', 'water_splash', 'wind_fan', 'spring_pad', 'ice_patch', 'bridge_gap', 'pulse_gate', 'rolling_boulder'],
         winReward: 2750,
         lossReward: 160,
-        couponReward: 1
+        couponReward: 3
     }
 ];

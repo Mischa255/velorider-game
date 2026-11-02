@@ -1,5 +1,5 @@
-import { player } from './state.js?v=10';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=10';
+import { player } from './state.js?v=13';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=13';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -12,6 +12,7 @@ const BIKE_WIDTH = 46;
 const BIKE_HEIGHT = 24;
 const TRACK_MULTIPLIER = 3;
 const OBSTACLE_MULTIPLIER = 3;
+const RACE_ZOOM = 0.86;
 const PLAYER_LANE_OFFSET = 0;
 const BOT_LANE_OFFSET = 0;
 
@@ -695,7 +696,9 @@ function updateRamp(bike, isBot) {
 
         bike.rampLift = 0;
         bike.grounded = false;
-        bike.jumpVelocity = 12 + extraJump;
+        bike.jumpVelocity = !isBot && currentTrackLevel >= 8
+            ? 10.2 + Math.min(extraJump, 0.9)
+            : 12 + extraJump;
 
         bike.jumpGravity = isBot && bike.abilities?.superJumpUnlocked
             ? 0.355
@@ -705,11 +708,13 @@ function updateRamp(bike, isBot) {
                     0.36,
                     0.38
                 )
-                : clamp(
-                    0.38 - jumpStat * 0.0007,
-                    0.36,
-                    0.38
-                );
+                : !isBot && currentTrackLevel >= 8
+                    ? 0.4
+                    : clamp(
+                        0.38 - jumpStat * 0.0007,
+                        0.36,
+                        0.38
+                    );
 
         bike.currentRamp = null;
     }
@@ -744,7 +749,7 @@ function updatePlayerPhysics() {
     const brake = clamp(
         Number(player.totalBrake) || 0,
         0,
-        26
+        80
     );
 
     const maxSpeed =
@@ -757,11 +762,7 @@ function updatePlayerPhysics() {
     const acceleration =
         0.05 + Math.min(accel, 70) * 0.002;
 
-    const brakePower = clamp(
-        0.14 + brake * 0.025,
-        0.14,
-        0.82
-    );
+    const brakePower = 0.08 + Math.min(brake, 80) * 0.0045;
 
     const jumpForce =
         8.5 + jump * 0.12;
@@ -799,7 +800,8 @@ function updatePlayerPhysics() {
         !input.reversing &&
         !input.braking
     ) {
-        playerBike.velocityX *= 0.992;
+        const coastBrake = 0.005 + Math.min(brake, 80) * 0.00013;
+        playerBike.velocityX *= 1 - coastBrake;
     }
 
     let allowedSpeed = maxSpeed * nitroMultiplier;
@@ -1827,6 +1829,17 @@ function drawBike(bike, label, color) {
     drawWheel(rearWheelX);
     drawWheel(frontWheelX);
 
+    if (!bike.isBot && input.braking && bike.velocityX > 0.15) {
+        ctx.save();
+        ctx.shadowColor = '#fb384f';
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = '#fb384f';
+        ctx.beginPath();
+        ctx.arc(rearWheelX, wheelY, radius * 0.34, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
     // Compress only the frame and rider vertically; wheel circles stay round.
     ctx.save();
     ctx.translate(0, wheelY);
@@ -2347,27 +2360,22 @@ function resizeCanvas() {
         Math.min(2, window.devicePixelRatio || 1)
     );
 
-    viewWidth = Math.max(
-        320,
-        rect.width || canvas.clientWidth || 800
-    );
+    const canvasWidth = Math.max(320, rect.width || canvas.clientWidth || 800);
+    const canvasHeight = Math.max(220, rect.height || canvas.clientHeight || 420);
+    viewWidth = canvasWidth / RACE_ZOOM;
+    viewHeight = canvasHeight / RACE_ZOOM;
 
-    viewHeight = Math.max(
-        220,
-        rect.height || canvas.clientHeight || 420
-    );
-
-    canvas.width = Math.round(viewWidth * dpr);
-    canvas.height = Math.round(viewHeight * dpr);
+    canvas.width = Math.round(canvasWidth * dpr);
+    canvas.height = Math.round(canvasHeight * dpr);
 
     ctx = canvas.getContext('2d');
 
     if (ctx) {
         ctx.setTransform(
-            dpr,
+            dpr * RACE_ZOOM,
             0,
             0,
-            dpr,
+            dpr * RACE_ZOOM,
             0,
             0
         );

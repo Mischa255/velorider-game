@@ -1,24 +1,24 @@
-import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=10';
+import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=13';
 import {
     player,
     loadPlayerState,
     initTelegramApp,
     clearSavedProgress,
     forceSavePlayerState
-} from './state.js?v=10';
+} from './state.js?v=13';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=10';
+} from './race.js?v=13';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=10';
+} from './audio.js?v=13';
 
 const CATEGORY_NAMES = {
     frames: 'Рамы',
@@ -986,6 +986,12 @@ const DUPLICATE_COMPENSATION = {
     legendary: 1000
 };
 
+function getUpgradePrice(part) {
+    const basePrice = Math.max(0, Number(part?.price) || 0);
+    const multiplier = part?.rarity === 'common' ? 1.3 : part?.rarity === 'rare' ? 1.5 : 1;
+    return Math.round(basePrice * multiplier / 10) * 10;
+}
+
 function getCategoryOrder() {
     return Object.keys(ITEMS_DB).filter(category =>
         Array.isArray(ITEMS_DB[category]) && ITEMS_DB[category].length > 0
@@ -1016,6 +1022,7 @@ function normalizePlayerState() {
     if (!Array.isArray(player.unlockedTracks)) player.unlockedTracks = ['t1'];
     if (!Array.isArray(player.completedTracks)) player.completedTracks = [];
     if (!Array.isArray(player.trackRewardsClaimed)) player.trackRewardsClaimed = [];
+    player.track4BonusClaimed = Boolean(player.track4BonusClaimed);
 
     if (!Array.isArray(player.unlockedComponentRarities)) {
         player.unlockedComponentRarities = ['common'];
@@ -1028,7 +1035,7 @@ function normalizePlayerState() {
     if (!player.componentProgression.rare) {
         player.componentProgression.rare = {
             unlocked: false,
-            requiredTrack: 't1',
+            requiredTrack: 't2',
             title: 'Редкие компоненты'
         };
     }
@@ -1040,6 +1047,8 @@ function normalizePlayerState() {
             title: 'Легендарные компоненты'
         };
     }
+    player.componentProgression.rare.requiredTrack = 't2';
+    player.componentProgression.legendary.requiredTrack = 't4';
 
     if (!player.equipped || typeof player.equipped !== 'object') {
         player.equipped = {};
@@ -1113,7 +1122,7 @@ function isRarityUnlocked(rarity) {
 }
 
 function syncProgression() {
-    if (player.completedTracks.includes('t1') || player.track1RewardClaimed) {
+    if (player.completedTracks.includes('t2')) {
         unlockComponentRarity('rare');
     }
     if (player.completedTracks.includes('t4')) {
@@ -1124,10 +1133,10 @@ function syncProgression() {
 
 function getRarityRequirement(rarity) {
     if (rarity === 'rare') {
-        const track = TRACKS_DB.find(item => item.id === 't1');
+        const track = TRACKS_DB.find(item => item.id === 't2');
         return track
             ? `Победите бота на трассе «${track.name}»`
-            : 'Победите на первой трассе';
+            : 'Победите на второй трассе';
     }
     if (rarity === 'legendary') {
         const track = TRACKS_DB.find(item => item.id === 't4');
@@ -1219,8 +1228,11 @@ function updateHUD() {
         const enough = container.currency === 'coupon'
             ? player.coupons >= container.price
             : player.coins >= container.price;
+        const hasAvailableLoot = Object.values(
+            getAvailableContainerChances(container, getPartPools())
+        ).some(chance => chance > 0);
 
-        button.disabled = containerOpening || !enough;
+        button.disabled = containerOpening || !enough || !hasAvailableLoot;
     });
 
     const trackButton = document.getElementById('buy-track-container');
@@ -1230,7 +1242,7 @@ function updateHUD() {
 }
 
 function getContainerChanceText(container) {
-    const chances = container.chances || {};
+    const chances = getAvailableContainerChances(container, getPartPools());
 
     return [
         `Обычные: ${Number(chances.common) || 0}%`,
@@ -1262,6 +1274,8 @@ function renderContainerShop() {
     containerList.innerHTML = '';
 
     CONTAINERS_DB.forEach(container => {
+        const chances = getAvailableContainerChances(container, getPartPools());
+        const hasAvailableLoot = Object.values(chances).some(chance => chance > 0);
         const isCoupon = container.currency === 'coupon';
         const priceText = isCoupon
             ? `${container.price} Велокупон`
@@ -1284,21 +1298,23 @@ function renderContainerShop() {
                 ${container.description || ''}
             </p>
 
+            ${hasAvailableLoot ? '' : '<p class="text-xs text-amber-300 text-center">Откроется после разблокировки редких деталей</p>'}
+
             <div class="bg-gray-900 rounded-lg p-3 text-xs text-gray-300 space-y-1">
                 <div class="font-bold text-gray-200 mb-1">
                     Шанс выпадения:
                 </div>
 
                 <div>
-                    Обычная деталь: ${Number(container.chances?.common) || 0}%
+                    Обычная деталь: ${formatChance(chances.common)}%
                 </div>
 
                 <div>
-                    Редкая деталь: ${Number(container.chances?.rare) || 0}%
+                    Редкая деталь: ${formatChance(chances.rare)}%
                 </div>
 
                 <div>
-                    Легендарная: ${Number(container.chances?.legendary) || 0}%
+                    Легендарная: ${formatChance(chances.legendary)}%
                 </div>
             </div>
 
@@ -1752,7 +1768,7 @@ function updateUpgradeUI() {
         const owned = hasPart(category, part.id);
         const equipped = player.equipped?.[category] === part.id;
         const unlocked = isRarityUnlocked(part.rarity);
-        const price = Math.max(0, Number(part.price) || 0);
+        const price = getUpgradePrice(part);
 
         const card = document.createElement('div');
         card.className =
@@ -1809,21 +1825,29 @@ function updateUpgradeUI() {
                 </button>
             `;
         } else if (slotOccupied) {
-            const replaceLabel = owned
-                ? '🔄 Заменить'
-                : `🪙 Купить и заменить за ${price} 🪙`;
-
-            actionHTML = `
-                <button class="replace-part-button bg-blue-700 hover:bg-blue-600 py-3 rounded-lg font-bold w-full">
-                    ${replaceLabel}
-                </button>
-            `;
+            if (owned) {
+                actionHTML = `
+                    <button class="replace-part-button bg-blue-700 hover:bg-blue-600 py-3 rounded-lg font-bold w-full">
+                        🔄 Заменить
+                    </button>
+                `;
+            } else if (part.rarity === 'legendary') {
+                actionHTML = '<div class="text-xs text-amber-300">🌟 Можно получить только из контейнера</div>';
+            } else {
+                actionHTML = `
+                    <button class="replace-part-button bg-blue-700 hover:bg-blue-600 py-3 rounded-lg font-bold w-full">
+                        🪙 Купить и заменить за ${price} 🪙
+                    </button>
+                `;
+            }
         } else if (owned) {
             actionHTML = `
                 <button class="install-part-button bg-blue-700 hover:bg-blue-600 py-3 rounded-lg font-bold w-full">
                     Установить
                 </button>
             `;
+        } else if (part.rarity === 'legendary') {
+            actionHTML = '<div class="text-xs text-amber-300">🌟 Можно получить только из контейнера</div>';
         } else {
             actionHTML = `
                 <button class="buy-part-button bg-yellow-600 hover:bg-yellow-500 py-3 rounded-lg font-bold w-full">
@@ -1887,6 +1911,11 @@ function buyPart(category, id) {
     const part = ITEMS_DB[category]?.find(item => item.id === id);
     if (!part) return;
 
+    if (part.rarity === 'legendary') {
+        alert('Легендарные детали можно получить только из контейнеров!');
+        return;
+    }
+
     if (!isRarityUnlocked(part.rarity)) {
         alert('Сначала открой эту редкость победой на трассе!');
         return;
@@ -1897,7 +1926,7 @@ function buyPart(category, id) {
         return;
     }
 
-    const price = Math.max(0, Number(part.price) || 0);
+    const price = getUpgradePrice(part);
     const balance = Math.max(0, Number(player.coins) || 0);
 
     if (balance < price) {
@@ -1917,6 +1946,11 @@ function buyAndReplacePart(category, id) {
     const part = ITEMS_DB[category]?.find(item => item.id === id);
     if (!part) return;
 
+    if (part.rarity === 'legendary') {
+        alert('Легендарные детали можно получить только из контейнеров!');
+        return;
+    }
+
     if (!isRarityUnlocked(part.rarity)) {
         alert('Эта редкость ещё не открыта!');
         return;
@@ -1927,7 +1961,7 @@ function buyAndReplacePart(category, id) {
         return;
     }
 
-    const price = Math.max(0, Number(part.price) || 0);
+    const price = getUpgradePrice(part);
     const balance = Math.max(0, Number(player.coins) || 0);
 
     if (balance < price) {
@@ -2158,6 +2192,23 @@ function randomItem(items) {
     return items[Math.floor(Math.random() * items.length)];
 }
 
+function grantGuaranteedPart(rarity) {
+    const pool = getPartPools()[rarity] || [];
+    if (!pool.length) return null;
+    const newParts = pool.filter(({ category, part }) => !hasPart(category, part.id));
+    const prize = randomItem(newParts.length ? newParts : pool);
+    if (!prize) return null;
+
+    if (hasPart(prize.category, prize.part.id)) {
+        const compensation = DUPLICATE_COMPENSATION[rarity] ?? 100;
+        player.coins = (Number(player.coins) || 0) + compensation;
+        return { ...prize, compensation };
+    }
+
+    player.inventory.push(partKey(prize.category, prize.part.id));
+    return { ...prize, compensation: 0 };
+}
+
 function getPartPools() {
     const pools = {
         common: [],
@@ -2181,8 +2232,26 @@ function getPartPools() {
     return pools;
 }
 
-function chooseContainerRarity(container, pools) {
+function getAvailableContainerChances(container, pools = getPartPools()) {
+    const rarities = ['common', 'rare', 'legendary'];
     const chances = container.chances || {};
+    const weights = rarities.map(rarity =>
+        isRarityUnlocked(rarity) && pools[rarity]?.length
+            ? Math.max(0, Number(chances[rarity]) || 0)
+            : 0
+    );
+    const total = weights.reduce((sum, weight) => sum + weight, 0);
+    if (!total) return { common: 0, rare: 0, legendary: 0 };
+    return Object.fromEntries(rarities.map((rarity, index) => [rarity, weights[index] * 100 / total]));
+}
+
+function formatChance(value) {
+    const number = Number(value) || 0;
+    return Number.isInteger(number) ? String(number) : number.toLocaleString('ru-RU', { maximumFractionDigits: 1 });
+}
+
+function chooseContainerRarity(container, pools) {
+    const chances = getAvailableContainerChances(container, pools);
     const rarities = ['common', 'rare', 'legendary'];
 
     const available = rarities.filter(rarity =>
@@ -2191,16 +2260,13 @@ function chooseContainerRarity(container, pools) {
 
     if (!available.length) return null;
 
-    const totalWeight = available.reduce(
-        (sum, rarity) => sum + Math.max(0, Number(chances[rarity]) || 0),
-        0
-    );
+    const totalWeight = available.reduce((sum, rarity) => sum + chances[rarity], 0);
 
     if (totalWeight <= 0) return available[0];
 
     let roll = Math.random() * totalWeight;
     for (const rarity of available) {
-        roll -= Math.max(0, Number(chances[rarity]) || 0);
+        roll -= chances[rarity];
         if (roll < 0) return rarity;
     }
 
@@ -2276,7 +2342,7 @@ function openContainer(containerId) {
 
     if (!hasEnoughCurrency(container)) {
         if (container.currency === 'coupon') {
-            alert('Недостаточно Велокупонов! За этот контейнер нужен 1 Велокупон.');
+            alert(`Недостаточно Велокупонов! За этот контейнер нужно ${container.price}.`);
         } else {
             alert(
                 `Недостаточно монет! Нужно ${Number(container.price).toLocaleString('ru-RU')} 🪙`
@@ -2484,15 +2550,26 @@ function handleRaceEnd(win, reason = 'finish') {
             }
         }
 
-        if (selectedId === 't1' && !player.track1RewardClaimed) {
-            player.track1RewardClaimed = true;
+        if (selectedId === 't2' && !isRarityUnlocked('rare')) {
             unlockComponentRarity('rare');
-            bonusText += '<br>🔵 Открыты редкие комплектующие!';
+            bonusText += '<br>🔵 После второй трассы открыты редкие комплектующие!';
         }
 
         if (selectedId === 't4' && !isRarityUnlocked('legendary')) {
             unlockComponentRarity('legendary');
             bonusText += '<br>🌟 Открыты легендарные комплектующие!';
+        }
+
+        if (selectedId === 't4' && !player.track4BonusClaimed) {
+            const guaranteed = [
+                grantGuaranteedPart('legendary'),
+                grantGuaranteedPart('rare'),
+                grantGuaranteedPart('rare')
+            ];
+            player.track4BonusClaimed = true;
+            bonusText += '<br>🎁 Награда за 4-ю трассу: легендарная деталь и 2 редкие!';
+            const compensation = guaranteed.reduce((total, reward) => total + (reward?.compensation || 0), 0);
+            if (compensation) bonusText += `<br>🔁 За повторные детали начислено: +${compensation.toLocaleString('ru-RU')} 🪙`;
         }
 
         syncProgression();

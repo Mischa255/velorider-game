@@ -42,6 +42,7 @@ function createDefaultPlayer() {
 
         // Защита от повторного получения наград
         trackRewardsClaimed: [],
+        track4BonusClaimed: false,
 
         // Совместимость со старым main.js
         track1RewardClaimed: false,
@@ -58,7 +59,7 @@ function createDefaultPlayer() {
             Доступны с самого начала.
 
             rare:
-            Открываются после победы на t1.
+            Открываются после победы на t2.
 
             legendary:
             Открываются после победы на t4.
@@ -67,7 +68,7 @@ function createDefaultPlayer() {
         componentProgression: {
             rare: {
                 unlocked: false,
-                requiredTrack: 't1',
+                requiredTrack: 't2',
                 title: 'Редкие компоненты'
             },
 
@@ -216,6 +217,7 @@ function sanitizeLoadedState(raw) {
     if (!Array.isArray(merged.unlockedTracks)) merged.unlockedTracks = deepClone(base.unlockedTracks);
     if (!Array.isArray(merged.completedTracks)) merged.completedTracks = [];
     if (!Array.isArray(merged.trackRewardsClaimed)) merged.trackRewardsClaimed = [];
+    merged.track4BonusClaimed = Boolean(merged.track4BonusClaimed);
     if (!Array.isArray(merged.unlockedComponentRarities)) merged.unlockedComponentRarities = ['common'];
 
     if (!merged.componentProgression || typeof merged.componentProgression !== 'object') {
@@ -223,7 +225,7 @@ function sanitizeLoadedState(raw) {
     } else {
         merged.componentProgression.rare = {
             unlocked: Boolean(merged.componentProgression.rare?.unlocked),
-            requiredTrack: String(merged.componentProgression.rare?.requiredTrack || 't1'),
+            requiredTrack: String(merged.componentProgression.rare?.requiredTrack || 't2'),
             title: String(merged.componentProgression.rare?.title || 'Редкие компоненты')
         };
 
@@ -405,6 +407,7 @@ export function getPlayerSaveData() {
         selectedTrack: player.selectedTrack,
         completedTracks: player.completedTracks,
         trackRewardsClaimed: player.trackRewardsClaimed,
+        track4BonusClaimed: player.track4BonusClaimed,
         track1RewardClaimed: player.track1RewardClaimed,
         unlockedComponentRarities: player.unlockedComponentRarities,
         componentProgression: player.componentProgression,
