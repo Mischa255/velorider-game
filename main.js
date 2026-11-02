@@ -12,7 +12,7 @@ import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=6';
+} from './audio.js?v=7';
 const CATEGORY_NAMES = {
     frames: 'Рамы',
     forks: 'Вилки',
