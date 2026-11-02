@@ -1,34 +1,21 @@
-// ============================================
-// VELORIDER — PLAYER STATE
-// Telegram CloudStorage + LocalStorage
-// ============================================
-
 const SAVE_KEY = 'velorider_progress_v1';
-const SAVE_VERSION = 1;
-const MAX_CLOUD_VALUE_LENGTH = 4096;
 
-// Очередь сохранений.
-let saveQueue = Promise.resolve();
-
-// Защита от сохранения во время сброса.
-let isClearing = false;
-
-// Версия текущего состояния сохранения.
-let saveRevision = 0;
-
-
-// ============================================
-// СОЗДАНИЕ НОВОГО ИГРОКА
-// ============================================
+const AUTOSAVE_DELAY_MS = 1200;
+const AUTOSAVE_INTERVAL_MS = 10000;
 
 function createDefaultPlayer() {
     return {
+        // =====================================
         // ЭКОНОМИКА
+        // =====================================
 
         coins: 1000,
         coupons: 0,
 
-        // ИНВЕНТАРЬ
+        // =====================================
+        // ИНВЕНТАРЬ КОМПОНЕНТОВ
+        // Формат: категория:id
+        // =====================================
 
         inventory: [
             'frames:f1',
@@ -42,21 +29,40 @@ function createDefaultPlayer() {
             'electronics:e1'
         ],
 
-        // ТРАССЫ
+        // =====================================
+        // ПРОГРЕССИЯ ТРАСС
+        // =====================================
 
         unlockedTracks: ['t1'],
+
         selectedTrack: 't1',
 
+        // Пройденные трассы
         completedTracks: [],
+
+        // Защита от повторного получения наград
         trackRewardsClaimed: [],
 
+        // Совместимость со старым main.js
         track1RewardClaimed: false,
 
-        // РЕДКОСТИ КОМПОНЕНТОВ
+        // =====================================
+        // ПРОГРЕССИЯ КОМПОНЕНТОВ
+        // =====================================
 
-        unlockedComponentRarities: [
-            'common'
-        ],
+        // В начале доступны только обычные детали
+        unlockedComponentRarities: ['common'],
+
+        /*
+            common:
+            Доступны с самого начала.
+
+            rare:
+            Открываются после победы на t1.
+
+            legendary:
+            Открываются после победы на t4.
+        */
 
         componentProgression: {
             rare: {
@@ -72,11 +78,12 @@ function createDefaultPlayer() {
             }
         },
 
-        // ПОБЕДЫ
-
+        // Количество побед
         totalWins: 0,
 
+        // =====================================
         // УСТАНОВЛЕННЫЕ ДЕТАЛИ
+        // =====================================
 
         equipped: {
             frames: 'f1',
@@ -90,7 +97,9 @@ function createDefaultPlayer() {
             electronics: 'e1'
         },
 
-        // ХАРАКТЕРИСТИКИ
+        // =====================================
+        // ХАРАКТЕРИСТИКИ ВЕЛОСИПЕДА
+        // =====================================
 
         totalSpeed: 0,
         totalAccel: 0,
@@ -99,27 +108,19 @@ function createDefaultPlayer() {
     };
 }
 
+let suppressAutoSave = false;
+let autosaveTimer = null;
+let autosaveInFlight = false;
+let autosaveDirty = false;
+let autosaveHeartbeatStarted = false;
 
-// ============================================
-// ИГРОК
-// ============================================
-
-export let player = createDefaultPlayer();
-
-
-// ============================================
-// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-// ============================================
+const proxyCache = new WeakMap();
 
 function deepClone(value) {
     return JSON.parse(JSON.stringify(value));
 }
 
 function getTelegramWebApp() {
-    if (typeof window === 'undefined') {
-        return null;
-    }
-
     return window.Telegram?.WebApp || null;
 }
 
@@ -127,269 +128,73 @@ function getCloudStorage() {
     return getTelegramWebApp()?.CloudStorage || null;
 }
 
-function parseJSON(value) {
-    try {
-        if (typeof value !== 'string') return null;
-
-        return JSON.parse(value);
-    } catch {
-        return null;
-    }
-}
-
-
-// ============================================
-// TELEGRAM CLOUD STORAGE
-// ============================================
-
-// Чтение сохранения.
-
 function cloudStorageGet(key) {
     const cloud = getCloudStorage();
 
-    if (
-        !cloud ||
-        typeof cloud.getItem !== 'function'
-    ) {
+    if (!cloud || typeof cloud.getItem !== 'function') {
         return Promise.resolve(null);
     }
 
     return new Promise(resolve => {
         try {
-            cloud.getItem(key, (error, value) => {
-                if (error) {
-                    console.warn(
-                        'Telegram CloudStorage: ошибка чтения',
-                        error
-                    );
-
-                    resolve(null);
-                    return;
-                }
-
+            cloud.getItem(key, value => {
                 resolve(value ?? null);
             });
-
-        } catch (error) {
-            console.warn(error);
+        } catch {
             resolve(null);
         }
     });
 }
 
-
-// Запись сохранения.
-
 function cloudStorageSet(key, value) {
     const cloud = getCloudStorage();
 
-    if (
-        !cloud ||
-        typeof cloud.setItem !== 'function'
-    ) {
-        return Promise.resolve(false);
-    }
-
-    if (value.length > MAX_CLOUD_VALUE_LENGTH) {
-        console.warn(
-            'Сохранение превышает лимит Telegram CloudStorage.'
-        );
-
+    if (!cloud || typeof cloud.setItem !== 'function') {
         return Promise.resolve(false);
     }
 
     return new Promise(resolve => {
         try {
-            cloud.setItem(key, value, (error, stored) => {
-                if (error) {
-                    console.warn(
-                        'Telegram CloudStorage: ошибка записи',
-                        error
-                    );
-
-                    resolve(false);
-                    return;
-                }
-
-                resolve(stored === true);
-            });
-
-        } catch (error) {
-            console.warn(error);
+            cloud.setItem(key, value, () => resolve(true));
+        } catch {
             resolve(false);
         }
     });
 }
-
-
-// Удаление сохранения.
 
 function cloudStorageDelete(key) {
     const cloud = getCloudStorage();
 
-    if (
-        !cloud ||
-        typeof cloud.removeItem !== 'function'
-    ) {
+    if (!cloud || typeof cloud.deleteItem !== 'function') {
         return Promise.resolve(false);
     }
 
     return new Promise(resolve => {
         try {
-            cloud.removeItem(key, (error, removed) => {
-                if (error) {
-                    console.warn(
-                        'Telegram CloudStorage: ошибка удаления',
-                        error
-                    );
-
-                    resolve(false);
-                    return;
-                }
-
-                resolve(removed === true);
-            });
-
-        } catch (error) {
-            console.warn(error);
+            cloud.deleteItem(key, () => resolve(true));
+        } catch {
             resolve(false);
         }
     });
 }
 
-
-// ============================================
-// ЛОКАЛЬНОЕ СОХРАНЕНИЕ
-// ============================================
-
 function readLocalSave() {
     try {
-        if (typeof localStorage === 'undefined') {
-            return null;
-        }
-
         const raw = localStorage.getItem(SAVE_KEY);
-
-        return parseJSON(raw);
-
-    } catch (error) {
-        console.warn(
-            'Ошибка чтения локального сохранения:',
-            error
-        );
-
+        return raw ? JSON.parse(raw) : null;
+    } catch {
         return null;
     }
 }
-
 
 function writeLocalSave(data) {
     try {
-        if (typeof localStorage === 'undefined') {
-            return false;
-        }
-
-        localStorage.setItem(
-            SAVE_KEY,
-            JSON.stringify(data)
-        );
-
+        localStorage.setItem(SAVE_KEY, JSON.stringify(data));
         return true;
-
-    } catch (error) {
-        console.warn(
-            'Ошибка локального сохранения:',
-            error
-        );
-
+    } catch {
         return false;
     }
 }
-
-
-function removeLocalSave() {
-    try {
-        if (typeof localStorage === 'undefined') {
-            return false;
-        }
-
-        localStorage.removeItem(SAVE_KEY);
-
-        return true;
-
-    } catch (error) {
-        console.warn(error);
-        return false;
-    }
-}
-
-
-// ============================================
-// ПОДГОТОВКА ДАННЫХ ИГРОКА
-// ============================================
-
-export function getPlayerSaveData() {
-    return {
-        coins: player.coins,
-        coupons: player.coupons,
-
-        inventory: player.inventory,
-
-        unlockedTracks: player.unlockedTracks,
-        selectedTrack: player.selectedTrack,
-
-        completedTracks: player.completedTracks,
-        trackRewardsClaimed: player.trackRewardsClaimed,
-
-        track1RewardClaimed: player.track1RewardClaimed,
-
-        unlockedComponentRarities:
-            player.unlockedComponentRarities,
-
-        componentProgression:
-            player.componentProgression,
-
-        totalWins: player.totalWins,
-
-        equipped: player.equipped,
-
-        totalSpeed: player.totalSpeed,
-        totalAccel: player.totalAccel,
-        totalJump: player.totalJump,
-        totalBrake: player.totalBrake
-    };
-}
-
-
-// ============================================
-// ПРОВЕРКА СОХРАНЕНИЯ
-// ============================================
-
-function getSaveTimestamp(data) {
-    return Number(data?.savedAt) || 0;
-}
-
-function getSavePlayerData(data) {
-    if (!data || typeof data !== 'object') {
-        return null;
-    }
-
-    // Новый формат сохранения.
-    if (
-        data.player &&
-        typeof data.player === 'object'
-    ) {
-        return data.player;
-    }
-
-    // Поддержка старого формата.
-    return data;
-}
-
-
-// ============================================
-// ПРОВЕРКА И ВОССТАНОВЛЕНИЕ СОСТОЯНИЯ
-// ============================================
 
 function sanitizeLoadedState(raw) {
     const base = createDefaultPlayer();
@@ -403,128 +208,34 @@ function sanitizeLoadedState(raw) {
         ...raw
     };
 
-    // ЭКОНОМИКА
+    merged.coins = Math.max(0, Number(merged.coins) || 0);
+    merged.coupons = Math.max(0, Number(merged.coupons) || 0);
+    merged.totalWins = Math.max(0, Number(merged.totalWins) || 0);
 
-    merged.coins = Math.max(
-        0,
-        Number(merged.coins) || 0
-    );
+    if (!Array.isArray(merged.inventory)) merged.inventory = deepClone(base.inventory);
+    if (!Array.isArray(merged.unlockedTracks)) merged.unlockedTracks = deepClone(base.unlockedTracks);
+    if (!Array.isArray(merged.completedTracks)) merged.completedTracks = [];
+    if (!Array.isArray(merged.trackRewardsClaimed)) merged.trackRewardsClaimed = [];
+    if (!Array.isArray(merged.unlockedComponentRarities)) merged.unlockedComponentRarities = ['common'];
 
-    merged.coupons = Math.max(
-        0,
-        Number(merged.coupons) || 0
-    );
-
-    merged.totalWins = Math.max(
-        0,
-        Number(merged.totalWins) || 0
-    );
-
-    // ИНВЕНТАРЬ
-
-    if (!Array.isArray(merged.inventory)) {
-        merged.inventory = deepClone(base.inventory);
-    }
-
-    // ТРАССЫ
-
-    if (!Array.isArray(merged.unlockedTracks)) {
-        merged.unlockedTracks = ['t1'];
-    }
-
-    if (!Array.isArray(merged.completedTracks)) {
-        merged.completedTracks = [];
-    }
-
-    if (!Array.isArray(merged.trackRewardsClaimed)) {
-        merged.trackRewardsClaimed = [];
-    }
-
-    merged.unlockedTracks = [
-        ...new Set(merged.unlockedTracks.filter(
-            item => typeof item === 'string'
-        ))
-    ];
-
-    merged.completedTracks = [
-        ...new Set(merged.completedTracks.filter(
-            item => typeof item === 'string'
-        ))
-    ];
-
-    merged.trackRewardsClaimed = [
-        ...new Set(merged.trackRewardsClaimed.filter(
-            item => typeof item === 'string'
-        ))
-    ];
-
-    if (!merged.unlockedTracks.includes('t1')) {
-        merged.unlockedTracks.unshift('t1');
-    }
-
-    if (
-        typeof merged.selectedTrack !== 'string' ||
-        !merged.unlockedTracks.includes(merged.selectedTrack)
-    ) {
-        merged.selectedTrack = 't1';
-    }
-
-    merged.track1RewardClaimed =
-        Boolean(merged.track1RewardClaimed);
-
-    // РЕДКОСТИ
-
-    if (!Array.isArray(merged.unlockedComponentRarities)) {
-        merged.unlockedComponentRarities = ['common'];
-    }
-
-    merged.unlockedComponentRarities = [
-        ...new Set(merged.unlockedComponentRarities.filter(
-            item => typeof item === 'string'
-        ))
-    ];
-
-    if (
-        !merged.unlockedComponentRarities.includes('common')
-    ) {
-        merged.unlockedComponentRarities.unshift('common');
-    }
-
-    // ПРОГРЕССИЯ КОМПОНЕНТОВ
-
-    if (
-        !merged.componentProgression ||
-        typeof merged.componentProgression !== 'object'
-    ) {
-        merged.componentProgression =
-            deepClone(base.componentProgression);
-
+    if (!merged.componentProgression || typeof merged.componentProgression !== 'object') {
+        merged.componentProgression = deepClone(base.componentProgression);
     } else {
-        merged.componentProgression = {
-            ...deepClone(base.componentProgression),
-            ...merged.componentProgression
-        };
-
         merged.componentProgression.rare = {
-            ...base.componentProgression.rare,
-            ...merged.componentProgression.rare
+            unlocked: Boolean(merged.componentProgression.rare?.unlocked),
+            requiredTrack: String(merged.componentProgression.rare?.requiredTrack || 't1'),
+            title: String(merged.componentProgression.rare?.title || 'Редкие компоненты')
         };
 
         merged.componentProgression.legendary = {
-            ...base.componentProgression.legendary,
-            ...merged.componentProgression.legendary
+            unlocked: Boolean(merged.componentProgression.legendary?.unlocked),
+            requiredTrack: String(merged.componentProgression.legendary?.requiredTrack || 't4'),
+            title: String(merged.componentProgression.legendary?.title || 'Легендарные компоненты')
         };
     }
 
-    // УСТАНОВЛЕННЫЕ ДЕТАЛИ
-
-    if (
-        !merged.equipped ||
-        typeof merged.equipped !== 'object' ||
-        Array.isArray(merged.equipped)
-    ) {
+    if (!merged.equipped || typeof merged.equipped !== 'object') {
         merged.equipped = deepClone(base.equipped);
-
     } else {
         merged.equipped = {
             ...base.equipped,
@@ -532,232 +243,296 @@ function sanitizeLoadedState(raw) {
         };
     }
 
-    // ХАРАКТЕРИСТИКИ
-
     merged.totalSpeed = Number(merged.totalSpeed) || 0;
     merged.totalAccel = Number(merged.totalAccel) || 0;
     merged.totalJump = Number(merged.totalJump) || 0;
     merged.totalBrake = Number(merged.totalBrake) || 0;
+    merged.selectedTrack = String(merged.selectedTrack || 't1');
+    merged.track1RewardClaimed = Boolean(merged.track1RewardClaimed);
+
+    if (!merged.unlockedTracks.includes('t1')) {
+        merged.unlockedTracks.unshift('t1');
+    }
+
+    if (!merged.unlockedComponentRarities.includes('common')) {
+        merged.unlockedComponentRarities.unshift('common');
+    }
 
     return merged;
 }
 
+function wrapReactiveState(value) {
+    if (!value || typeof value !== 'object') {
+        return value;
+    }
 
-// ============================================
-// СОХРАНЕНИЕ ПРОГРЕССА
-// ============================================
+    if (proxyCache.has(value)) {
+        return proxyCache.get(value);
+    }
+
+    const proxy = new Proxy(value, {
+        get(target, prop, receiver) {
+            const result = Reflect.get(target, prop, receiver);
+            return wrapReactiveState(result);
+        },
+
+        set(target, prop, newValue, receiver) {
+            const wrappedValue = wrapReactiveState(newValue);
+            const result = Reflect.set(target, prop, wrappedValue, receiver);
+
+            if (!suppressAutoSave) {
+                markAutosaveDirty();
+            }
+
+            return result;
+        },
+
+        deleteProperty(target, prop) {
+            const result = Reflect.deleteProperty(target, prop);
+
+            if (!suppressAutoSave) {
+                markAutosaveDirty();
+            }
+
+            return result;
+        }
+    });
+
+    proxyCache.set(value, proxy);
+    return proxy;
+}
+
+function resetAutosaveTimer() {
+    if (autosaveTimer !== null) {
+        clearTimeout(autosaveTimer);
+        autosaveTimer = null;
+    }
+}
+
+function markAutosaveDirty() {
+    autosaveDirty = true;
+    resetAutosaveTimer();
+
+    autosaveTimer = setTimeout(() => {
+        void flushAutosave();
+    }, AUTOSAVE_DELAY_MS);
+}
+
+async function flushAutosave() {
+    if (autosaveInFlight || !autosaveDirty) {
+        return;
+    }
+
+    autosaveInFlight = true;
+    resetAutosaveTimer();
+
+    try {
+        autosaveDirty = false;
+        await savePlayerState();
+    } catch (error) {
+        console.warn('Ошибка автосохранения:', error);
+        autosaveDirty = true;
+    } finally {
+        autosaveInFlight = false;
+
+        if (autosaveDirty && !suppressAutoSave) {
+            resetAutosaveTimer();
+            autosaveTimer = setTimeout(() => {
+                void flushAutosave();
+            }, AUTOSAVE_DELAY_MS);
+        }
+    }
+}
+
+function startAutosaveHeartbeat() {
+    if (autosaveHeartbeatStarted) {
+        return;
+    }
+
+    autosaveHeartbeatStarted = true;
+
+    setInterval(() => {
+        if (autosaveDirty && !suppressAutoSave) {
+            void flushAutosave();
+        }
+    }, AUTOSAVE_INTERVAL_MS);
+
+    window.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            void flushAutosave();
+        }
+    });
+
+    window.addEventListener('pagehide', () => {
+        void flushAutosave();
+    });
+
+    window.addEventListener('beforeunload', () => {
+        try {
+            if (autosaveDirty) {
+                const payload = JSON.stringify(getPlayerSaveData());
+                writeLocalSave(getPlayerSaveData());
+
+                const cloud = getCloudStorage();
+                if (cloud && typeof cloud.setItem === 'function') {
+                    try {
+                        cloud.setItem(SAVE_KEY, payload, () => {});
+                    } catch {
+                        // ignore
+                    }
+                }
+            } else {
+                writeLocalSave(getPlayerSaveData());
+            }
+        } catch {
+            // ignore
+        }
+    });
+}
+
+export let player = wrapReactiveState(createDefaultPlayer());
+
+// =====================================
+// ДАННЫЕ ДЛЯ СОХРАНЕНИЯ
+// =====================================
+
+export function getPlayerSaveData() {
+    return {
+        coins: player.coins,
+        coupons: player.coupons,
+        inventory: player.inventory,
+        unlockedTracks: player.unlockedTracks,
+        selectedTrack: player.selectedTrack,
+        completedTracks: player.completedTracks,
+        trackRewardsClaimed: player.trackRewardsClaimed,
+        track1RewardClaimed: player.track1RewardClaimed,
+        unlockedComponentRarities: player.unlockedComponentRarities,
+        componentProgression: player.componentProgression,
+        totalWins: player.totalWins,
+        equipped: player.equipped,
+        totalSpeed: player.totalSpeed,
+        totalAccel: player.totalAccel,
+        totalJump: player.totalJump,
+        totalBrake: player.totalBrake
+    };
+}
+
+// =====================================
+// СОХРАНЕНИЕ / ЗАГРУЗКА
+// =====================================
 
 export async function savePlayerState() {
-    if (isClearing) {
-        return false;
-    }
+    const data = getPlayerSaveData();
+    const payload = JSON.stringify(data);
 
-    const currentRevision = saveRevision;
+    const localSaved = writeLocalSave(data);
+    const cloudSaved = await cloudStorageSet(SAVE_KEY, payload);
 
-    // Создаём отдельную копию данных на момент вызова.
-    const snapshot = deepClone(getPlayerSaveData());
-
-    const saveEnvelope = {
-        version: SAVE_VERSION,
-        savedAt: Date.now(),
-        player: snapshot
-    };
-
-    const payload = JSON.stringify(saveEnvelope);
-
-    const operation = saveQueue.then(async () => {
-        // Проверяем, не был ли прогресс уже сброшен.
-        if (
-            isClearing ||
-            currentRevision !== saveRevision
-        ) {
-            return false;
-        }
-
-        // Сначала локальная копия.
-        const localSaved = writeLocalSave(saveEnvelope);
-
-        // Затем облачная копия Telegram.
-        const cloudSaved = await cloudStorageSet(
-            SAVE_KEY,
-            payload
-        );
-
-        return localSaved || cloudSaved;
-    });
-
-    // Ошибка одного сохранения не ломает очередь остальных.
-    saveQueue = operation.catch(error => {
-        console.error('Ошибка очереди сохранений:', error);
-    });
-
-    return operation;
+    return localSaved || cloudSaved;
 }
 
-
-// ============================================
-// ЗАГРУЗКА ПРОГРЕССА
-// ============================================
+export async function forceSavePlayerState() {
+    autosaveDirty = false;
+    resetAutosaveTimer();
+    return savePlayerState();
+}
 
 export async function loadPlayerState() {
-    let cloudData = null;
+    let raw = null;
 
-    let localData = null;
-
-    // Читаем облачное сохранение.
     try {
         const cloudValue = await cloudStorageGet(SAVE_KEY);
-
         if (cloudValue) {
-            cloudData = parseJSON(cloudValue);
+            raw = JSON.parse(cloudValue);
         }
-
-    } catch (error) {
-        console.warn(
-            'Не удалось загрузить облачное сохранение:',
-            error
-        );
+    } catch {
+        raw = null;
     }
 
-    // Читаем локальное сохранение.
-    localData = readLocalSave();
-
-    // Выбираем наиболее свежее сохранение.
-    let selectedData = null;
-
-    const cloudTime = getSaveTimestamp(cloudData);
-    const localTime = getSaveTimestamp(localData);
-
-    if (
-        cloudData &&
-        localData &&
-        getSavePlayerData(cloudData) &&
-        getSavePlayerData(localData)
-    ) {
-        selectedData = cloudTime >= localTime
-            ? cloudData
-            : localData;
-
-    } else if (
-        cloudData &&
-        getSavePlayerData(cloudData)
-    ) {
-        selectedData = cloudData;
-
-    } else if (
-        localData &&
-        getSavePlayerData(localData)
-    ) {
-        selectedData = localData;
+    if (!raw) {
+        raw = readLocalSave();
     }
 
-    const playerData = getSavePlayerData(selectedData);
+    const merged = sanitizeLoadedState(raw);
 
-    const restoredState = sanitizeLoadedState(playerData);
+    suppressAutoSave = true;
+    try {
+        player = wrapReactiveState(merged);
+    } finally {
+        suppressAutoSave = false;
+    }
 
-    // Обновляем существующий объект player,
-    // чтобы остальные модули сохранили ссылку на него.
-    Object.keys(player).forEach(key => {
-        delete player[key];
-    });
+    autosaveDirty = false;
+    resetAutosaveTimer();
 
-    Object.assign(player, restoredState);
+    startAutosaveHeartbeat();
 
     return player;
 }
 
-
-// ============================================
-// СБРОС СОСТОЯНИЯ ИГРОКА
-// ============================================
+// =====================================
+// СБРОС
+// =====================================
 
 export function resetPlayerState() {
-    const freshPlayer = createDefaultPlayer();
+    suppressAutoSave = true;
 
-    Object.keys(player).forEach(key => {
-        delete player[key];
-    });
+    try {
+        player = wrapReactiveState(createDefaultPlayer());
+    } finally {
+        suppressAutoSave = false;
+    }
 
-    Object.assign(player, freshPlayer);
+    autosaveDirty = true;
+    resetAutosaveTimer();
 
     return player;
 }
 
-
-// ============================================
-// ПОЛНЫЙ СБРОС СОХРАНЕНИЙ
-// ============================================
-
 export async function clearSavedProgress() {
-    if (isClearing) {
-        return false;
-    }
-
-    isClearing = true;
-
-    // Инвалидируем все ранее созданные запросы сохранения.
-    saveRevision++;
+    suppressAutoSave = true;
 
     try {
-        // Ждём окончания уже выполняющегося сохранения.
-        await saveQueue;
+        player = wrapReactiveState(createDefaultPlayer());
+        autosaveDirty = false;
+        resetAutosaveTimer();
 
-        // Возвращаем начальный велосипед и прогресс.
-        resetPlayerState();
+        await cloudStorageDelete(SAVE_KEY);
 
-        // Удаляем облачное сохранение.
-        const cloudDeleted = await cloudStorageDelete(SAVE_KEY);
-
-        // Удаляем локальное сохранение.
-        const localDeleted = removeLocalSave();
-
-        return cloudDeleted || localDeleted;
-
-    } catch (error) {
-        console.error('Ошибка сброса прогресса:', error);
-        return false;
-
+        try {
+            localStorage.removeItem(SAVE_KEY);
+        } catch {
+            // ignore
+        }
     } finally {
-        isClearing = false;
+        suppressAutoSave = false;
     }
+
+    return true;
 }
 
-
-// ============================================
-// ПРОВЕРКА TELEGRAM
-// ============================================
+// =====================================
+// TELEGRAM
+// =====================================
 
 export function isTelegramApp() {
     return Boolean(getTelegramWebApp());
 }
 
-
-// ============================================
-// ИНИЦИАЛИЗАЦИЯ TELEGRAM MINI APP
-// ============================================
-
 export function initTelegramApp() {
     const tg = getTelegramWebApp();
 
-    if (!tg) {
-        console.log('VeloRider запущен в обычном браузере.');
-        return false;
-    }
+    if (!tg) return false;
 
     try {
         tg.ready();
         tg.expand();
-
-        console.log('VeloRider запущен внутри Telegram.');
-
-        return true;
-
-    } catch (error) {
-        console.warn(
-            'Ошибка инициализации Telegram:',
-            error
-        );
-
-        return false;
+    } catch {
+        // ignore
     }
+
+    return true;
 }
+
+// Стартуем heartbeat сразу
+startAutosaveHeartbeat();
