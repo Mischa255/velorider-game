@@ -2,12 +2,23 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
     <title>VeloRider: Custom Garage</title>
 
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script>
+        if (window.Telegram && window.Telegram.WebApp) {
+            window.Telegram.WebApp.ready();
+            window.Telegram.WebApp.expand();
+        }
+    </script>
+
     <script src="https://cdn.tailwindcss.com"></script>
+
     <link rel="stylesheet" href="style.css?v=8">
     <link rel="stylesheet" href="tracks-overrides.css?v=8">
+    <link rel="stylesheet" href="mobile-fix.css?v=1">
 </head>
 
 <body class="bg-gray-900 text-white font-sans h-screen flex flex-col select-none overflow-hidden">
@@ -49,6 +60,7 @@
         </div>
 
     </header>
+
 
     <!-- =====================================
          ОСНОВНОЙ КОНТЕЙНЕР
@@ -102,16 +114,7 @@
                 Трассы
             </button>
 
-            <!-- Сброс прогресса -->
-            <button
-                onclick="resetProgressRequest()"
-                class="nav-btn bg-red-700 hover:bg-red-600 active:bg-red-500 p-4 rounded-xl text-left transition duration-200 flex items-center gap-3 border border-red-500">
-
-                <span class="text-xl">↻</span>
-                Сбросить прогресс
-            </button>
-
-            <!-- Гонка -->
+            <!-- Гонка и сброс прогресса -->
             <div class="mt-auto pt-4">
 
                 <button
@@ -123,15 +126,27 @@
 
                 </button>
 
+                <button
+                    type="button"
+                    onclick="resetProgressRequest()"
+                    class="w-full mt-3 px-4 py-3 rounded-xl border border-red-800 bg-red-950/50 hover:bg-red-900/70 active:bg-red-800 text-red-300 text-sm font-bold transition flex items-center justify-center gap-2">
+
+                    <span>↻</span>
+                    Сбросить прогресс
+
+                </button>
+
             </div>
 
         </aside>
+
 
         <!-- =================================
              ОСНОВНОЙ ЭКРАН
         ================================== -->
 
         <main class="flex-1 min-w-0 p-6 relative bg-gray-950 overflow-hidden">
+
 
             <!-- =================================
                  ЭКРАН ГАРАЖА
@@ -194,6 +209,7 @@
 
             </div>
 
+
             <!-- =================================
                  ЭКРАН МОДЕРНИЗАЦИИ
             ================================== -->
@@ -225,13 +241,12 @@
 
                 </div>
 
+
                 <!-- Основная область -->
                 <div class="flex flex-1 min-h-0 gap-5">
 
-                    <!-- =================================
-                         КАТЕГОРИИ ДЕТАЛЕЙ
-                    ================================== -->
 
+                    <!-- Категории деталей -->
                     <div class="w-56 shrink-0 bg-gray-800 border border-gray-700 rounded-2xl p-3 overflow-y-auto">
 
                         <h3 class="text-xs text-gray-400 font-bold uppercase tracking-wider mb-4 px-2">
@@ -239,15 +254,15 @@
                         </h3>
 
                         <div id="upgrade-categories" class="flex flex-col gap-2">
+
                             <!-- Заполняется через main.js -->
+
                         </div>
 
                     </div>
 
-                    <!-- =================================
-                         СПИСОК КОМПЛЕКТУЮЩИХ
-                    ================================== -->
 
+                    <!-- Список комплектующих -->
                     <div class="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-2xl p-5 overflow-y-auto">
 
                         <div class="flex justify-between items-center mb-5 gap-3">
@@ -268,11 +283,14 @@
 
                         </div>
 
+
                         <!-- Карточки компонентов -->
                         <div
                             id="upgrade-parts"
                             class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+
                             <!-- Заполняется через main.js -->
+
                         </div>
 
                     </div>
@@ -280,6 +298,7 @@
                 </div>
 
             </div>
+
 
             <!-- =================================
                  ЭКРАН МАГАЗИНА
@@ -327,6 +346,7 @@
 
                 </div>
 
+
                 <!-- Результат -->
                 <div
                     id="loot-result"
@@ -335,22 +355,30 @@
 
             </div>
 
+
             <!-- =================================
                  ЭКРАН ТРАСС
             ================================== -->
 
-            <div id="screen-tracks" class="screen hidden flex flex-col h-full">
+            <div id="screen-tracks" class="screen tracks-screen hidden flex flex-col h-full">
 
-                <h2 class="text-3xl font-bold mb-6 text-gray-100">
-                    Выбор локации
-                </h2>
+                <div class="tracks-heading">
+                    <div class="tracks-heading__text">
+                        <span class="tracks-kicker">VELO RIDER / MAP SELECT</span>
+                        <h2>Выбор трассы</h2>
+                        <p>Выбери доступный маршрут и проверь награды перед стартом.</p>
+                    </div>
 
-                <div
-                    id="tracks-list"
-                    class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto pr-2 pb-2">
+                    <div class="tracks-total-box">
+                        <strong id="tracks-total">10</strong>
+                        <span>локаций</span>
+                    </div>
                 </div>
 
+                <div id="tracks-list" class="tracks-grid" aria-label="Список трасс"></div>
+
             </div>
+
 
             <!-- =================================
                  ЭКРАН ГОНКИ
@@ -364,6 +392,7 @@
                         id="raceCanvas"
                         class="w-full h-full block touch-none">
                     </canvas>
+
 
                     <!-- ОКНО РЕЗУЛЬТАТА -->
                     <div
@@ -398,11 +427,12 @@
 
                 </div>
 
+
                 <!-- =================================
                      КНОПКИ УПРАВЛЕНИЯ
                 ================================== -->
 
-                <div class="grid grid-cols-4 gap-3 h-24 shrink-0">
+                <div id="race-controls" class="grid grid-cols-4 gap-3 h-24 shrink-0">
 
                     <!-- Назад -->
                     <button
@@ -417,6 +447,7 @@
 
                     </button>
 
+
                     <!-- Тормоз -->
                     <button
                         id="btn-brake"
@@ -430,6 +461,7 @@
 
                     </button>
 
+
                     <!-- Прыжок -->
                     <button
                         id="btn-jump"
@@ -442,6 +474,7 @@
                         </span>
 
                     </button>
+
 
                     <!-- Газ -->
                     <button
@@ -463,6 +496,7 @@
         </main>
 
     </div>
+
 
     <!-- =====================================
          ГЛАВНЫЙ JAVASCRIPT
