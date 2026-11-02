@@ -1,5 +1,5 @@
 import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js';
-import { player } from './state.js';
+import { player, clearSavedProgress } from './state.js';
 import {
     initRace,
     setAccelerating,
@@ -12,7 +12,7 @@ import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=7';
+} from './audio.js?v=8';
 const CATEGORY_NAMES = {
     frames: 'Рамы',
     forks: 'Вилки',
@@ -1157,20 +1157,6 @@ function getPartLoot(container) {
     if (!rarity) return null;
     return randomItem(pools[rarity]);
 }
-function getTrackLoot() {
-    const undiscovered = TRACKS_DB.filter(track =>
-        !player.unlockedTracks.includes(track.id)
-    );
-    if (!undiscovered.length) return null;
-    const rarityRoll = Math.random();
-    const rarity = rarityRoll > 0.70
-        ? 'legendary'
-        : rarityRoll > 0.35
-            ? 'rare'
-            : 'common';
-    const matching = undiscovered.filter(track => track.rarity === rarity);
-    return randomItem(matching.length ? matching : undiscovered);
-}
 function hasEnoughCurrency(container) {
     if (container.currency === 'coupon') {
         return player.coupons >= Number(container.price);
@@ -1302,62 +1288,6 @@ function openContainer(containerId) {
         }
     }, 1200);
 }
-function openTrackContainer() {
-    if (containerOpening) return;
-    const cost = 1000;
-    const loot = getTrackLoot();
-    if (!loot) {
-        alert('Все доступные карты уже найдены. Монеты не списаны.');
-        return;
-    }
-    if (player.coins < cost) {
-        alert(`Недостаточно монет! Нужно ${cost} 🪙`);
-        return;
-    }
-    player.coins = Math.max(0, Number(player.coins) || 0) - cost;
-    containerOpening = true;
-    updateHUD();
-    const box = document.getElementById('container-box-tracks');
-    const result = document.getElementById('loot-result');
-    box?.classList.add('shake-animation');
-    if (result) {
-        result.className = 'mt-8 text-2xl font-black text-center';
-        result.innerText = 'Открываем контейнер локаций...';
-    }
-    setTimeout(() => {
-        let rewardGranted = false;
-        try {
-            box?.classList.remove('shake-animation');
-            if (!player.unlockedTracks.includes(loot.id)) {
-                player.unlockedTracks.push(loot.id);
-            }
-            rewardGranted = true;
-            if (result) {
-                result.innerHTML = `
-                    🗺️ Найдена новая карта!
-                    <br>
-                    <span class="rarity-${loot.rarity}">${loot.name}</span>
-                    <br>
-                    <span class="text-base text-gray-400">
-                        Для доступа победи на предыдущих трассах.
-                    </span>
-                `;
-            }
-        } catch (error) {
-            console.error('Ошибка открытия контейнера локаций:', error);
-            if (!rewardGranted) {
-                player.coins = (Number(player.coins) || 0) + cost;
-            }
-            if (result) {
-                result.innerHTML = '<span class="text-red-400">Ошибка открытия. Оплата возвращена.</span>';
-            }
-        } finally {
-            containerOpening = false;
-            updateHUD();
-            updateTracksUI();
-        }
-    }, 1200);
-}
 function getRaceReward(track, win) {
     const index = Math.max(0, TRACKS_DB.findIndex(item => item.id === track?.id));
     if (win) {
@@ -1449,12 +1379,40 @@ window.openContainer = function (type, payment) {
         openContainer('coupon');
         return;
     }
-    if (type === 'tracks') {
-        openTrackContainer();
-        return;
-    }
+    // Контейнеры локаций удалены. Новые трассы открываются за победы.
+    if (type === 'tracks') return;
     openContainer(type);
 };
+async function resetProgressRequest() {
+    const confirmed = window.confirm(
+        'Сбросить весь прогресс VeloRider?\n\n' +
+        'Будут удалены монеты, велокупоны, открытые трассы, победы, ' +
+        'купленные детали и текущая сборка велосипеда.\n\n' +
+        'Это действие нельзя отменить.'
+    );
+
+    if (!confirmed) return;
+
+    try {
+        if (typeof clearSavedProgress !== 'function') {
+            throw new Error('clearSavedProgress отсутствует в state.js');
+        }
+
+        await clearSavedProgress();
+
+        window.alert('Прогресс сброшен. Игра перезапустится.');
+        window.location.reload();
+    } catch (error) {
+        console.error('Не удалось сбросить прогресс:', error);
+        window.alert(
+            'Не удалось полностью сбросить прогресс. ' +
+            'Проверь подключение и попробуй ещё раз.'
+        );
+    }
+}
+
+window.resetProgressRequest = resetProgressRequest;
+
 window.resetRace = function () {
     showScreen('garage');
 };

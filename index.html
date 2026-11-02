@@ -15,8 +15,8 @@
         }
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="style.css?v=7">
-    <link rel="stylesheet" href="tracks-overrides.css?v=7">
+    <link rel="stylesheet" href="style.css?v=8">
+    <link rel="stylesheet" href="tracks-overrides.css?v=8">
 </head>
 
 <body class="bg-gray-900 text-white font-sans h-screen flex flex-col select-none overflow-hidden">
@@ -122,6 +122,14 @@
                     <span class="text-xl">🏁</span>
                     В ГОНКУ
 
+                </button>
+
+                <button
+                    type="button"
+                    onclick="resetProgressRequest()"
+                    class="w-full mt-3 px-4 py-3 rounded-xl border border-red-800 bg-red-950/50 hover:bg-red-900/70 active:bg-red-800 text-red-300 text-sm font-bold transition flex items-center justify-center gap-2">
+                    <span>↻</span>
+                    Сбросить прогресс
                 </button>
 
             </div>
@@ -339,37 +347,6 @@
                     </div>
 
 
-                    <!-- Контейнер трасс -->
-                    <div class="flex flex-col items-center group">
-
-                        <div
-                            id="container-box-tracks"
-                            class="w-48 h-48 bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-3xl flex items-center justify-center cursor-pointer hover:scale-105 transition-all duration-300 shadow-[0_0_40px_rgba(16,185,129,0.4)] border-4 border-emerald-500/50"
-                            onclick="openContainer('tracks')">
-
-                            <span class="text-7xl drop-shadow-lg group-hover:-translate-y-2 transition-transform">
-                                🗺️
-                            </span>
-
-                        </div>
-
-                        <h3 class="text-2xl font-bold mt-6 text-gray-200">
-                            Локации
-                        </h3>
-
-                        <p class="text-gray-400 text-sm mb-4">
-                            Новые места для гонок
-                        </p>
-
-                        <button
-                            class="bg-yellow-600 hover:bg-yellow-500 active:bg-yellow-700 px-8 py-3 rounded-xl font-bold text-lg shadow-lg flex items-center gap-2 transition"
-                            onclick="openContainer('tracks')">
-
-                            Открыть за 1000 🪙
-
-                        </button>
-
-                    </div>
 
                 </div>
 
@@ -528,7 +505,7 @@
          ГЛАВНЫЙ JAVASCRIPT
     ====================================== -->
 
-    <script type="module" src="main.js?v=7"></script>
+    <script type="module" src="main.js?v=8"></script>
 
 </body>
 </html>
