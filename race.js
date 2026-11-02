@@ -1,5 +1,5 @@
-import { player } from './state.js?v=13';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=13';
+import { player } from './state.js?v=14';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=14';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -2093,7 +2093,7 @@ function drawRaceHUD() {
     const racers = [
         {
             bike: playerBike,
-            label: 'ТЫ',
+            label: '🚴 ТЫ',
             color: '#22c55e'
         },
 
@@ -2117,42 +2117,42 @@ function drawRaceHUD() {
         })
     ];
 
-    const panelWidth = Math.min(
-        390,
-        viewWidth - 28
-    );
+    const mobileLayout = viewWidth < 600;
+    const panelWidth = Math.min(mobileLayout ? 390 : 390, viewWidth - (mobileLayout ? 20 : 28));
+    const rowHeight = mobileLayout ? 29 : 19;
+    const panelHeight = (mobileLayout ? 42 : 35) + racers.length * rowHeight;
+    const panelX = mobileLayout ? (viewWidth - panelWidth) / 2 : 14;
+    const panelY = mobileLayout ? Math.max(8, viewHeight - panelHeight - 10) : 12;
 
-    const rowHeight = 19;
-
-    const panelHeight =
-        35 + racers.length * rowHeight;
-
-    ctx.fillStyle = 'rgba(15,23,42,0.84)';
+    ctx.fillStyle = mobileLayout ? 'rgba(15,23,42,0.94)' : 'rgba(15,23,42,0.84)';
+    ctx.strokeStyle = 'rgba(148,163,184,0.42)';
+    ctx.lineWidth = mobileLayout ? 1.5 : 1;
 
     ctx.fillRect(
-        14,
-        12,
+        panelX,
+        panelY,
         panelWidth,
         panelHeight
     );
+    if (mobileLayout) ctx.strokeRect(panelX, panelY, panelWidth, panelHeight);
 
-    ctx.font = 'bold 13px Arial';
+    ctx.font = mobileLayout ? 'bold 15px Arial' : 'bold 13px Arial';
     ctx.textAlign = 'left';
     ctx.fillStyle = '#e2e8f0';
 
     ctx.fillText(
         currentTrack.name,
-        25,
-        30
+        panelX + 11,
+        panelY + (mobileLayout ? 24 : 18)
     );
 
-    const labelWidth = 53;
-    const percentWidth = 38;
+    const labelWidth = mobileLayout ? Math.min(105, panelWidth * 0.34) : 53;
+    const percentWidth = mobileLayout ? 42 : 38;
 
-    const barX = 25 + labelWidth;
+    const barX = panelX + 11 + labelWidth;
 
     const barWidth = Math.max(
-        55,
+        mobileLayout ? 70 : 55,
         panelWidth - labelWidth - percentWidth - 24
     );
 
@@ -2163,16 +2163,16 @@ function drawRaceHUD() {
             1
         );
 
-        const y = 43 + index * rowHeight;
+        const y = panelY + (mobileLayout ? 34 : 31) + index * rowHeight;
 
-        ctx.font = 'bold 10px Arial';
+        ctx.font = mobileLayout ? 'bold 13px Arial' : 'bold 10px Arial';
         ctx.textAlign = 'left';
         ctx.fillStyle = racer.color;
 
         ctx.fillText(
             racer.label,
-            25,
-            y + 7
+            panelX + 11,
+            y + (mobileLayout ? 11 : 7)
         );
 
         ctx.fillStyle = '#334155';
@@ -2181,7 +2181,7 @@ function drawRaceHUD() {
             barX,
             y,
             barWidth,
-            7
+            mobileLayout ? 11 : 7
         );
 
         ctx.fillStyle = racer.color;
@@ -2190,7 +2190,7 @@ function drawRaceHUD() {
             barX,
             y,
             barWidth * progress,
-            7
+            mobileLayout ? 11 : 7
         );
 
         ctx.textAlign = 'right';
@@ -2198,8 +2198,8 @@ function drawRaceHUD() {
 
         ctx.fillText(
             `${Math.round(progress * 100)}%`,
-            panelWidth + 14,
-            y + 7
+            panelX + panelWidth - 10,
+            y + (mobileLayout ? 11 : 7)
         );
     });
 }
