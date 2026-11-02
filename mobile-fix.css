@@ -7,6 +7,47 @@
 /* Основные настройки мобильного экрана */
 @media screen and (max-width: 768px) {
 
+    .upgrade-part-info-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 19998;
+        background: rgba(2, 6, 23, .78);
+        backdrop-filter: blur(3px);
+        -webkit-backdrop-filter: blur(3px);
+    }
+
+    .upgrade-part-info-panel.is-mobile-dialog {
+        position: fixed;
+        inset: 50% 12px auto !important;
+        z-index: 19999;
+        width: auto !important;
+        max-width: 520px;
+        max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 32px);
+        margin: 0 auto;
+        padding: 18px !important;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+        transform: translateY(-50%);
+        font-size: 14px !important;
+        line-height: 1.6 !important;
+        box-shadow: 0 18px 55px rgba(0, 0, 0, .65) !important;
+    }
+
+    .upgrade-part-info-panel.is-mobile-dialog .upgrade-part-info-close {
+        position: sticky;
+        top: -8px;
+        float: right;
+        display: grid;
+        place-items: center;
+        width: 36px;
+        height: 36px;
+        margin: -8px -8px 6px 8px;
+        border-radius: 50% !important;
+        background: #78350f !important;
+        font-size: 26px !important;
+    }
+
     html,
     body {
         width: 100%;

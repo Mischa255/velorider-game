@@ -1,24 +1,24 @@
-import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=9';
+import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=10';
 import {
     player,
     loadPlayerState,
     initTelegramApp,
     clearSavedProgress,
     forceSavePlayerState
-} from './state.js?v=9';
+} from './state.js?v=10';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=9';
+} from './race.js?v=10';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=9';
+} from './audio.js?v=10';
 
 const CATEGORY_NAMES = {
     frames: 'Рамы',
@@ -719,6 +719,11 @@ function ensureGarageStyles() {
         }
         .upgrade-part-info-panel.is-open { display:block; }
         .upgrade-part-info-panel .garage-part-stats { margin-top:8px; }
+        .upgrade-part-info-close {
+            float:right; margin:-5px -5px 4px 8px; padding:0 5px !important;
+            color:#fde68a !important; background:transparent !important;
+            font-size:22px !important; line-height:1.1;
+        }
 
         #garage-upgrade-parts button {
             border-radius:10px;
@@ -1384,6 +1389,7 @@ function getPartInfoHTML(category, part) {
         <div class="upgrade-part-info">
             <button type="button" class="upgrade-part-info-button" aria-expanded="false" aria-label="Суперспособность: ${escapeHTML(part.name)}">?</button>
             <div class="upgrade-part-info-panel" role="note">
+                <button type="button" class="upgrade-part-info-close" aria-label="Закрыть подсказку">×</button>
                 <strong>Суперспособность</strong><br>
                 ${escapeHTML(description)}
             </div>
@@ -1391,16 +1397,57 @@ function getPartInfoHTML(category, part) {
     `;
 }
 
+let openPartInfoPanel = null;
+let openPartInfoHome = null;
+let openPartInfoButton = null;
+let openPartInfoBackdrop = null;
+
+function closePartInfo() {
+    if (!openPartInfoPanel) return;
+    openPartInfoPanel.classList.remove('is-open', 'is-mobile-dialog');
+    openPartInfoPanel.removeAttribute('aria-modal');
+    openPartInfoHome?.appendChild(openPartInfoPanel);
+    openPartInfoButton?.setAttribute('aria-expanded', 'false');
+    openPartInfoBackdrop?.remove();
+    openPartInfoPanel = openPartInfoHome = openPartInfoButton = openPartInfoBackdrop = null;
+}
+
 function attachPartInfoToggle(card) {
     const button = card.querySelector('.upgrade-part-info-button');
     const panel = card.querySelector('.upgrade-part-info-panel');
     if (!button || !panel) return;
 
+    const closeButton = panel.querySelector('.upgrade-part-info-close');
     button.addEventListener('click', event => {
         event.preventDefault();
         event.stopPropagation();
-        const isOpen = panel.classList.toggle('is-open');
-        button.setAttribute('aria-expanded', String(isOpen));
+        if (openPartInfoPanel === panel) {
+            closePartInfo();
+            return;
+        }
+        closePartInfo();
+        openPartInfoPanel = panel;
+        openPartInfoHome = panel.parentElement;
+        openPartInfoButton = button;
+        panel.classList.add('is-open');
+        button.setAttribute('aria-expanded', 'true');
+        if (window.matchMedia('(max-width: 768px)').matches) {
+            openPartInfoBackdrop = document.createElement('div');
+            openPartInfoBackdrop.className = 'upgrade-part-info-backdrop';
+            openPartInfoBackdrop.addEventListener('click', closePartInfo);
+            document.body.appendChild(openPartInfoBackdrop);
+            panel.classList.add('is-mobile-dialog');
+            panel.setAttribute('role', 'dialog');
+            panel.setAttribute('aria-modal', 'true');
+            document.body.appendChild(panel);
+            closeButton?.focus({ preventScroll: true });
+        }
+    });
+    closeButton?.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        closePartInfo();
+        button.focus({ preventScroll: true });
     });
 }
 
@@ -1630,6 +1677,7 @@ function updateGarageUI() {
 }
 
 function updateUpgradeUI() {
+    closePartInfo();
     const upgradeRoot = document.getElementById('screen-upgrade');
     const categoriesDiv =
         upgradeRoot?.querySelector('#upgrade-categories, #garage-upgrade-categories') ||
