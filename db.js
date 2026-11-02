@@ -408,7 +408,17 @@ export const OBSTACLE_TYPES = {
         width: 45,
         height: 45,
         color: '#dc2626'
-    }
+    },
+    cone: { name: '\u041a\u043e\u043d\u0443\u0441\u044b', width: 34, height: 28, color: '#f97316' },
+    mud: { name: '\u0413\u0440\u044f\u0437\u044c', width: 100, height: 15, color: '#78350f' },
+    fallen_branch: { name: '\u041d\u0438\u0437\u043a\u0430\u044f \u0432\u0435\u0442\u043a\u0430', width: 78, height: 30, color: '#65a30d' },
+    water_splash: { name: '\u0412\u043e\u0434\u043d\u0430\u044f \u043b\u0443\u0436\u0430', width: 90, height: 14, color: '#38bdf8' },
+    wind_fan: { name: '\u0412\u0435\u0442\u0440\u043e\u0432\u043e\u0439 \u0432\u0435\u0435\u0440', width: 46, height: 58, color: '#a5f3fc' },
+    spring_pad: { name: '\u041f\u0440\u0443\u0436\u0438\u043d\u043d\u0430\u044f \u043f\u043b\u0438\u0442\u0430', width: 68, height: 12, color: '#4ade80' },
+    ice_patch: { name: '\u041b\u0451\u0434', width: 110, height: 12, color: '#bae6fd' },
+    bridge_gap: { name: '\u0420\u0430\u0437\u0440\u0443\u0448\u0435\u043d\u043d\u044b\u0439 \u043c\u043e\u0441\u0442', width: 90, height: 22, color: '#0f172a' },
+    pulse_gate: { name: '\u0421\u0432\u0435\u0442\u043e\u0432\u043e\u0439 \u0437\u0430\u0442\u0432\u043e\u0440', width: 52, height: 56, color: '#c084fc' },
+    rolling_boulder: { name: '\u041a\u0430\u0442\u044f\u0449\u0438\u0439\u0441\u044f \u0432\u0430\u043b\u0443\u043d', width: 42, height: 38, color: '#a8a29e' }
 };
 
 
@@ -422,6 +432,7 @@ export const TRACKS_DB = [
 
     {
         id: 't1',
+        musicTheme: 't1',
         name: 'Дворы',
         rarity: 'common',
         length: 15000,
@@ -429,7 +440,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 4,
         botAccel: 0.05,
         obstacles: 8,
-        obstacleTypes: ['rock', 'log', 'pit', 'ramp'],
+        obstacleTypes: ['rock', 'log', 'ramp', 'cone', 'spring_pad', 'mud'],
         winReward: 500,
         lossReward: 50,
         couponReward: 1
@@ -437,6 +448,7 @@ export const TRACKS_DB = [
 
     {
         id: 't2',
+        musicTheme: 't2',
         name: 'Лесопарк',
         rarity: 'common',
         length: 25000,
@@ -444,7 +456,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 6.5,
         botAccel: 0.08,
         obstacles: 18,
-        obstacleTypes: ['rock', 'log', 'pit', 'ramp', 'barrier'],
+        obstacleTypes: ['log', 'rock', 'ramp', 'mud', 'water_splash', 'fallen_branch'],
         winReward: 650,
         lossReward: 60,
         couponReward: 1
@@ -452,6 +464,7 @@ export const TRACKS_DB = [
 
     {
         id: 't3',
+        musicTheme: 't3',
         name: 'Саржин Яр',
         rarity: 'common',
         length: 35000,
@@ -459,7 +472,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 10,
         botAccel: 0.12,
         obstacles: 30,
-        obstacleTypes: ['rock', 'log', 'pit', 'ramp', 'barrier'],
+        obstacleTypes: ['pit', 'rock', 'ramp', 'fallen_branch', 'wind_fan', 'water_splash'],
         winReward: 800,
         lossReward: 70,
         couponReward: 1
@@ -467,6 +480,7 @@ export const TRACKS_DB = [
 
     {
         id: 't4',
+        musicTheme: 't4',
         name: 'Студгородок ХПИ',
         rarity: 'rare',
         length: 45000,
@@ -474,7 +488,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 14,
         botAccel: 0.18,
         obstacles: 45,
-        obstacleTypes: ['rock', 'log', 'pit', 'ramp', 'barrier'],
+        obstacleTypes: ['barrier', 'log', 'ramp', 'pulse_gate', 'cone', 'spring_pad'],
         winReward: 1000,
         lossReward: 80,
         couponReward: 1
@@ -482,6 +496,7 @@ export const TRACKS_DB = [
 
     {
         id: 't5',
+        musicTheme: 't5',
         name: 'Городской парк',
         rarity: 'rare',
         length: 55000,
@@ -489,7 +504,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 16,
         botAccel: 0.20,
         obstacles: 50,
-        obstacleTypes: ['rock', 'log', 'pit', 'ramp', 'barrier'],
+        obstacleTypes: ['log', 'spring_pad', 'wind_fan', 'water_splash', 'cone', 'fallen_branch'],
         winReward: 1200,
         lossReward: 90,
         couponReward: 1
@@ -497,6 +512,7 @@ export const TRACKS_DB = [
 
     {
         id: 't6',
+        musicTheme: 't6',
         name: 'Каменный карьер',
         rarity: 'rare',
         length: 65000,
@@ -504,7 +520,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 18,
         botAccel: 0.23,
         obstacles: 60,
-        obstacleTypes: ['rock', 'rock', 'log', 'pit', 'ramp', 'barrier'],
+        obstacleTypes: ['rock', 'rolling_boulder', 'mud', 'bridge_gap', 'wind_fan', 'spring_pad'],
         winReward: 1450,
         lossReward: 100,
         couponReward: 1
@@ -512,6 +528,7 @@ export const TRACKS_DB = [
 
     {
         id: 't7',
+        musicTheme: 't7',
         name: 'Горный серпантин',
         rarity: 'rare',
         length: 75000,
@@ -519,7 +536,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 20,
         botAccel: 0.26,
         obstacles: 70,
-        obstacleTypes: ['rock', 'log', 'pit', 'ramp', 'barrier'],
+        obstacleTypes: ['ice_patch', 'water_splash', 'bridge_gap', 'fallen_branch', 'pulse_gate', 'wind_fan'],
         winReward: 1700,
         lossReward: 115,
         couponReward: 1
@@ -527,6 +544,7 @@ export const TRACKS_DB = [
 
     {
         id: 't8',
+        musicTheme: 't8',
         name: 'Заброшенная железная дорога',
         rarity: 'rare',
         length: 85000,
@@ -534,7 +552,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 22,
         botAccel: 0.29,
         obstacles: 80,
-        obstacleTypes: ['rock', 'log', 'pit', 'ramp', 'barrier'],
+        obstacleTypes: ['barrier', 'pulse_gate', 'rolling_boulder', 'mud', 'cone', 'bridge_gap'],
         winReward: 2000,
         lossReward: 130,
         couponReward: 1
@@ -542,6 +560,7 @@ export const TRACKS_DB = [
 
     {
         id: 't9',
+        musicTheme: 't9',
         name: 'Альпийский спуск',
         rarity: 'legendary',
         length: 95000,
@@ -549,7 +568,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 25,
         botAccel: 0.32,
         obstacles: 90,
-        obstacleTypes: ['rock', 'log', 'pit', 'ramp', 'barrier'],
+        obstacleTypes: ['rock', 'pit', 'ramp', 'log', 'ice_patch', 'pulse_gate', 'rolling_boulder', 'wind_fan'],
         winReward: 2350,
         lossReward: 145,
         couponReward: 1
@@ -557,6 +576,7 @@ export const TRACKS_DB = [
 
     {
         id: 't10',
+        musicTheme: 't10',
         name: 'VeloRider Марафон',
         rarity: 'legendary',
         length: 110000,
@@ -564,7 +584,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 28,
         botAccel: 0.36,
         obstacles: 110,
-        obstacleTypes: ['rock', 'rock', 'log', 'pit', 'ramp', 'barrier'],
+        obstacleTypes: ['rock', 'log', 'pit', 'ramp', 'barrier', 'cone', 'mud', 'fallen_branch', 'water_splash', 'wind_fan', 'spring_pad', 'ice_patch', 'bridge_gap', 'pulse_gate', 'rolling_boulder'],
         winReward: 2750,
         lossReward: 160,
         couponReward: 1

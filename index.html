@@ -18,7 +18,7 @@
 
     <link rel="stylesheet" href="style.css?v=8">
     <link rel="stylesheet" href="tracks-overrides.css?v=8">
-    <link rel="stylesheet" href="mobile-fix.css?v=1">
+    <link rel="stylesheet" href="mobile-fix.css?v=8">
 </head>
 
 <body class="bg-gray-900 text-white font-sans h-screen flex flex-col select-none overflow-hidden">
@@ -304,53 +304,26 @@
                  ЭКРАН МАГАЗИНА
             ================================== -->
 
-            <div id="screen-shop" class="screen hidden flex flex-col items-center justify-center h-full overflow-y-auto">
+            <div id="screen-shop" class="screen hidden flex flex-col items-center justify-start h-full overflow-y-auto py-4">
 
-                <h2 class="text-4xl font-black mb-12 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">
+                <h2 class="text-4xl font-black mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">
                     Магазин Контейнеров
                 </h2>
 
-                <div class="flex flex-wrap justify-center gap-12">
+                <p class="text-gray-400 text-sm mb-4 text-center">
+                    Открывай контейнеры за монеты или велокупоны и получай детали доступных редкостей
+                </p>
 
-                    <!-- Контейнер деталей -->
-                    <div class="flex flex-col items-center group">
-
-                        <div
-                            id="container-box-parts"
-                            class="w-48 h-48 bg-gradient-to-br from-blue-600 to-blue-800 rounded-3xl flex items-center justify-center cursor-pointer hover:scale-105 transition-all duration-300 shadow-[0_0_40px_rgba(37,99,235,0.4)] border-4 border-blue-500/50"
-                            onclick="openContainer('parts')">
-
-                            <span class="text-7xl drop-shadow-lg group-hover:-translate-y-2 transition-transform">
-                                📦
-                            </span>
-
-                        </div>
-
-                        <h3 class="text-2xl font-bold mt-6 text-gray-200">
-                            Детали
-                        </h3>
-
-                        <p class="text-gray-400 text-sm mb-4">
-                            Рамы, цепи, трансмиссия и другое
-                        </p>
-
-                        <button
-                            class="bg-yellow-600 hover:bg-yellow-500 active:bg-yellow-700 px-8 py-3 rounded-xl font-bold text-lg shadow-lg flex items-center gap-2 transition"
-                            onclick="openContainer('parts')">
-
-                            Открыть за 500 🪙
-
-                        </button>
-
-                    </div>
-
+                <!-- Сетка контейнеров из CONTAINERS_DB -->
+                <div
+                    id="container-shop-list"
+                    class="w-full max-w-6xl grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mt-4 px-4">
                 </div>
 
-
-                <!-- Результат -->
+                <!-- Результат открытия -->
                 <div
                     id="loot-result"
-                    class="mt-12 text-3xl font-black min-h-12 text-center drop-shadow-md">
+                    class="mt-8 text-2xl font-black min-h-12 text-center drop-shadow-md">
                 </div>
 
             </div>

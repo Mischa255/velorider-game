@@ -371,6 +371,28 @@ const THEMES = {
     }
 };
 
+
+const TRACK_MUSIC_PROFILES = {
+ t1:{bpm:104,root:48,wave:'triangle',motif:[0,3,5,7,5,3,2,0],mode:'minor'},
+ t2:{bpm:112,root:50,wave:'sine',motif:[0,2,5,7,9,7,5,2],mode:'major'},
+ t3:{bpm:118,root:52,wave:'triangle',motif:[0,3,7,10,7,5,3,0],mode:'minor'},
+ t4:{bpm:124,root:53,wave:'square',motif:[0,2,4,7,9,7,4,2],mode:'major'},
+ t5:{bpm:108,root:55,wave:'sine',motif:[0,4,7,9,7,4,2,0],mode:'major'},
+ t6:{bpm:128,root:45,wave:'sawtooth',motif:[0,5,7,10,12,10,7,5],mode:'minor'},
+ t7:{bpm:116,root:47,wave:'triangle',motif:[0,3,5,8,10,8,5,3],mode:'minor'},
+ t8:{bpm:136,root:50,wave:'square',motif:[0,2,7,9,12,9,7,2],mode:'minor'},
+ t9:{bpm:120,root:52,wave:'sine',motif:[0,4,7,11,12,11,7,4],mode:'major'},
+ t10:{bpm:144,root:48,wave:'sawtooth',motif:[0,3,7,10,12,15,12,10],mode:'minor'}
+};
+function createTrackTheme(p){
+ const third=p.mode==='major'?4:3, steps=[0,5,3,7];
+ return {bpm:p.bpm,root:p.root,bass:steps.map(x=>p.root+x-12),
+ chords:steps.map((x,i)=>{const r=p.root+x;return [r,r+((i===1||i===3)?3:third),r+7]}),
+ melody:[0,1,2,3].map(bar=>p.motif.map(n=>n+(bar===2?2:0))),
+ melodyWave:p.wave,bassVolume:.14,melodyVolume:.085,chordVolume:.065,drumVolume:p.bpm>=130?.105:.085};
+}
+for(const [id,p] of Object.entries(TRACK_MUSIC_PROFILES)) THEMES[id]=createTrackTheme(p);
+
 function playBass(note, time, theme) {
     scheduleTone(
         midiToFrequency(note),
@@ -597,7 +619,9 @@ function ensureNoiseBuffer() {
 // ------------------------------------------------------------
 
 export function setAudioScene(scene) {
-    const nextScene = scene === 'race' ? 'race' : 'garage';
+    const nextScene = Object.prototype.hasOwnProperty.call(THEMES, scene)
+        ? scene
+        : scene === 'race' ? 'race' : 'garage';
 
     if (currentScene === nextScene) return;
 

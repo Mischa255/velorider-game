@@ -18,7 +18,7 @@ import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=7';
+} from './audio.js?v=8';
 
 const CATEGORY_NAMES = {
     frames: 'Рамы',
@@ -64,6 +64,19 @@ const RARITY_NAMES = {
     common: 'Обычная',
     rare: 'Редкая',
     legendary: 'Легендарная'
+};
+
+const TRACK_ICONS = {
+    t1: '🏘️',
+    t2: '🌲',
+    t3: '🌿',
+    t4: '🏛️',
+    t5: '🎡',
+    t6: '🪨',
+    t7: '⛰️',
+    t8: '🛤️',
+    t9: '🏔️',
+    t10: '🏆'
 };
 
 const STAT_META = {
@@ -785,100 +798,56 @@ function ensureGarageLayout() {
                     </div>
 
                     <div class="garage-bike-stage">
-                        <svg class="garage-bike-svg"
-                            viewBox="0 0 680 300"
-                            role="img"
-                            aria-label="Иллюстрация горного велосипеда">
+                        <svg class="garage-bike-svg" viewBox="0 0 680 300" role="img" aria-label="\u0413\u043e\u0440\u043d\u044b\u0439 \u0432\u0435\u043b\u043e\u0441\u0438\u043f\u0435\u0434">
                             <defs>
-                                <linearGradient id="garage-metal-gradient"
-                                    x1="0" x2="1" y1="0" y2="1">
-                                    <stop offset="0" stop-color="#f8fafc"/>
-                                    <stop offset="1" stop-color="#64748b"/>
-                                </linearGradient>
-
-                                <radialGradient id="garage-wheel-glow">
-                                    <stop offset="0"
-                                        stop-color="#38bdf8"
-                                        stop-opacity=".12"/>
-                                    <stop offset="1"
-                                        stop-color="#38bdf8"
-                                        stop-opacity="0"/>
-                                </radialGradient>
+                                <linearGradient id="garage-metal-gradient" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#f8fafc"/><stop offset="1" stop-color="#64748b"/></linearGradient>
+                                <radialGradient id="garage-wheel-glow"><stop offset="0" stop-color="#38bdf8" stop-opacity=".12"/><stop offset="1" stop-color="#38bdf8" stop-opacity="0"/></radialGradient>
+                                <linearGradient id="garage-frame-gloss" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".6"/><stop offset=".45" stop-color="var(--garage-bike-accent,#38bdf8)"/><stop offset="1" stop-color="#0f172a" stop-opacity=".7"/></linearGradient>
                             </defs>
-
-                            <ellipse cx="340" cy="245"
-                                rx="265" ry="34"
-                                fill="#020617"
-                                opacity=".48"/>
-
-                            <circle cx="170" cy="174"
-                                r="105"
-                                fill="url(#garage-wheel-glow)"/>
-
-                            <circle cx="510" cy="174"
-                                r="105"
-                                fill="url(#garage-wheel-glow)"/>
-
-                            <g fill="none"
-                                stroke-linecap="round"
-                                stroke-linejoin="round">
-                                <g class="bike-tire" stroke-width="14">
-                                    <circle cx="170" cy="174" r="79"/>
-                                    <circle cx="510" cy="174" r="79"/>
+                            <ellipse cx="340" cy="270" rx="255" ry="18" fill="#020617" opacity=".55"/>
+                            <circle cx="150" cy="185" r="105" fill="url(#garage-wheel-glow)"/>
+                            <circle cx="520" cy="185" r="105" fill="url(#garage-wheel-glow)"/>
+                            <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                <g class="bike-tire" stroke-width="16"><circle cx="150" cy="185" r="79"/><circle cx="520" cy="185" r="79"/></g>
+                                <g class="bike-rims" stroke="#64748b" stroke-width="2"><circle cx="150" cy="185" r="67"/><circle cx="520" cy="185" r="67"/></g>
+                                <g class="bike-spoke" stroke-width="1.4" opacity=".8">
+                                    ${Array.from({ length: 18 }, (_, i) => { const a = i * Math.PI / 9; return `<path d="M150 185 L${150 + Math.cos(a) * 66} ${185 + Math.sin(a) * 66}"/>`; }).join('')}
+                                    ${Array.from({ length: 18 }, (_, i) => { const a = i * Math.PI / 9; return `<path d="M520 185 L${520 + Math.cos(a) * 66} ${185 + Math.sin(a) * 66}"/>`; }).join('')}
                                 </g>
-
-                                <g class="bike-metal"
-                                    stroke-width="2"
-                                    opacity=".9">
-                                    <circle cx="170" cy="174" r="69"/>
-                                    <circle cx="510" cy="174" r="69"/>
-
-                                    ${Array.from({ length: 12 }, (_, i) =>
-                                        `<path d="M170 174 L${170 + Math.cos(i * Math.PI / 6) * 68} ${174 + Math.sin(i * Math.PI / 6) * 68}"/>`
-                                    ).join('')}
-
-                                    ${Array.from({ length: 12 }, (_, i) =>
-                                        `<path d="M510 174 L${510 + Math.cos(i * Math.PI / 6) * 68} ${174 + Math.sin(i * Math.PI / 6) * 68}"/>`
-                                    ).join('')}
+                                <g class="bike-tread" stroke="#cbd5e1" stroke-width="2" opacity=".75">
+                                    ${Array.from({ length: 28 }, (_, i) => { const a = i * Math.PI / 14; return `<path d="M${150 + Math.cos(a) * 85} ${185 + Math.sin(a) * 85} L${150 + Math.cos(a) * 89} ${185 + Math.sin(a) * 89}"/>`; }).join('')}
+                                    ${Array.from({ length: 28 }, (_, i) => { const a = i * Math.PI / 14; return `<path d="M${520 + Math.cos(a) * 85} ${185 + Math.sin(a) * 85} L${520 + Math.cos(a) * 89} ${185 + Math.sin(a) * 89}"/>`; }).join('')}
                                 </g>
-
-                                <g class="bike-frame" stroke-width="12">
-                                    <path d="M170 174 L275 174 L355 75 L235 75 Z"/>
-                                    <path d="M275 174 L410 174 L355 75"/>
-                                    <path d="M410 174 L510 174"/>
+                                <g class="bike-brake-discs" stroke="#cbd5e1" stroke-width="2.5"><circle cx="150" cy="185" r="27"/><circle cx="520" cy="185" r="27"/><circle cx="150" cy="185" r="19"/><circle cx="520" cy="185" r="19"/></g>
+                                <g class="bike-frame" stroke="url(#garage-frame-gloss)" stroke-width="13">
+                                    <path d="M150 185 L300 185 L235 88 L150 185"/>
+                                    <path d="M235 88 L445 96 L300 185"/>
+                                    <path d="M445 96 L457 145 L520 185"/>
+                                    <path d="M235 88 L457 145" opacity=".45"/>
                                 </g>
-
-                                <g class="bike-metal" stroke-width="10">
-                                    <path d="M355 75 L335 44 L395 44"/>
-                                    <path d="M410 174 L458 63 L480 63"/>
-                                    <path d="M235 75 L215 48 L180 48"/>
-                                    <path d="M275 174 L255 214"/>
+                                <g class="bike-metal-parts" stroke="url(#garage-metal-gradient)" stroke-width="7">
+                                    <path id="garage-bike-seatpost" d="M235 88 L228 53"/><path id="garage-bike-saddle" d="M215 51 Q230 45 255 51" stroke-width="10"/>
+                                    <g id="garage-bike-cockpit"><path d="M452 99 L461 27 L478 27"/><path d="M440 23 L481 23" stroke-width="6"/></g>
+                                    <path class="bike-fork" d="M457 145 L520 185" stroke-width="9"/><path class="bike-fork-highlight" d="M397 145 L520 185" stroke="#38bdf8" stroke-width="2"/>
+                                    <path d="M300 185 L330 207 L348 207"/><path d="M300 185 L276 160 L257 160"/>
                                 </g>
-
-                                <g class="bike-detail" stroke-width="5">
-                                    <path d="M332 39 L407 39"/>
-                                    <path d="M470 57 L505 57"/>
-                                    <circle cx="275" cy="174" r="18"/>
-                                    <path d="M275 174 L300 198 M275 174 L250 150"/>
+                                <g stroke="#e2e8f0" stroke-width="2.5">
+                                    <circle cx="300" cy="185" r="25"/><circle cx="300" cy="185" r="7" fill="#e2e8f0"/>
+                                    <path d="M175 185 L300 185 L235 88"/><path d="M175 185 L235 88" opacity=".7"/>
+                                    <g class="bike-crank-detail"><path d="M300 185 L326 207 M300 185 L278 160"/></g>
+                                    <path d="M276 160 L257 160 M348 207 L365 207" stroke-width="5"/>
+                                    <path d="M185 184 L196 174 L203 187" stroke="#fbbf24" stroke-width="4"/>
                                 </g>
-
-                                <circle cx="170" cy="174" r="8" fill="#e2e8f0" stroke="none"/>
-                                <circle cx="510" cy="174" r="8" fill="#e2e8f0" stroke="none"/>
-                                <circle cx="275" cy="174" r="7" fill="#f8fafc" stroke="none"/>
+                                <g id="garage-bike-suspension" fill="none" stroke="#fbbf24" stroke-width="3"><path d="M465 150 L478 156 L473 164 L490 170 L485 178"/></g>
+                                <g id="garage-bike-motor" display="none"><path d="M300 157 L326 157 L337 178 L326 194 L300 194 L290 178 Z" fill="#334155" stroke="#fbbf24" stroke-width="3"/><rect x="329" y="125" width="45" height="15" rx="5" fill="#0f172a" stroke="#94a3b8" stroke-width="2"/><circle cx="312" cy="176" r="9" fill="#fbbf24"/></g>
+                                <g class="bike-chain-detail" fill="none" stroke="#cbd5e1" stroke-width="2"><path d="M150 185 L300 185"/><circle cx="300" cy="185" r="21"/><circle cx="150" cy="185" r="10"/></g>
+                                <g fill="#e2e8f0" stroke="#0f172a" stroke-width="2"><circle cx="150" cy="185" r="6"/><circle cx="520" cy="185" r="6"/><circle cx="300" cy="185" r="6"/></g>
+                                <path d="M415 135 Q427 143 417 151" stroke="#fbbf24" stroke-width="4"/>
+                                <path class="bike-vbrakes" d="M160 157 Q150 149 140 157 M550 157 Q520 149 530 157" stroke="#ef4444" stroke-width="3"/>
                             </g>
-
-                            <g fill="#94a3b8"
-                                font-size="10"
-                                font-family="Arial"
-                                font-weight="700"
-                                letter-spacing="2">
-                                <text x="170" y="286" text-anchor="middle">
-                                    REAR WHEEL
-                                </text>
-
-                                <text x="510" y="286" text-anchor="middle">
-                                    FRONT WHEEL
-                                </text>
+                            <g fill="#94a3b8" font-size="10" font-family="Arial" font-weight="700" letter-spacing="2">
+                                <text x="150" y="292" text-anchor="middle">\u0417\u0410\u0414\u041d\u0415\u0415 \u041a\u041e\u041b\u0415\u0421\u041e</text>
+                                <text x="520" y="292" text-anchor="middle">\u041f\u0415\u0420\u0415\u0414\u041d\u0415\u0415 \u041a\u041e\u041b\u0415\u0421\u041e</text>
                             </g>
                         </svg>
                     </div>
@@ -1157,7 +1126,7 @@ function canPlayTrack(trackId) {
 }
 
 function showScreen(screenName) {
-    setAudioScene(screenName === 'race' ? 'race' : 'garage');
+    setAudioScene(screenName === 'race' ? (player.selectedTrack || 'race') : 'garage');
 
     document.querySelectorAll('.screen').forEach(el => {
         el.classList.add('hidden');
@@ -1467,7 +1436,90 @@ function updateGarageUI() {
     }
 
     const bikeSvg = root.querySelector('.garage-bike-svg');
-    if (bikeSvg) bikeSvg.style.setProperty('--garage-bike-accent', getRarityAccent(frame?.rarity));
+    const getEquippedPart = category => {
+        const id = player.equipped?.[category];
+        return ITEMS_DB[category]?.find(item => item.id === id) || null;
+    };
+    if (bikeSvg) {
+        const fork = getEquippedPart('forks');
+        const wheels = getEquippedPart('wheels');
+        const tires = getEquippedPart('tires');
+        const brakes = getEquippedPart('brakes');
+        const electronics = getEquippedPart('electronics');
+        const chain = getEquippedPart('chains');
+        const crank = getEquippedPart('cranks');
+        const handlebar = getEquippedPart('handlebars');
+        const saddle = getEquippedPart('saddles');
+        const seatpost = getEquippedPart('seatposts');
+        const frameColor = getRarityAccent(frame?.rarity);
+        bikeSvg.style.setProperty('--garage-bike-accent', frameColor);
+        bikeSvg.style.setProperty('--garage-fork-accent', getRarityAccent(fork?.rarity));
+        bikeSvg.style.setProperty('--garage-drive-accent', getRarityAccent(chain?.rarity));
+        bikeSvg.style.setProperty('--garage-crank-accent', getRarityAccent(crank?.rarity));
+        bikeSvg.style.setProperty('--garage-seat-accent', getRarityAccent(seatpost?.rarity));
+        bikeSvg.style.setProperty('--garage-saddle-accent', getRarityAccent(saddle?.rarity));
+        bikeSvg.style.setProperty('--garage-handlebar-width', handlebar?.rarity === 'legendary' ? '8px' : handlebar?.rarity === 'rare' ? '7px' : '6px');
+        bikeSvg.dataset.frameId = frame?.id || 'none';
+        bikeSvg.dataset.wheelId = wheels?.id || 'none';
+        bikeSvg.classList.toggle('has-motor', Boolean(electronics && electronics.id !== 'e1'));
+        bikeSvg.classList.toggle('has-suspension', Boolean(fork && fork.id !== 'fk1'));
+        bikeSvg.classList.toggle('has-disc-brakes', Boolean(brakes && !['b1', 'b2'].includes(brakes.id)));
+        const frameGroup = bikeSvg.querySelector('.bike-frame');
+        if (frameGroup) {
+            const geometry = frame?.rarity === 'legendary'
+                ? { seat: [250, 80], head: [435, 88], lower: [447, 135] }
+                : frame?.rarity === 'rare'
+                    ? { seat: [242, 85], head: [440, 92], lower: [452, 140] }
+                    : { seat: [235, 88], head: [445, 96], lower: [457, 145] };
+            const points = geometry;
+            const xy = pair => pair.join(' ');
+            const paths = frameGroup.querySelectorAll('path');
+            const values = [
+                `M150 185 L300 185 L${xy(points.seat)} L150 185`,
+                `M${xy(points.seat)} L${xy(points.head)} L300 185`,
+                `M${xy(points.head)} L${xy(points.lower)} L520 185`,
+                `M${xy(points.seat)} L${xy(points.lower)}`
+            ];
+            paths.forEach((path, index) => { if (values[index]) path.setAttribute('d', values[index]); });
+            bikeSvg.querySelectorAll('.bike-fork, .bike-fork-highlight').forEach(path =>
+                path.setAttribute('d', `M${xy(points.lower)} L520 185`)
+            );
+            const cockpitPaths = bikeSvg.querySelectorAll('#garage-bike-cockpit path');
+            if (cockpitPaths[0]) cockpitPaths[0].setAttribute('d', `M${xy(points.head)} L${points.head[0] + 16} 27 L${points.head[0] + 33} 27`);
+            if (cockpitPaths[1]) cockpitPaths[1].setAttribute('d', `M${points.head[0] - 5} 23 L${points.head[0] + 37} 23`);
+        }
+        if (frameGroup) frameGroup.setAttribute('stroke-width', frame?.rarity === 'legendary' ? '15' : frame?.rarity === 'rare' ? '13' : '11');
+        const seatCoordinates = frame?.rarity === 'legendary' ? { x: 250, y: 80 } : frame?.rarity === 'rare' ? { x: 242, y: 85 } : { x: 235, y: 88 };
+        const seatpostLine = bikeSvg.querySelector('#garage-bike-seatpost');
+        if (seatpostLine) seatpostLine.setAttribute('d', `M${seatCoordinates.x} ${seatCoordinates.y} L${seatCoordinates.x - 7} 53`);
+        const saddleLine = bikeSvg.querySelector('#garage-bike-saddle');
+        if (saddleLine) saddleLine.setAttribute('d', `M${seatCoordinates.x - 20} 51 Q${seatCoordinates.x} 45 ${seatCoordinates.x + 25} 51`);
+        const tireGroup = bikeSvg.querySelector('.bike-tire');
+        if (tireGroup) tireGroup.setAttribute('stroke-width', tires?.rarity === 'legendary' ? '20' : tires?.rarity === 'rare' ? '17' : '14');
+        const rimGroup = bikeSvg.querySelector('.bike-rims');
+        if (rimGroup) rimGroup.setAttribute('stroke', wheels?.rarity === 'legendary' ? '#fbbf24' : wheels?.rarity === 'rare' ? '#38bdf8' : '#64748b');
+        const motor = bikeSvg.querySelector('#garage-bike-motor');
+        if (motor) motor.setAttribute('display', electronics && electronics.id !== 'e1' ? 'inline' : 'none');
+        bikeSvg.querySelectorAll('.bike-brake-discs').forEach(group => {
+            group.setAttribute('display', brakes && !['b1', 'b2'].includes(brakes.id) ? 'inline' : 'none');
+        });
+        const vBrakes = bikeSvg.querySelector('.bike-vbrakes');
+        if (vBrakes) vBrakes.setAttribute('display', brakes && !['b1', 'b2'].includes(brakes.id) ? 'none' : 'inline');
+        const cockpit = bikeSvg.querySelector('#garage-bike-cockpit');
+        if (cockpit) cockpit.querySelectorAll('path').forEach(path => path.setAttribute('stroke-width', handlebar?.rarity === 'legendary' ? '8' : handlebar?.rarity === 'rare' ? '7' : '6'));
+        const forkLine = bikeSvg.querySelector('.bike-fork');
+        if (forkLine) forkLine.setAttribute('stroke', getRarityAccent(fork?.rarity));
+        const suspension = bikeSvg.querySelector('#garage-bike-suspension');
+        if (suspension) suspension.setAttribute('display', fork && fork.id !== 'fk1' ? 'inline' : 'none');
+        const saddleElement = bikeSvg.querySelector('#garage-bike-saddle');
+        if (saddleElement) saddleElement.setAttribute('stroke', getRarityAccent(saddle?.rarity));
+        const seatpostElement = bikeSvg.querySelector('#garage-bike-seatpost');
+        if (seatpostElement) seatpostElement.setAttribute('stroke', getRarityAccent(seatpost?.rarity));
+        const chainDetail = bikeSvg.querySelector('.bike-chain-detail');
+        if (chainDetail) chainDetail.setAttribute('stroke', getRarityAccent(chain?.rarity));
+        const crankDetail = bikeSvg.querySelector('.bike-crank-detail');
+        if (crankDetail) crankDetail.setAttribute('stroke', getRarityAccent(crank?.rarity));
+    }
 
     const countEl = document.getElementById('garage-equipped-count');
     const percentEl = document.getElementById('garage-completeness-percent');
@@ -1818,115 +1870,185 @@ function updateTracksUI() {
     const list = document.getElementById('tracks-list');
     if (!list) return;
 
+    const totalEl = document.getElementById('tracks-total');
+    if (totalEl) {
+        totalEl.textContent = String(TRACKS_DB.length);
+    }
+
     list.innerHTML = '';
 
     TRACKS_DB.forEach((track, index) => {
         const discovered = player.unlockedTracks.includes(track.id);
         const playable = canPlayTrack(track.id);
+        const completed = player.completedTracks.includes(track.id);
         const selected = player.selectedTrack === track.id;
         const previousTrack = TRACKS_DB[index - 1];
 
         const winReward = Number(track.winReward) || (500 + index * 250);
         const lossReward = Number(track.lossReward) || (50 + index * 10);
+        const couponReward = Math.max(1, Number(track.couponReward) || 1);
+        const raceLength = Math.max(1000, Number(track.length) * 3 - 1500);
+        const obstaclesCount = Math.floor((Number(track.obstacles) || 0) * (3 + index * 0.07));
+        const trackNumber = `TRACK ${String(index + 1).padStart(2, '0')}`;
+        const icon = TRACK_ICONS[track.id] || '🗺️';
+
+        let statusClass = 'track-status--locked';
+        let statusText = '🔒 Закрыта';
+
+        if (selected && playable) {
+            statusClass = 'track-status--selected';
+            statusText = '✓ Выбрана';
+        } else if (completed) {
+            statusClass = 'track-status--completed';
+            statusText = '★ Пройдена';
+        } else if (playable) {
+            statusClass = 'track-status--available';
+            statusText = '● Доступна';
+        } else if (discovered) {
+            statusClass = 'track-status--found';
+            statusText = '🗺️ Найдена';
+        }
+
+        const cardClasses = [
+            'track-card',
+            playable ? 'track-card--playable' : 'track-card--locked-card',
+            selected && playable ? 'track-card--selected' : ''
+        ].filter(Boolean).join(' ');
+
+        const card = document.createElement('article');
+        card.className = cardClasses;
 
         if (playable) {
-            const raceLength = Math.max(1000, Number(track.length) * 3 - 1500);
-            list.insertAdjacentHTML('beforeend', `
-                <div class="bg-gray-800 p-5 rounded-2xl border-2 ${
-                    selected
-                        ? 'border-green-500 bg-gray-750 scale-[1.02]'
-                        : 'border-gray-600 hover:border-green-400'
-                } cursor-pointer transition-all shadow-lg flex flex-col"
-                    onclick="selectTrack('${track.id}')">
-
-                    <div class="font-black text-xl rarity-${track.rarity}">
-                        ${track.name}
-                    </div>
-
-                    <div class="text-sm text-gray-400 mt-3 space-y-2 border-t border-gray-700 pt-3">
-                        <div class="flex justify-between">
-                            <span>Длина:</span>
-                            <span>${raceLength.toLocaleString('ru-RU')} м</span>
-                        </div>
-
-                        <div class="flex justify-between">
-                            <span>Препятствий:</span>
-                            <span>${(Number(track.obstacles) || 0) * 3} шт.</span>
-                        </div>
-
-                        <div class="flex justify-between">
-                            <span>Победа:</span>
-                            <span class="text-green-400 font-bold">
-                                +${winReward} 🪙
-                            </span>
-                        </div>
-
-                        <div class="flex justify-between">
-                            <span>Поражение:</span>
-                            <span class="text-yellow-400">
-                                +${lossReward} 🪙
-                            </span>
-                        </div>
-
-                        <div class="flex justify-between">
-                            <span>За победу:</span>
-                            <span class="text-emerald-400">
-                                +${Math.max(1, Number(track.couponReward) || 1)} 🎟️
-                            </span>
-                        </div>
-
-                        <div class="flex justify-between">
-                            <span>Скорость бота:</span>
-                            <span class="text-red-400 font-bold">
-                                ${track.botMaxSpeed}
-                            </span>
-                        </div>
-                    </div>
-
-                    ${
-                        selected
-                            ? '<div class="mt-auto pt-4 text-green-400 font-bold text-center">✓ Текущая трасса</div>'
-                            : '<div class="mt-auto pt-4 text-blue-400 text-center">Выбрать трассу</div>'
-                    }
+            card.innerHTML = `
+                <div class="track-card__topline">
+                    <span class="track-card__number">${trackNumber}</span>
+                    <span class="track-status ${statusClass}">${statusText}</span>
                 </div>
-            `);
-        } else if (discovered) {
-            list.insertAdjacentHTML('beforeend', `
-                <div class="bg-gray-900 p-5 rounded-2xl border-2 border-blue-900 opacity-75 flex flex-col justify-center items-center min-h-[200px]">
-                    <div class="font-bold text-blue-400 text-xl mb-2">
-                        🗺️ Карта найдена
-                    </div>
 
-                    <div class="font-bold text-gray-300 mb-2">
-                        ${track.name}
-                    </div>
-
-                    <div class="text-sm text-gray-500 text-center">
-                        Победите на трассе «${previousTrack ? previousTrack.name : 'предыдущей трассе'}», чтобы получить доступ.
+                <div class="track-card__title-row">
+                    <div class="track-card__icon">${icon}</div>
+                    <div class="track-card__title-wrap">
+                        <h3 class="track-card__title rarity-${escapeHTML(track.rarity)}">
+                            ${escapeHTML(track.name)}
+                        </h3>
+                        <span class="track-card__rarity">
+                            ${escapeHTML(getRarityName(track.rarity))} трасса
+                        </span>
                     </div>
                 </div>
-            `);
+
+                <div class="track-card__stats">
+                    <div class="track-stat">
+                        <span>Длина</span>
+                        <strong>${raceLength.toLocaleString('ru-RU')} м</strong>
+                    </div>
+                    <div class="track-stat">
+                        <span>Препятствия</span>
+                        <strong>${obstaclesCount} шт.</strong>
+                    </div>
+                    <div class="track-stat">
+                        <span>Скорость бота</span>
+                        <strong>${track.botMaxSpeed}</strong>
+                    </div>
+                </div>
+
+                <div class="track-card__rewards">
+                    <div class="track-card__section-label">НАГРАДЫ ЗА ЗАЕЗД</div>
+                    <div class="track-card__reward-grid">
+                        <div class="track-reward track-reward--win">
+                            <span>Победа</span>
+                            <strong>+${winReward.toLocaleString('ru-RU')} 🪙</strong>
+                        </div>
+                        <div class="track-reward track-reward--coupon">
+                            <span>Велокупоны</span>
+                            <strong>+${couponReward} 🎟️</strong>
+                        </div>
+                        <div class="track-reward">
+                            <span>Поражение</span>
+                            <strong>+${lossReward.toLocaleString('ru-RU')} 🪙</strong>
+                        </div>
+                        <div class="track-reward">
+                            <span>Соперников</span>
+                            <strong>${index + 1 >= 3 ? '2 бота' : '1 бот'}</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <button
+                    type="button"
+                    class="track-card__action"
+                    ${selected ? 'disabled' : ''}>
+                    ${selected ? '✓ Текущая трасса' : 'Выбрать маршрут'}
+                </button>
+            `;
+
+            card.addEventListener('click', () => {
+                window.selectTrack(track.id);
+            });
         } else {
-            list.insertAdjacentHTML('beforeend', `
-                <div class="bg-gray-900 p-5 rounded-2xl border-2 border-gray-800 opacity-50 flex flex-col justify-center items-center min-h-[200px]">
-                    <div class="font-bold text-gray-500 text-xl mb-2">
-                        🔒 Заблокировано
-                    </div>
+            const lockTitle = discovered
+                ? 'Маршрут обнаружен'
+                : 'Маршрут заблокирован';
 
-                    <div class="font-bold text-gray-400 mb-2">
-                        ${track.name}
-                    </div>
+            const lockRequirement = previousTrack
+                ? `Победите бота на трассе «${previousTrack.name}», чтобы открыть доступ.`
+                : 'Выполните предыдущие заезды.';
 
-                    <div class="text-sm text-gray-600 text-center">
-                        ${
-                            previousTrack
-                                ? `Победите на трассе «${previousTrack.name}», чтобы открыть эту трассу.`
-                                : 'Трасса заблокирована'
-                        }
+            card.innerHTML = `
+                <div class="track-card__topline">
+                    <span class="track-card__number">${trackNumber}</span>
+                    <span class="track-status ${statusClass}">${statusText}</span>
+                </div>
+
+                <div class="track-card__title-row">
+                    <div class="track-card__icon">🔒</div>
+                    <div class="track-card__title-wrap">
+                        <h3 class="track-card__title">
+                            ${escapeHTML(track.name)}
+                        </h3>
+                        <span class="track-card__rarity">
+                            ${escapeHTML(getRarityName(track.rarity))} трасса
+                        </span>
                     </div>
                 </div>
-            `);
+
+                <div class="track-card__stats">
+                    <div class="track-stat">
+                        <span>Длина</span>
+                        <strong>${raceLength.toLocaleString('ru-RU')} м</strong>
+                    </div>
+                    <div class="track-stat">
+                        <span>Препятствия</span>
+                        <strong>${obstaclesCount} шт.</strong>
+                    </div>
+                    <div class="track-stat">
+                        <span>Скорость бота</span>
+                        <strong>${track.botMaxSpeed}</strong>
+                    </div>
+                </div>
+
+                <div class="track-card__rewards">
+                    <div class="track-card__section-label">НАГРАДЫ ЗА ЗАЕЗД</div>
+                    <div class="track-card__reward-grid">
+                        <div class="track-reward track-reward--win">
+                            <span>Победа</span>
+                            <strong>+${winReward.toLocaleString('ru-RU')} 🪙</strong>
+                        </div>
+                        <div class="track-reward track-reward--coupon">
+                            <span>Велокупоны</span>
+                            <strong>+${couponReward} 🎟️</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="track-card__locked-note">
+                    <strong>${lockTitle}</strong>
+                    <span>${escapeHTML(lockRequirement)}</span>
+                </div>
+            `;
         }
+
+        list.appendChild(card);
     });
 }
 

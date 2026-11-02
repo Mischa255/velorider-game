@@ -1,5 +1,5 @@
 import { player } from './state.js';
-import { TRACKS_DB, OBSTACLE_TYPES } from './db.js';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -33,16 +33,16 @@ const TRACK_BALANCE = {
 // =========================================
 
 const TRACK_TERRAIN = {
-    t1:  { amplitude: 8,  longFrequency: 0.0010, shortFrequency: 0.0030, micro: 1.4, phase: 0.2, ridge: 0.08 },
-    t2:  { amplitude: 15, longFrequency: 0.0011, shortFrequency: 0.0032, micro: 2.0, phase: 1.1, ridge: 0.12 },
-    t3:  { amplitude: 21, longFrequency: 0.0010, shortFrequency: 0.0038, micro: 2.4, phase: 2.0, ridge: 0.16 },
-    t4:  { amplitude: 29, longFrequency: 0.0009, shortFrequency: 0.0040, micro: 2.5, phase: 0.8, ridge: 0.22 },
-    t5:  { amplitude: 52, longFrequency: 0.00072, shortFrequency: 0.0028, micro: 3.3, phase: 1.7, ridge: 0.42 },
-    t6:  { amplitude: 12, longFrequency: 0.0014, shortFrequency: 0.0046, micro: 1.8, phase: 2.4, ridge: 0.10 },
-    t7:  { amplitude: 36, longFrequency: 0.00082, shortFrequency: 0.0042, micro: 3.1, phase: 0.4, ridge: 0.30 },
-    t8:  { amplitude: 65, longFrequency: 0.00066, shortFrequency: 0.0032, micro: 3.8, phase: 2.8, ridge: 0.58 },
-    t9:  { amplitude: 28, longFrequency: 0.0011, shortFrequency: 0.0050, micro: 2.8, phase: 1.3, ridge: 0.24 },
-    t10: { amplitude: 74, longFrequency: 0.00058, shortFrequency: 0.0035, micro: 4.2, phase: 2.1, ridge: 0.72 }
+    t1:  { amplitude: 8,  longFrequency: 0.0034, shortFrequency: 0.0080, micro: 1.0, phase: 0.2, ridge: 0.04, chop: 0.02 },
+    t2:  { amplitude: 15, longFrequency: 0.0038, shortFrequency: 0.0095, micro: 1.5, phase: 0.5, ridge: 0.07, chop: 0.035 },
+    t3:  { amplitude: 21, longFrequency: 0.0042, shortFrequency: 0.0110, micro: 2.0, phase: 0.8, ridge: 0.11, chop: 0.05 },
+    t4:  { amplitude: 28, longFrequency: 0.0046, shortFrequency: 0.0125, micro: 2.5, phase: 1.1, ridge: 0.17, chop: 0.065 },
+    t5:  { amplitude: 36, longFrequency: 0.0050, shortFrequency: 0.0140, micro: 3.0, phase: 1.4, ridge: 0.24, chop: 0.08 },
+    t6:  { amplitude: 45, longFrequency: 0.0054, shortFrequency: 0.0160, micro: 3.5, phase: 1.7, ridge: 0.32, chop: 0.10 },
+    t7:  { amplitude: 54, longFrequency: 0.0058, shortFrequency: 0.0180, micro: 4.0, phase: 2.0, ridge: 0.40, chop: 0.12 },
+    t8:  { amplitude: 64, longFrequency: 0.0062, shortFrequency: 0.0200, micro: 4.5, phase: 2.3, ridge: 0.50, chop: 0.14 },
+    t9:  { amplitude: 74, longFrequency: 0.0068, shortFrequency: 0.0220, micro: 5.0, phase: 2.6, ridge: 0.60, chop: 0.17 },
+    t10: { amplitude: 88, longFrequency: 0.0074, shortFrequency: 0.0250, micro: 5.5, phase: 2.9, ridge: 0.74, chop: 0.20 }
 };
 
 // =========================================
@@ -247,8 +247,12 @@ function getGroundY(worldX, laneOffset = 0) {
         Math.sin(worldX * 0.008 + profile.phase) *
         profile.micro;
 
+    const trailChop =
+        Math.sin(worldX * profile.shortFrequency * 1.9 + profile.phase * 2.4) *
+        amplitude * (profile.chop || 0);
+
     return clamp(
-        base + longWave + shortWave + sharperRidges + tinyWave,
+        base + longWave + shortWave + sharperRidges + tinyWave + trailChop,
         viewHeight * 0.45,
         viewHeight * 0.88
     );
@@ -291,6 +295,30 @@ function getBotAbilities(botIndex) {
 // СОЗДАНИЕ ВЕЛОСИПЕДА
 // =========================================
 
+function getBikeVisualProfile() {
+    const part = category => ITEMS_DB[category]?.find(item => item.id === player.equipped?.[category]) || null;
+    const rank = rarity => rarity === 'legendary' ? 2 : rarity === 'rare' ? 1 : 0;
+    const color = rarity => rarity === 'legendary' ? '#fbbf24' : rarity === 'rare' ? '#38bdf8' : '#94a3b8';
+    const frame = part('frames'), fork = part('forks'), wheels = part('wheels');
+    const tires = part('tires'), brakes = part('brakes'), electronics = part('electronics');
+    const chains = part('chains'), cranks = part('cranks'), handlebars = part('handlebars');
+    const saddle = part('saddles'), seatpost = part('seatposts');
+    return {
+        frameColor: color(frame?.rarity), forkColor: color(fork?.rarity),
+        chainColor: color(chains?.rarity), crankColor: color(cranks?.rarity),
+        saddleColor: color(saddle?.rarity), seatpostColor: color(seatpost?.rarity),
+        handlebarColor: color(handlebars?.rarity),
+        wheelRadius: 9.5 + rank(wheels?.rarity) * 0.6,
+        tireWidth: 2.4 + rank(tires?.rarity) * 0.8,
+        frameWidth: 2.8 + rank(frame?.rarity) * 0.7,
+        handlebarWidth: 2 + rank(handlebars?.rarity) * 0.6,
+        discBrakes: Boolean(brakes && !['b1', 'b2'].includes(brakes.id)),
+        suspension: Boolean(fork && fork.id !== 'fk1'),
+        motor: Boolean(electronics && electronics.id !== 'e1'),
+        hubColor: color(wheels?.rarity)
+    };
+}
+
 function createBike(isBot = false, botIndex = 1) {
     const botColor = botIndex === 2
         ? '#38bdf8'
@@ -307,6 +335,8 @@ function createBike(isBot = false, botIndex = 1) {
 
     return {
         id: isBot ? `bot-${botIndex}` : 'player',
+        displayName: isBot ? (botIndex === 1 ? '\u041c\u0430\u043a\u0441' : '\u041b\u0435\u0440\u0430') : '\u0418\u0433\u0440\u043e\u043a',
+        visuals: isBot ? null : getBikeVisualProfile(),
 
         x: startX,
         previousX: startX,
@@ -393,13 +423,7 @@ function createObstacles() {
         type => OBSTACLE_TYPES[type]
     );
 
-    const obstacleMultiplier = currentTrackLevel === 5
-        ? 3.25
-        : currentTrackLevel === 8
-            ? 3.45
-            : currentTrackLevel === 10
-                ? 3.65
-                : OBSTACLE_MULTIPLIER;
+    const obstacleMultiplier = 3 + (currentTrackLevel - 1) * 0.07;
 
     const obstacleCount = Math.max(
         8,
@@ -413,9 +437,18 @@ function createObstacles() {
     const spacing = usableLength / (obstacleCount + 1);
 
     const generated = [];
+    const pitCount = currentTrackLevel * 2;
+    const pitIndices = new Set(
+        Array.from({ length: pitCount }, (_, index) =>
+            Math.floor((index + 0.5) * obstacleCount / pitCount)
+        )
+    );
+    const nonPitPool = typePool.filter(type => type !== 'pit');
 
     for (let i = 0; i < obstacleCount; i++) {
-        const type = randomItem(typePool) || 'rock';
+        const type = pitIndices.has(i)
+            ? 'pit'
+            : randomItem(nonPitPool) || 'rock';
         const definition = OBSTACLE_TYPES[type];
 
         const x =
@@ -787,7 +820,7 @@ function findBotJumpTarget(bike) {
     const jumpableTypes = new Set([
         'pit',
         'log',
-        'barrier'
+        'barrier', 'cone', 'fallen_branch', 'bridge_gap', 'pulse_gate', 'rolling_boulder'
     ]);
 
     const front = bike.x + BIKE_WIDTH * 0.35;
@@ -1075,7 +1108,7 @@ function updatePlayerCollisions() {
             continue;
         }
 
-        if (obstacle.type === 'pit') {
+        if (obstacle.type === 'pit' || obstacle.type === 'bridge_gap') {
             if (
                 playerBike.grounded &&
                 playerBike.jumpHeight < 8
@@ -1087,9 +1120,33 @@ function updatePlayerCollisions() {
             continue;
         }
 
+        if (obstacle.type === 'pulse_gate') {
+            if (Math.sin(frameCounter * 0.045 + obstacle.x) > 0.15) continue;
+            if (playerBike.jumpHeight < obstacle.height + 8) applyPlayerImpact(obstacle, 0.9);
+            continue;
+        }
+        if (obstacle.type === 'spring_pad') {
+            if (!obstacle.playerHit && playerBike.grounded) {
+                obstacle.playerHit = true; playerBike.velocityX += 1.6;
+                playerBike.nitroTimer = Math.max(playerBike.nitroTimer, 34);
+            }
+            continue;
+        }
+        if (obstacle.type === 'mud' || obstacle.type === 'water_splash' || obstacle.type === 'ice_patch' || obstacle.type === 'wind_fan') {
+            if (playerBike.grounded) {
+                if (obstacle.type === 'ice_patch') {
+                    applyPlayerImpact(obstacle, Math.max(0.8, playerBike.velocityX * 0.58));
+                } else if (obstacle.type === 'wind_fan') {
+                    applyPlayerImpact(obstacle, Math.max(0.6, playerBike.velocityX * 0.42));
+                } else {
+                    applyPlayerImpact(obstacle, obstacle.type === 'water_splash' ? 0.8 : 1.05);
+                }
+            }
+            continue;
+        }
         if (obstacle.type === 'ramp') continue;
 
-        if (obstacle.type === 'rock') {
+        if (obstacle.type === 'rock' || obstacle.type === 'rolling_boulder') {
             if (
                 playerBike.jumpHeight <
                 obstacle.height * 0.65
@@ -1102,7 +1159,7 @@ function updatePlayerCollisions() {
 
         if (
             obstacle.type === 'log' ||
-            obstacle.type === 'barrier'
+            obstacle.type === 'barrier' || obstacle.type === 'cone' || obstacle.type === 'fallen_branch' || obstacle.type === 'pulse_gate'
         ) {
             const requiredJump =
                 obstacle.height + 9;
@@ -1190,7 +1247,7 @@ function updateBotCollisions(bike) {
             continue;
         }
 
-        if (obstacle.type === 'pit') {
+        if (obstacle.type === 'pit' || obstacle.type === 'bridge_gap') {
             if (
                 bike.jumpHeight <
                 Math.max(22, obstacle.height * 0.75)
@@ -1206,9 +1263,28 @@ function updateBotCollisions(bike) {
             continue;
         }
 
+        if (obstacle.type === 'pulse_gate') {
+            if (Math.sin(frameCounter * 0.045 + obstacle.x) > 0.15) continue;
+            if (bike.jumpHeight < obstacle.height + 8) applyBotImpact(bike, obstacle, 0.5, 38);
+            continue;
+        }
+        if (obstacle.type === 'spring_pad') {
+            if (!obstacle.botHitBy.has(bike.botIndex) && bike.grounded) {
+                obstacle.botHitBy.add(bike.botIndex); bike.velocityX += 1.6;
+                bike.nitroTimer = Math.max(bike.nitroTimer, 34);
+            }
+            continue;
+        }
+        if (obstacle.type === 'mud' || obstacle.type === 'water_splash' || obstacle.type === 'ice_patch' || obstacle.type === 'wind_fan') {
+            if (bike.grounded) {
+                const factor = obstacle.type === 'wind_fan' ? 0.28 : obstacle.type === 'ice_patch' ? 0.52 : obstacle.type === 'water_splash' ? 0.42 : 0.58;
+                applyBotImpact(bike, obstacle, factor, obstacle.type === 'ice_patch' ? 24 : 48);
+            }
+            continue;
+        }
         if (obstacle.type === 'ramp') continue;
 
-        if (obstacle.type === 'rock') {
+        if (obstacle.type === 'rock' || obstacle.type === 'rolling_boulder') {
             if (
                 bike.jumpHeight <
                 Math.max(10, obstacle.height * 0.65)
@@ -1226,7 +1302,7 @@ function updateBotCollisions(bike) {
 
         if (
             obstacle.type === 'log' ||
-            obstacle.type === 'barrier'
+            obstacle.type === 'barrier' || obstacle.type === 'cone' || obstacle.type === 'fallen_branch' || obstacle.type === 'pulse_gate'
         ) {
             if (
                 bike.jumpHeight <
@@ -1446,6 +1522,36 @@ function drawObstacle(obstacle) {
     const width = obstacle.width;
     const height = obstacle.height;
 
+    if (obstacle.type === 'mud' || obstacle.type === 'ice_patch' || obstacle.type === 'water_splash' || obstacle.type === 'spring_pad') {
+        ctx.fillStyle = obstacle.color; ctx.beginPath();
+        ctx.ellipse(screenX + width / 2, groundY + 1, width / 2, Math.max(5, height / 2), 0, 0, Math.PI * 2); ctx.fill();
+        if (obstacle.type === 'spring_pad') { ctx.strokeStyle = '#dcfce7'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(screenX + 8, groundY - 2); ctx.lineTo(screenX + width - 8, groundY - 2); ctx.stroke(); }
+        if (obstacle.type === 'ice_patch') { ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.moveTo(screenX + 10, groundY - 3); ctx.lineTo(screenX + width - 10, groundY - 3); ctx.stroke(); }
+        return;
+    }
+    if (obstacle.type === 'cone') {
+        ctx.fillStyle = obstacle.color; ctx.beginPath(); ctx.moveTo(screenX + width / 2, groundY - height); ctx.lineTo(screenX + width, groundY); ctx.lineTo(screenX, groundY); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#fff7ed'; ctx.fillRect(screenX + width * .2, groundY - height * .38, width * .6, 4); return;
+    }
+    if (obstacle.type === 'fallen_branch') {
+        ctx.strokeStyle = obstacle.color; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(screenX, groundY - height); ctx.lineTo(screenX + width, groundY - height * .65); ctx.stroke(); return;
+    }
+    if (obstacle.type === 'wind_fan') {
+        const cx = screenX + width / 2, cy = groundY - height * .55; ctx.strokeStyle = obstacle.color; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(cx, groundY); ctx.lineTo(cx, cy); ctx.stroke(); ctx.save(); ctx.translate(cx, cy); ctx.rotate(frameCounter * .16); ctx.fillStyle = obstacle.color;
+        for (let i = 0; i < 3; i++) { ctx.rotate(Math.PI * 2 / 3); ctx.beginPath(); ctx.ellipse(0, -height * .28, 5, height * .25, 0, 0, Math.PI * 2); ctx.fill(); } ctx.restore(); return;
+    }
+    if (obstacle.type === 'pulse_gate') {
+        const open = Math.sin(frameCounter * .045 + obstacle.x) > 0.15; ctx.strokeStyle = open ? '#4ade80' : obstacle.color; ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.moveTo(screenX + 5, groundY); ctx.lineTo(screenX + 5, groundY - height); ctx.lineTo(screenX + width - 5, groundY - height); ctx.lineTo(screenX + width - 5, groundY); ctx.stroke();
+        if (!open) { ctx.fillStyle = obstacle.color; ctx.fillRect(screenX, groundY - height * .55, width, 8); } return;
+    }
+    if (obstacle.type === 'bridge_gap') { ctx.fillStyle = '#020617'; ctx.fillRect(screenX, groundY - 2, width, 12); ctx.strokeStyle = '#a16207'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(screenX, groundY - 5); ctx.lineTo(screenX + width, groundY - 5); ctx.stroke(); return; }
+    if (obstacle.type === 'rolling_boulder') {
+        ctx.fillStyle = obstacle.color; ctx.beginPath(); ctx.arc(screenX + width / 2, groundY - height / 2, height / 2, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#57534e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(screenX + width / 2, groundY - height / 2); ctx.lineTo(screenX + width / 2 + Math.cos(frameCounter * .12) * height * .35, groundY - height / 2 + Math.sin(frameCounter * .12) * height * .35); ctx.stroke(); return;
+    }
+
     if (obstacle.type === 'pit') {
         ctx.fillStyle = '#020617';
 
@@ -1599,168 +1705,307 @@ function drawObstacles() {
 
 function drawBike(bike, label, color) {
     const x = bike.x - cameraX;
-
     const groundY = getGroundY(bike.x, 0);
-
-    const y =
-        groundY -
-        bike.jumpHeight -
-        bike.rampLift;
-
+    const y = groundY - bike.jumpHeight - bike.rampLift;
+    const visuals = bike.visuals || {};
+    const radius = visuals.wheelRadius || 9.5;
     const wheelY = y - 8;
+    const rearWheelX = x - 25;
+    const frontWheelX = x + 25;
+    const bottomX = x - 3;
+    const seatX = x - 10;
+    const headX = x + 11;
+    const travel = Number.isFinite(bike.previousX)
+        ? bike.x - bike.previousX
+        : 0;
 
-    const rearWheelX = x - 17;
-    const frontWheelX = x + 17;
+    bike.wheelRotation = (bike.wheelRotation || 0) + travel / radius;
+    bike.pedalPhase = (bike.pedalPhase || 0) + travel / radius * 0.42;
+    const wheelAngle = bike.wheelRotation;
+    const pedalAngle = bike.pedalPhase;
 
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
-
     ctx.beginPath();
-
-    ctx.ellipse(
-        x,
-        groundY - 1,
-        25,
-        4,
-        0,
-        0,
-        Math.PI * 2
-    );
-
+    ctx.ellipse(x, groundY - 1, 35, 5, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = '#0f172a';
+    function drawWheel(cx) {
+        ctx.save();
+        ctx.translate(cx, wheelY);
+        ctx.rotate(wheelAngle);
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = visuals.tireWidth || 3.2;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.stroke();
 
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.72, 0, Math.PI * 2);
+        for (let i = 0; i < 8; i++) {
+            const angle = i * Math.PI / 4;
+            ctx.moveTo(0, 0);
+            ctx.lineTo(Math.cos(angle) * radius * 0.72, Math.sin(angle) * radius * 0.72);
+        }
+        for (let i = 0; i < 16; i++) {
+            const angle = i * Math.PI / 8;
+            ctx.moveTo(Math.cos(angle) * (radius - 1), Math.sin(angle) * (radius - 1));
+            ctx.lineTo(Math.cos(angle) * (radius + 1), Math.sin(angle) * (radius + 1));
+        }
+        ctx.stroke();
+
+        ctx.strokeStyle = visuals.hubColor || '#94a3b8';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.22, 0, Math.PI * 2);
+        ctx.stroke();
+        if (visuals.discBrakes) {
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(0, 0, radius * 0.48, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
+    drawWheel(rearWheelX);
+    drawWheel(frontWheelX);
+
+    // Compress only the frame and rider vertically; wheel circles stay round.
+    ctx.save();
+    ctx.translate(0, wheelY);
+    ctx.scale(1, 0.78);
+    ctx.translate(0, -wheelY);
+
+    const frameColor = visuals.frameColor || color;
+    ctx.strokeStyle = frameColor;
+    ctx.lineWidth = visuals.frameWidth || 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     ctx.beginPath();
-
-    ctx.arc(rearWheelX, wheelY, 8, 0, Math.PI * 2);
-    ctx.arc(frontWheelX, wheelY, 8, 0, Math.PI * 2);
-
-    ctx.stroke();
-
-    ctx.strokeStyle = '#cbd5e1';
-    ctx.lineWidth = 1.5;
-
-    ctx.beginPath();
-
-    ctx.arc(rearWheelX, wheelY, 5, 0, Math.PI * 2);
-    ctx.arc(frontWheelX, wheelY, 5, 0, Math.PI * 2);
-
-    ctx.stroke();
-
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 3;
-
-    ctx.beginPath();
-
     ctx.moveTo(rearWheelX, wheelY);
-    ctx.lineTo(x - 3, wheelY - 10);
-    ctx.lineTo(frontWheelX, wheelY);
+    ctx.lineTo(bottomX, wheelY);
+    ctx.lineTo(seatX, wheelY - 27);
     ctx.lineTo(rearWheelX, wheelY);
-
-    ctx.moveTo(x - 3, wheelY - 10);
-    ctx.lineTo(x + 5, wheelY);
-    ctx.lineTo(rearWheelX, wheelY);
-
+    ctx.moveTo(seatX, wheelY - 27);
+    ctx.lineTo(headX, wheelY - 19);
+    ctx.lineTo(bottomX, wheelY);
     ctx.stroke();
 
-    ctx.strokeStyle = '#e2e8f0';
-    ctx.lineWidth = 2;
-
-    ctx.beginPath();
-
-    ctx.moveTo(x + 5, wheelY);
-    ctx.lineTo(frontWheelX, wheelY);
-    ctx.lineTo(frontWheelX + 2, wheelY - 13);
-    ctx.lineTo(frontWheelX + 8, wheelY - 13);
-
-    ctx.stroke();
-
-    ctx.strokeStyle = '#f8fafc';
+    ctx.strokeStyle = visuals.forkColor || '#cbd5e1';
     ctx.lineWidth = 3;
-
     ctx.beginPath();
+    ctx.moveTo(headX, wheelY - 19);
+    ctx.lineTo(frontWheelX, wheelY);
+    ctx.stroke();
+    if (visuals.suspension) {
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(headX + 3, wheelY - 16);
+        ctx.lineTo(headX + 6, wheelY - 12);
+        ctx.lineTo(headX + 3, wheelY - 8);
+        ctx.lineTo(headX + 7, wheelY - 4);
+        ctx.stroke();
+    }
 
-    ctx.moveTo(x - 2, wheelY - 10);
-    ctx.lineTo(x - 6, wheelY - 21);
-    ctx.lineTo(x + 7, wheelY - 16);
-    ctx.lineTo(frontWheelX + 2, wheelY - 13);
-
-    ctx.moveTo(x - 6, wheelY - 21);
-    ctx.lineTo(x - 12, wheelY - 14);
-
+    ctx.strokeStyle = visuals.chainColor || '#cbd5e1';
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(rearWheelX + 2, wheelY + 1);
+    ctx.lineTo(bottomX, wheelY + 1);
+    ctx.arc(bottomX, wheelY, 4.5, 0, Math.PI * 2);
     ctx.stroke();
 
-    ctx.fillStyle = color;
-
+    const pedalRadius = 7;
+    const leftPedal = {
+        x: bottomX + Math.cos(pedalAngle) * pedalRadius,
+        y: wheelY + Math.sin(pedalAngle) * pedalRadius
+    };
+    const rightPedal = {
+        x: bottomX + Math.cos(pedalAngle + Math.PI) * pedalRadius,
+        y: wheelY + Math.sin(pedalAngle + Math.PI) * pedalRadius
+    };
+    ctx.strokeStyle = visuals.crankColor || '#e2e8f0';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(x - 6, wheelY - 25, 5, 0, Math.PI * 2);
+    ctx.arc(bottomX, wheelY, 4.5, 0, Math.PI * 2);
+    ctx.moveTo(bottomX, wheelY);
+    ctx.lineTo(leftPedal.x, leftPedal.y);
+    ctx.moveTo(bottomX, wheelY);
+    ctx.lineTo(rightPedal.x, rightPedal.y);
+    ctx.stroke();
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(leftPedal.x - 3, leftPedal.y);
+    ctx.lineTo(leftPedal.x + 3, leftPedal.y);
+    ctx.moveTo(rightPedal.x - 3, rightPedal.y);
+    ctx.lineTo(rightPedal.x + 3, rightPedal.y);
+    ctx.stroke();
+
+    ctx.strokeStyle = visuals.seatpostColor || '#cbd5e1';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(seatX, wheelY - 27);
+    ctx.lineTo(seatX - 1, wheelY - 33);
+    ctx.stroke();
+    ctx.strokeStyle = visuals.saddleColor || '#f8fafc';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(seatX - 8, wheelY - 33);
+    ctx.lineTo(seatX + 6, wheelY - 33);
+    ctx.stroke();
+
+    // A compact rider leans forward and pedals with alternating legs.
+    const hip = { x: seatX + 1, y: wheelY - 35 };
+    const shoulder = { x: x + 1, y: wheelY - 46 };
+    const head = { x: x + 4, y: wheelY - 53 };
+    const kneeA = { x: (hip.x + leftPedal.x) / 2 + 3, y: (hip.y + leftPedal.y) / 2 - 3 };
+    const kneeB = { x: (hip.x + rightPedal.x) / 2 - 3, y: (hip.y + rightPedal.y) / 2 - 3 };
+    const jersey = bike.isBot ? color : '#16a34a';
+
+    // Far leg, then near leg; knees and shoes follow the turning pedals.
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#172033';
+    ctx.lineWidth = 3.4;
+    ctx.beginPath();
+    ctx.moveTo(hip.x, hip.y);
+    ctx.lineTo(kneeB.x, kneeB.y);
+    ctx.lineTo(rightPedal.x, rightPedal.y);
+    ctx.stroke();
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(hip.x, hip.y);
+    ctx.lineTo(kneeA.x, kneeA.y);
+    ctx.lineTo(leftPedal.x, leftPedal.y);
+    ctx.stroke();
+    ctx.fillStyle = '#334155';
+    ctx.beginPath();
+    ctx.arc(kneeA.x, kneeA.y, 1.8, 0, Math.PI * 2);
+    ctx.arc(kneeB.x, kneeB.y, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(leftPedal.x - 2, leftPedal.y - 1.2, 5, 2.4);
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillRect(rightPedal.x - 2, rightPedal.y - 1.2, 5, 2.4);
+
+    // Jersey has a clear shoulder and waist shape instead of a single stick line.
+    ctx.fillStyle = jersey;
+    ctx.beginPath();
+    ctx.moveTo(shoulder.x - 4, shoulder.y - 1);
+    ctx.lineTo(shoulder.x + 3, shoulder.y - 2);
+    ctx.lineTo(hip.x + 5, hip.y + 1);
+    ctx.lineTo(hip.x - 4, hip.y + 1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.strokeStyle = bike.isBot ? '#f8fafc' : '#bbf7d0';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(shoulder.x - 1, shoulder.y + 1);
+    ctx.lineTo(hip.x, hip.y - 1);
+    ctx.stroke();
+
+    // Arms bend toward the grips; the hands meet the handlebar.
+    const elbow = { x: x + 10, y: wheelY - 42 };
+    const hand = { x: headX + 13, y: wheelY - 37 };
+    ctx.strokeStyle = jersey;
+    ctx.lineWidth = 3.2;
+    ctx.beginPath();
+    ctx.moveTo(shoulder.x + 1, shoulder.y + 1);
+    ctx.lineTo(elbow.x, elbow.y);
+    ctx.stroke();
+    ctx.strokeStyle = '#f1c9a5';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(elbow.x, elbow.y);
+    ctx.lineTo(hand.x, hand.y);
+    ctx.stroke();
+    ctx.fillStyle = '#f1c9a5';
+    ctx.beginPath();
+    ctx.arc(hand.x, hand.y, 1.8, 0, Math.PI * 2);
     ctx.fill();
 
-    // Нитро.
+    // Neck, face and helmet are drawn as separate shapes for a readable rider.
+    ctx.strokeStyle = '#f1c9a5';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(shoulder.x + 1, shoulder.y - 1);
+    ctx.lineTo(head.x - 1, head.y + 2);
+    ctx.stroke();
+    ctx.fillStyle = '#f1c9a5';
+    ctx.beginPath();
+    ctx.arc(head.x, head.y, 3.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = bike.isBot ? color : '#16a34a';
+    ctx.beginPath();
+    ctx.ellipse(head.x - 0.3, head.y - 2.5, 4.5, 2.1, -0.08, Math.PI, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(head.x - 4.5, head.y - 2.2);
+    ctx.lineTo(head.x + 3.5, head.y - 2.2);
+    ctx.stroke();
+
+    // Handlebar is above the saddle and the rider's hands reach it.
+    ctx.strokeStyle = visuals.handlebarColor || '#f8fafc';
+    ctx.lineWidth = visuals.handlebarWidth || 2;
+    ctx.beginPath();
+    ctx.moveTo(headX, wheelY - 19);
+    ctx.lineTo(headX + 2, wheelY - 35);
+    ctx.lineTo(headX + 14, wheelY - 35);
+    ctx.moveTo(headX - 3, wheelY - 37);
+    ctx.lineTo(headX + 19, wheelY - 37);
+    ctx.stroke();
+
+    if (visuals.motor) {
+        ctx.fillStyle = '#334155';
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.rect(x - 1, wheelY - 12, 10, 8);
+        ctx.fill();
+        ctx.stroke();
+    }
+
+    ctx.restore();
+
     if (bike.nitroTimer > 0) {
         ctx.fillStyle = '#fbbf24';
-
         ctx.beginPath();
-
         ctx.moveTo(rearWheelX - 8, wheelY - 2);
-
-        ctx.lineTo(
-            rearWheelX - 25 - Math.random() * 7,
-            wheelY - 7
-        );
-
+        ctx.lineTo(rearWheelX - 25 - Math.random() * 7, wheelY - 7);
         ctx.lineTo(rearWheelX - 17, wheelY + 3);
-
         ctx.closePath();
         ctx.fill();
-
         ctx.fillStyle = '#fb7185';
-
         ctx.beginPath();
-
         ctx.moveTo(rearWheelX - 8, wheelY - 1);
         ctx.lineTo(rearWheelX - 18, wheelY - 4);
         ctx.lineTo(rearWheelX - 12, wheelY + 2);
-
         ctx.closePath();
         ctx.fill();
     }
 
-    // Защитный щит.
     if (bike.shieldActiveTimer > 0) {
         ctx.strokeStyle = 'rgba(56,189,248,0.8)';
         ctx.lineWidth = 2;
-
         ctx.beginPath();
-
-        ctx.ellipse(
-            x,
-            wheelY - 4,
-            34,
-            25,
-            0,
-            0,
-            Math.PI * 2
-        );
-
+        ctx.ellipse(x, wheelY - 4, 42, 31, 0, 0, Math.PI * 2);
         ctx.stroke();
     }
 
     ctx.font = 'bold 12px Arial';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#f8fafc';
-
-    ctx.fillText(
-        label,
-        x,
-        wheelY - 36
-    );
+    ctx.fillText(label, x, wheelY - 51);
 }
-
-// =========================================
-// HUD ГОНКИ
-// =========================================
 
 function drawRaceHUD() {
     const racers = [
@@ -1782,7 +2027,7 @@ function drawRaceHUD() {
 
             return {
                 bike,
-                label: `БОТ ${index + 1}${icon}`,
+                label: `${bike.displayName}${icon}`,
                 color: bike.color
             };
         })
@@ -1941,13 +2186,13 @@ function render() {
 
     activeBots.forEach((bike, index) => {
         const label = bike.nitroTimer > 0
-            ? `БОТ ${index + 1} ⚡`
+            ? `${bike.displayName} ⚡`
             : bike.abilities?.superJumpUnlocked
-                ? `БОТ ${index + 1} ✦`
+                ? `${bike.displayName} ✦`
                 : bike.abilities?.shieldCharges > 0 ||
                   bike.shieldActiveTimer > 0
-                    ? `БОТ ${index + 1} 🛡`
-                    : `БОТ ${index + 1}`;
+                    ? `${bike.displayName} 🛡`
+                    : bike.displayName;
 
         drawBike(
             bike,
