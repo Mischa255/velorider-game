@@ -12,31 +12,37 @@ if (window.supabase) {
     supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
 
-function getTelegramUserId() {
+// Получаем уникальный идентификатор игрока (юзернейм, telegram id или dev-id)
+function getPlayerKey() {
     const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
-    if (tgUser && tgUser.id) {
-        return {
-            id: tgUser.id,
-            username: tgUser.username || tgUser.first_name || 'Rider'
-        };
+    
+    // 1. Если у игрока есть юзернейм в Telegram — используем его как главный ключ
+    if (tgUser && tgUser.username) {
+        return tgUser.username.trim().toLowerCase();
     }
-    // Для тестов в обычном браузере (без Telegram)
+    
+    // 2. Если юзернейма нет, но есть цифровой ID — используем его
+    if (tgUser && tgUser.id) {
+        return `tg_${tgUser.id}`;
+    }
+    
+    // 3. Запасной вариант для обычного браузера (вне Telegram)
     let devId = localStorage.getItem('velorider_dev_id');
     if (!devId) {
         devId = 'dev_' + Math.floor(Math.random() * 1000000);
         localStorage.setItem('velorider_dev_id', devId);
     }
-    return { id: devId, username: 'Local Tester' };
+    return devId;
 }
 
 async function loadFromSupabase() {
     if (!supabaseClient) return null;
-    const user = getTelegramUserId();
+    const identifier = getPlayerKey();
     try {
         const { data, error } = await supabaseClient
             .from('player_saves')
             .select('save_data')
-            .eq('telegram_id', user.id)
+            .eq('player_identifier', identifier)
             .maybeSingle();
         if (error) throw error;
         return data ? data.save_data : null;
@@ -48,16 +54,16 @@ async function loadFromSupabase() {
 
 async function saveToSupabase(playerData) {
     if (!supabaseClient) return false;
-    const user = getTelegramUserId();
+    const identifier = getPlayerKey();
+
     try {
         const { error } = await supabaseClient
             .from('player_saves')
             .upsert({
-                telegram_id: user.id,
-                username: user.username,
+                player_identifier: identifier,
                 save_data: playerData,
                 updated_at: new Date().toISOString()
-            }, { onConflict: 'telegram_id' });
+            }, { onConflict: 'player_identifier' });
         if (error) throw error;
         return true;
     } catch (e) {
@@ -576,11 +582,11 @@ export async function clearSavedProgress() {
         await cloudStorageDelete(SAVE_KEY);
 
         if (supabaseClient) {
-            const user = getTelegramUserId();
+            const identifier = getPlayerKey(); // Используем наш надежный идентификатор
             await supabaseClient
                 .from('player_saves')
                 .delete()
-                .eq('telegram_id', user.id);
+                .eq('player_identifier', identifier); // Удаляем по правильной колонке
         }
 
         try {

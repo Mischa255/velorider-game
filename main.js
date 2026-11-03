@@ -1,24 +1,24 @@
-import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=18';
+import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=20';
 import {
     player,
     loadPlayerState,
     initTelegramApp,
     clearSavedProgress,
     forceSavePlayerState
-} from './state.js?v=18';
+} from './state.js?v=20';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=18';
+} from './race.js?v=20';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=18';
+} from './audio.js?v=20';
 
 const CATEGORY_NAMES = {
     frames: 'Рамы',
