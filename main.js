@@ -1,24 +1,24 @@
-import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=36';
+import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=37';
 import {
     player,
     loadPlayerState,
     initTelegramApp,
     clearSavedProgress,
     forceSavePlayerState
-} from './state.js?v=36';
+} from './state.js?v=37';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=36';
+} from './race.js?v=37';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=36';
+} from './audio.js?v=37';
 
 const CATEGORY_NAMES = {
     frames: 'Рамы',
@@ -47,6 +47,8 @@ const CATEGORY_NAMES = {
     tubes: 'Камеры',
     hubs: 'Втулки'
 };
+
+const MIN_SPRINT_RECORD_IMPROVEMENT_MS = 10;
 
 const CATEGORY_ICONS = {
     frames: '🚲', forks: '🔧', chains: '⛓️',
@@ -2566,7 +2568,10 @@ function handleRaceEnd(win, reason = 'finish', raceTimeMs = 0) {
     if (selectedId === 'sprint') {
         const elapsedMs = Math.max(0, Number(raceTimeMs) || 0);
         const previousBest = Number(player.bestSprintTime) || 0;
-        const isNewRecord = elapsedMs > 0 && (!previousBest || elapsedMs < previousBest);
+        const isNewRecord = elapsedMs > 0 && (
+            !previousBest ||
+            elapsedMs <= previousBest - MIN_SPRINT_RECORD_IMPROVEMENT_MS
+        );
         let bonusText = `<span class="text-white text-xl">⏱ Твоё время: ${(elapsedMs / 1000).toFixed(2)} сек.</span><br><br>`;
 
         if (isNewRecord) {

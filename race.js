@@ -1,5 +1,5 @@
-import { player } from './state.js?v=36';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=36';
+import { player } from './state.js?v=37';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=37';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -8,6 +8,7 @@ import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=36';
 // =========================================
 
 const GRAVITY = 0.42;
+const MIN_SPRINT_RECORD_IMPROVEMENT_MS = 10;
 const BIKE_WIDTH = 46;
 const BIKE_HEIGHT = 24;
 const TRACK_MULTIPLIER = 3;
@@ -1439,7 +1440,9 @@ function checkFinish() {
     if (currentTrack?.id === 'sprint') {
         if (playerFinished) {
             const bestTime = Number(player.bestSprintTime) || 0;
-            const isRecordBeaten = !bestTime || raceTimeMs < bestTime;
+            const isRecordBeaten =
+                !bestTime ||
+                raceTimeMs <= bestTime - MIN_SPRINT_RECORD_IMPROVEMENT_MS;
             finishRace(isRecordBeaten, 'finish');
         }
         return;
