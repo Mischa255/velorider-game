@@ -555,6 +555,23 @@ function finishRace(playerWon, reason = 'finish') {
 
 function updateJumpPhysics(bike) {
     if (!bike.isBot && bike.landingBoostCooldown > 0) bike.landingBoostCooldown--;
+
+// --- НОВЫЙ КОД НАКЛОНА НАЧАЛО (ИСПРАВЛЕНО) ---
+    let targetPitch = 0;
+    if (bike.grounded && !bike.currentRamp) {
+        const wheelBase = 25; 
+        const frontY = getGroundY(bike.x + wheelBase, 0);
+        const backY = getGroundY(bike.x - wheelBase, 0);
+        targetPitch = Math.atan2(frontY - backY, wheelBase * 2);
+    } else if (bike.currentRamp) {
+        targetPitch = -0.35; 
+    } else {
+        targetPitch = -bike.jumpVelocity * 0.04; 
+    }
+    bike.pitchAngle = bike.pitchAngle || 0;
+    bike.pitchAngle += (targetPitch - bike.pitchAngle) * 0.18;
+    // --- НОВЫЙ КОД НАКЛОНА КОНЕЦ ---
+
     if (bike.grounded) {
         bike.airY = null;
         return;
@@ -1442,6 +1459,7 @@ function checkFinish() {
 function drawBackground() {
     const palette = getTrackPalette();
 
+    // 1. Градиент неба
     const gradient = ctx.createLinearGradient(
         0,
         0,
@@ -1456,11 +1474,26 @@ function drawBackground() {
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, viewWidth, viewHeight);
 
+    // 2. Солнце или Луна со свечением вдали
+    const isNight = ['#1d233f', '#090f2b', '#1a263c', '#281b2c'].includes(palette.skyTop);
+    ctx.save();
+    ctx.beginPath();
+    const celestialX = (viewWidth * 0.8) - (cameraX * 0.015) % viewWidth; 
+    const celestialY = viewHeight * 0.35;
+    ctx.arc(celestialX, celestialY, viewWidth * 0.08, 0, Math.PI * 2);
+    ctx.fillStyle = isNight ? 'rgba(226, 232, 240, 0.9)' : 'rgba(253, 224, 71, 0.95)';
+    ctx.shadowColor = isNight ? 'rgba(148, 163, 184, 0.6)' : 'rgba(250, 204, 21, 0.6)';
+    ctx.shadowBlur = 60;
+    ctx.fill();
+    ctx.restore();
+
+    // 3. Многослойные горы с вертикальным градиентом (туманом)
     const drawMountainLayer = (
         color,
         parallax,
         heightFactor,
-        phase
+        phase,
+        hasOutline
     ) => {
         ctx.beginPath();
         ctx.moveTo(0, viewHeight * 0.58);
@@ -1482,22 +1515,36 @@ function drawBackground() {
 
         ctx.closePath();
 
-        ctx.fillStyle = color;
+        // Градиент для тумана у основания гор
+        const mGrad = ctx.createLinearGradient(0, viewHeight * 0.4, 0, viewHeight);
+        mGrad.addColorStop(0, color);
+        mGrad.addColorStop(1, palette.skyBottom);
+        
+        ctx.fillStyle = mGrad;
         ctx.fill();
+
+        // Подсветка хребта для объема
+        if (hasOutline) {
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+            ctx.stroke();
+        }
     };
 
     drawMountainLayer(
         palette.far,
         0.12,
         34 + getTrackTerrain().amplitude * 0.22,
-        0.6
+        0.6,
+        false
     );
 
     drawMountainLayer(
         palette.near,
         0.22,
         22 + getTrackTerrain().amplitude * 0.16,
-        2.1
+        2.1,
+        true
     );
 
     if ([5, 8, 10].includes(currentTrackLevel)) {
@@ -1542,34 +1589,57 @@ function drawBackground() {
 // =========================================
 
 function drawTrack() {
-    ctx.beginPath();
+    const palette = getTrackPalette();
+    const points = [];
 
+    // Собираем точки поверхности трассы
     for (let x = 0; x <= viewWidth + 10; x += 8) {
         const worldX = cameraX + x;
         const y = getGroundY(worldX, 0);
-
-        if (x === 0) {
-            ctx.moveTo(x, y);
-        } else {
-            ctx.lineTo(x, y);
-        }
+        points.push({ x, y });
     }
 
-    const palette = getTrackPalette();
+    // 1. РИСУЕМ ПОДЗЕМЕЛЬЕ (Сплошная заливка грунта до низа экрана)
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) {
+        ctx.lineTo(points[i].x, points[i].y);
+    }
+    // Замыкаем контур по нижнему краю экрана
+    ctx.lineTo(viewWidth + 10, viewHeight);
+    ctx.lineTo(0, viewHeight);
+    ctx.closePath();
 
+    // Градиент грунта (сверху цвет земли трассы, снизу уходит в темноту)
+    const groundGradient = ctx.createLinearGradient(0, viewHeight * 0.5, 0, viewHeight);
+    groundGradient.addColorStop(0, palette.near); 
+    groundGradient.addColorStop(1, '#020617');    
+    ctx.fillStyle = groundGradient;
+    ctx.fill();
+
+    // 2. РИСУЕМ САМУ ДОРОГУ (Широкая полоса по поверхности)
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) {
+        ctx.lineTo(points[i].x, points[i].y);
+    }
+
+    // Основная толстая линия дороги
     ctx.strokeStyle = palette.road;
-    ctx.lineWidth = 28;
+    ctx.lineWidth = 32; 
     ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     ctx.stroke();
 
-    ctx.strokeStyle = palette.edge;
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
+    // Яркая верхняя кромка дороги (для красивого контраста)
     ctx.strokeStyle = palette.accent;
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 4;
+    ctx.stroke();
 
-    ctx.setLineDash([14, 12]);
+    // Пунктирная разметка посередине дороги
+    ctx.strokeStyle = palette.edge;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([16, 12]);
     ctx.stroke();
     ctx.setLineDash([]);
 }
@@ -1697,39 +1767,27 @@ function drawObstacle(obstacle) {
     }
 
     if (obstacle.type === 'log') {
+        const frontY = getGroundY(obstacle.x + width, 0);
+        const backY = getGroundY(obstacle.x, 0);
+        const logAngle = Math.atan2(frontY - backY, width);
+        
+        ctx.save();
+        ctx.translate(screenX + width/2, groundY);
+        ctx.rotate(logAngle);
+        
         ctx.fillStyle = obstacle.color;
-
-        ctx.fillRect(
-            screenX,
-            groundY - height,
-            width,
-            height
-        );
+        ctx.fillRect(-width/2, -height, width, height);
 
         ctx.strokeStyle = '#451a03';
         ctx.lineWidth = 2;
-
-        ctx.strokeRect(
-            screenX,
-            groundY - height,
-            width,
-            height
-        );
+        ctx.strokeRect(-width/2, -height, width, height);
 
         ctx.strokeStyle = '#d97706';
-
         ctx.beginPath();
-
-        ctx.arc(
-            screenX + 5,
-            groundY - height / 2,
-            5,
-            0,
-            Math.PI * 2
-        );
-
+        ctx.arc(-width/2 + 5, -height/2, 5, 0, Math.PI * 2);
         ctx.stroke();
-
+        
+        ctx.restore();
         return;
     }
 
@@ -1767,7 +1825,31 @@ function drawObstacle(obstacle) {
 }
 
 function drawObstacles() {
-    obstacles.forEach(drawObstacle);
+    obstacles.forEach(obstacle => {
+        const screenX = obstacle.x - cameraX;
+        
+        // Не тратим ресурсы на просчет того, что за экраном
+        if (screenX < -150 || screenX > viewWidth + 150) return;
+        
+        // Вычисляем высоту земли в начале и в конце препятствия
+        const groundY = getGroundY(obstacle.x, 0);
+        const frontY = getGroundY(obstacle.x + obstacle.width, 0);
+        
+        // Находим угол наклона рельефа именно под этим объектом
+        const obstacleAngle = Math.atan2(frontY - groundY, obstacle.width);
+        
+        ctx.save();
+        
+        // Переносим точку вращения в левый нижний угол препятствия (ровно на землю)
+        ctx.translate(screenX, groundY);
+        ctx.rotate(obstacleAngle);
+        ctx.translate(-screenX, -groundY);
+        
+        // Теперь рисуем препятствие — оно автоматически "ляжет" на склон!
+        drawObstacle(obstacle);
+        
+        ctx.restore();
+    });
 }
 
 // =========================================
@@ -1794,6 +1876,13 @@ function drawBike(bike, label, color) {
     bike.pedalPhase = (bike.pedalPhase || 0) + travel / radius * 0.42;
     const wheelAngle = bike.wheelRotation;
     const pedalAngle = bike.pedalPhase;
+
+    // --- НАКЛОНЯЕМ ХОЛСТ ---
+    ctx.save();
+    ctx.translate(x, wheelY - 15);
+    ctx.rotate(bike.pitchAngle || 0);
+    ctx.translate(-x, -(wheelY - 15));
+    // -----------------------
 
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
     ctx.beginPath();
@@ -2085,6 +2174,8 @@ function drawBike(bike, label, color) {
         ctx.ellipse(x, wheelY - 4, 42, 31, 0, 0, Math.PI * 2);
         ctx.stroke();
     }
+
+    ctx.restore(); // <--- ВОЗВРАЩАЕМ ХОЛСТ НА МЕСТО
 
     ctx.font = 'bold 12px Arial';
     ctx.textAlign = 'center';

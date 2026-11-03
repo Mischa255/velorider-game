@@ -2022,6 +2022,12 @@ function updateTracksUI() {
         const winReward = Number(track.winReward) || (500 + index * 250);
         const lossReward = Number(track.lossReward) || (50 + index * 10);
         const couponReward = Math.max(1, Number(track.couponReward) || 1);
+        const fourthTrackBonus = track.id === 't4'
+            ? `<div class="track-reward track-reward--first-clear">
+                    <span>Одноразово за первое прохождение</span>
+                    <strong>${player.track4BonusClaimed ? '✓ Награда получена' : '2 редкие + 1 легендарный предмет'}</strong>
+               </div>`
+            : '';
         const raceLength = Math.max(1000, Number(track.length) * 3 - 1500);
         const obstaclesCount = Math.floor((Number(track.obstacles) || 0) * (3 + index * 0.07));
         const trackNumber = `TRACK ${String(index + 1).padStart(2, '0')}`;
@@ -2106,6 +2112,7 @@ function updateTracksUI() {
                             <span>Соперников</span>
                             <strong>${index + 1 >= 3 ? '2 бота' : '1 бот'}</strong>
                         </div>
+                        ${fourthTrackBonus}
                     </div>
                 </div>
 
@@ -2173,6 +2180,7 @@ function updateTracksUI() {
                             <span>Велокупоны</span>
                             <strong>+${couponReward} 🎟️</strong>
                         </div>
+                        ${fourthTrackBonus}
                     </div>
                 </div>
 
