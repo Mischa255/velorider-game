@@ -125,6 +125,32 @@ function playBgm(sceneName) {
     }, 40);
 }
 
+// Начинаем загрузку MP3 синхронно с нажатием пользователя.
+// Мобильные WebView могут снять разрешение на autoplay после await/setInterval.
+function startBgmFromGesture(sceneName) {
+    const trackName = sceneName.startsWith('t') ? sceneName : 'garage';
+    const fileName = `music/${trackName}.mp3`;
+
+    if (fadeInterval) {
+        clearInterval(fadeInterval);
+        fadeInterval = null;
+    }
+
+    if (!bgm.src.endsWith(fileName)) {
+        bgm.pause();
+        bgm.src = fileName;
+    }
+
+    bgm.volume = clamp(volume * BGM_MAX_VOLUME, 0, 1);
+    const playRequest = bgm.play();
+    if (playRequest?.catch) {
+        playRequest.catch(error => {
+            console.warn('Не удалось запустить музыку:', error);
+            setStatus('Не удалось загрузить музыку. Проверь подключение и нажми ещё раз.');
+        });
+    }
+}
+
 function stopBgm() {
     if (fadeInterval) clearInterval(fadeInterval);
     
@@ -305,6 +331,9 @@ async function setEnabled(value) {
     enabled = true;
     updateUI();
     updateBgmVolume();
+
+    // Вызов play() до первого await сохраняет пользовательский жест на iOS/WebView.
+    startBgmFromGesture(currentScene);
 
     const success = await unlockAudio();
     if (!success) {
