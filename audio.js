@@ -424,7 +424,8 @@ function playKick(time, gain = 0.1) {
 }
 
 function playNoise(time, duration, cutoff, gainValue) {
-    if (!audioContext || !noiseBuffer || !enabled || !audioUnlocked) {
+    const buffer = ensureNoiseBuffer();
+    if (!audioContext || !buffer || !enabled || !audioUnlocked) {
         return;
     }
 

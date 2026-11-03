@@ -12,7 +12,7 @@ import {
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=14';
+} from './race.js?v=15';
 
 import {
     initAudioControls,

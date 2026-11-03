@@ -3,6 +3,70 @@ const SAVE_KEY = 'velorider_progress_v1';
 const AUTOSAVE_DELAY_MS = 1200;
 const AUTOSAVE_INTERVAL_MS = 10000;
 
+// === НАСТРОЙКИ SUPABASE ===
+const SUPABASE_URL = 'https://qtyokehvvcoswkhdzscz.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_LcslQx_fXGEeRkR96jooDQ_tnf2V7rA';
+
+let supabaseClient = null;
+if (window.supabase) {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+}
+
+function getTelegramUserId() {
+    const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+    if (tgUser && tgUser.id) {
+        return {
+            id: tgUser.id,
+            username: tgUser.username || tgUser.first_name || 'Rider'
+        };
+    }
+    // Для тестов в обычном браузере (без Telegram)
+    let devId = localStorage.getItem('velorider_dev_id');
+    if (!devId) {
+        devId = 'dev_' + Math.floor(Math.random() * 1000000);
+        localStorage.setItem('velorider_dev_id', devId);
+    }
+    return { id: devId, username: 'Local Tester' };
+}
+
+async function loadFromSupabase() {
+    if (!supabaseClient) return null;
+    const user = getTelegramUserId();
+    try {
+        const { data, error } = await supabaseClient
+            .from('player_saves')
+            .select('save_data')
+            .eq('telegram_id', user.id)
+            .maybeSingle();
+        if (error) throw error;
+        return data ? data.save_data : null;
+    } catch (e) {
+        console.warn('Ошибка загрузки из Supabase:', e);
+        return null;
+    }
+}
+
+async function saveToSupabase(playerData) {
+    if (!supabaseClient) return false;
+    const user = getTelegramUserId();
+    try {
+        const { error } = await supabaseClient
+            .from('player_saves')
+            .upsert({
+                telegram_id: user.id,
+                username: user.username,
+                save_data: playerData,
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'telegram_id' });
+        if (error) throw error;
+        return true;
+    } catch (e) {
+        console.warn('Ошибка сохранения в Supabase:', e);
+        return false;
+    }
+}
+// ==========================
+
 function createDefaultPlayer() {
     return {
         // =====================================
@@ -430,8 +494,9 @@ export async function savePlayerState() {
 
     const localSaved = writeLocalSave(data);
     const cloudSaved = await cloudStorageSet(SAVE_KEY, payload);
+    const dbSaved = await saveToSupabase(data);
 
-    return localSaved || cloudSaved;
+    return localSaved || cloudSaved || dbSaved;
 }
 
 export async function forceSavePlayerState() {
@@ -444,12 +509,20 @@ export async function loadPlayerState() {
     let raw = null;
 
     try {
-        const cloudValue = await cloudStorageGet(SAVE_KEY);
-        if (cloudValue) {
-            raw = JSON.parse(cloudValue);
-        }
+        raw = await loadFromSupabase();
     } catch {
         raw = null;
+    }
+
+    if (!raw) {
+        try {
+            const cloudValue = await cloudStorageGet(SAVE_KEY);
+            if (cloudValue) {
+                raw = JSON.parse(cloudValue);
+            }
+        } catch {
+            raw = null;
+        }
     }
 
     if (!raw) {
@@ -501,6 +574,14 @@ export async function clearSavedProgress() {
         resetAutosaveTimer();
 
         await cloudStorageDelete(SAVE_KEY);
+
+        if (supabaseClient) {
+            const user = getTelegramUserId();
+            await supabaseClient
+                .from('player_saves')
+                .delete()
+                .eq('telegram_id', user.id);
+        }
 
         try {
             localStorage.removeItem(SAVE_KEY);

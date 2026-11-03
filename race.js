@@ -113,6 +113,9 @@ let currentTrackLevel = 1;
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
 }
+function isMobileScreen() {
+    return window.matchMedia('(max-width: 768px)').matches;
+}
 
 function randomItem(items) {
     if (!items || !items.length) return null;
@@ -1224,10 +1227,9 @@ function updatePlayerCollisions() {
 
             continue;
         }
-
         if (
             obstacle.type === 'log' ||
-            obstacle.type === 'barrier' || obstacle.type === 'cone' || obstacle.type === 'fallen_branch' || obstacle.type === 'pulse_gate'
+            obstacle.type === 'barrier' || obstacle.type === 'cone' || obstacle.type === 'fallen_branch'
         ) {
             const requiredJump =
                 obstacle.height + 9;
@@ -1368,9 +1370,10 @@ function updateBotCollisions(bike) {
             continue;
         }
 
+        // Стало (убран obstacle.type === 'pulse_gate'):
         if (
             obstacle.type === 'log' ||
-            obstacle.type === 'barrier' || obstacle.type === 'cone' || obstacle.type === 'fallen_branch' || obstacle.type === 'pulse_gate'
+            obstacle.type === 'barrier' || obstacle.type === 'cone' || obstacle.type === 'fallen_branch'
         ) {
             if (
                 bike.jumpHeight <
@@ -2117,7 +2120,9 @@ function drawRaceHUD() {
         })
     ];
 
-    const mobileLayout = viewWidth < 600;
+    const mobileLayout =
+    window.matchMedia('(max-width: 768px)').matches ||
+    window.matchMedia('(pointer: coarse)').matches;
     const panelWidth = Math.min(mobileLayout ? 390 : 390, viewWidth - (mobileLayout ? 20 : 28));
     const rowHeight = mobileLayout ? 29 : 19;
     const panelHeight = (mobileLayout ? 42 : 35) + racers.length * rowHeight;
@@ -2358,7 +2363,7 @@ function gameLoop() {
 // =========================================
 
 function resizeCanvas() {
-    if (!canvas) return;
+    if (!canvas || canvas.offsetParent === null) return;
 
     const rect = canvas.getBoundingClientRect();
 

@@ -151,34 +151,36 @@
 
     /* Стиль отдельных кнопок */
     #race-controls button {
-        display: flex !important;
-        flex-direction: column;
+    display: flex !important;
+    flex-direction: column;
 
-        justify-content: center !important;
-        align-items: center !important;
+    justify-content: center !important;
+    align-items: center !important;
 
-        width: 100% !important;
-        min-width: 0 !important;
-        height: 56px !important;
-        min-height: 56px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 56px !important;
+    min-height: 56px !important;
 
-        padding: 4px 2px !important;
+    padding: 2px 1px !important;
+    overflow: hidden;
 
-        font-size: clamp(10px, 2.9vw, 13px) !important;
-        line-height: 1.1;
+    font-size: clamp(9px, 2.5vw, 12px) !important;
+    line-height: 1.1;
+    word-break: break-word;
 
-        border-radius: 12px !important;
+    border-radius: 12px !important;
 
-        box-shadow: none !important;
-        transform: none !important;
+    box-shadow: none !important;
+    transform: none !important;
 
-        touch-action: none !important;
+    touch-action: none !important;
 
-        -webkit-user-select: none;
-        user-select: none;
+    -webkit-user-select: none;
+    user-select: none;
 
-        -webkit-tap-highlight-color: transparent;
-    }
+    -webkit-tap-highlight-color: transparent;
+}
 
 
     /* Основная надпись */
