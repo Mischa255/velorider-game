@@ -1,5 +1,5 @@
-import { player } from './state.js?v=34';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=34';
+import { player } from './state.js?v=35';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=35';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -92,6 +92,9 @@ let obstacles = [];
 let frameCounter = 0;
 let raceFinished = false;
 let raceRunning = false;
+let raceStartTime = 0;
+let raceTimeMs = 0;
+let timerStarted = false;
 
 let input = {
     accelerating: false,
@@ -132,9 +135,8 @@ function getTrackBalance(trackId) {
 }
 
 function getTrackLevel() {
-    const index = TRACKS_DB.findIndex(
-        track => track.id === currentTrack?.id
-    );
+    const storyTracks = TRACKS_DB.filter(track => !track.alwaysUnlocked);
+    const index = storyTracks.findIndex(track => track.id === currentTrack?.id);
 
     return Math.max(1, index + 1);
 }
@@ -144,7 +146,8 @@ function getTrackLevel() {
 // =========================================
 
 function getBotDifficultyTrack(botIndex) {
-    const currentIndex = TRACKS_DB.findIndex(
+    const storyTracks = TRACKS_DB.filter(track => !track.alwaysUnlocked);
+    const currentIndex = storyTracks.findIndex(
         track => track.id === currentTrack?.id
     );
 
@@ -153,14 +156,14 @@ function getBotDifficultyTrack(botIndex) {
     }
 
     if (botIndex === 1) {
-        return TRACKS_DB[currentIndex];
+        return storyTracks[currentIndex];
     }
 
     if (botIndex === 2) {
-        return TRACKS_DB[Math.max(0, currentIndex - 1)];
+        return storyTracks[Math.max(0, currentIndex - 1)];
     }
 
-    return TRACKS_DB[currentIndex];
+    return storyTracks[currentIndex];
 }
 
 function getBotDifficultyStats(botIndex) {
@@ -202,6 +205,18 @@ function getBotDifficultyStats(botIndex) {
 // =========================================
 
 function getTrackTerrain() {
+    if (currentTrack?.id === 'sprint') {
+        return {
+            amplitude: 0,
+            longFrequency: 0,
+            shortFrequency: 0,
+            micro: 0,
+            phase: 0,
+            ridge: 0,
+            chop: 0
+        };
+    }
+
     const fallbackHills = Math.max(
         1,
         Number(currentTrack?.hills) || 15
@@ -403,6 +418,10 @@ function createBike(isBot = false, botIndex = 1) {
 // =========================================
 
 function createObstacles() {
+    if (currentTrack?.id === 'sprint') {
+        return [];
+    }
+
     let typePool = Array.isArray(currentTrack?.obstacleTypes)
         ? currentTrack.obstacleTypes.filter(
             type => OBSTACLE_TYPES[type]
@@ -545,7 +564,7 @@ function finishRace(playerWon, reason = 'finish') {
     }
 
     if (typeof callbackOnRaceEnd === 'function') {
-        callbackOnRaceEnd(Boolean(playerWon), reason);
+        callbackOnRaceEnd(Boolean(playerWon), reason, raceTimeMs);
     }
 }
 
@@ -1415,6 +1434,17 @@ function checkFinish() {
     const playerFinished =
         playerBike.x >= finishX;
 
+    // В спринте призрак показывает рекорд, но не завершает гонку за игрока.
+    // Игрок всегда доезжает до финиша, а результат сверяется со временем рекорда.
+    if (currentTrack?.id === 'sprint') {
+        if (playerFinished) {
+            const bestTime = Number(player.bestSprintTime) || 0;
+            const isRecordBeaten = !bestTime || raceTimeMs < bestTime;
+            finishRace(isRecordBeaten, 'finish');
+        }
+        return;
+    }
+
     const finishedBots = activeBots.filter(
         bike => bike.x >= finishX
     );
@@ -1857,6 +1887,11 @@ function drawObstacles() {
 // =========================================
 
 function drawBike(bike, label, color) {
+    ctx.save();
+    if (bike.isGhost) {
+        ctx.globalAlpha = 0.4;
+    }
+
     const x = bike.x - cameraX;
     const groundY = getGroundY(bike.x, 0);
     const y = groundY - bike.jumpHeight - bike.rampLift;
@@ -2181,9 +2216,29 @@ function drawBike(bike, label, color) {
     ctx.textAlign = 'center';
     ctx.fillStyle = '#f8fafc';
     ctx.fillText(label, x, wheelY - 51);
+    ctx.restore();
 }
 
 function drawRaceHUD() {
+    if (currentTrack?.id === 'sprint') {
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = '900 32px Arial';
+        ctx.fillText(`${(raceTimeMs / 1000).toFixed(2)} сек`, viewWidth / 2, 45);
+
+        if (Number(player.bestSprintTime) > 0) {
+            ctx.font = 'bold 14px Arial';
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillText(
+                `Рекорд: ${(Number(player.bestSprintTime) / 1000).toFixed(2)} сек`,
+                viewWidth / 2,
+                65
+            );
+        }
+        ctx.restore();
+    }
+
     const racers = [
         {
             bike: playerBike,
@@ -2362,8 +2417,7 @@ function render() {
     if (
         !ctx ||
         !canvas ||
-        !playerBike ||
-        !botBike
+        !playerBike
     ) {
         return;
     }
@@ -2373,7 +2427,7 @@ function render() {
     drawObstacles();
     drawFinishLine();
 
-    activeBots.forEach((bike, index) => {
+    const drawBot = bike => {
         const label = bike.nitroTimer > 0
             ? `${bike.displayName} ⚡`
             : bike.springBoostTimer > 0
@@ -2390,13 +2444,18 @@ function render() {
             label,
             bike.color
         );
-    });
+    };
+
+    activeBots.filter(bike => !bike.isGhost).forEach(drawBot);
 
     drawBike(
         playerBike,
         'ТЫ',
         '#22c55e'
     );
+
+    // Рисуем призрака поверх игрока, чтобы он оставался заметен при совпадении позиций.
+    activeBots.filter(bike => bike.isGhost).forEach(drawBot);
 
     drawRaceHUD();
 }
@@ -2407,6 +2466,15 @@ function render() {
 
 function update() {
     if (!raceRunning || raceFinished) return;
+
+    if (!timerStarted && playerBike.velocityX > 0) {
+        timerStarted = true;
+        raceStartTime = performance.now();
+    }
+
+    if (timerStarted) {
+        raceTimeMs = performance.now() - raceStartTime;
+    }
 
     frameCounter++;
 
@@ -2421,9 +2489,34 @@ function update() {
         playerBike.finishFrame = frameCounter;
     }
 
-    activeBots.forEach(bike => {
-        updateBotPhysics(bike);
-    });
+    if (currentTrack?.id === 'sprint') {
+        activeBots.forEach(bike => {
+            if (!bike.isGhost || !timerStarted) return;
+
+            const previousX = bike.x;
+            const ghostStartX = Number(bike.ghostStartX) || playerBike.x;
+            const progress = clamp(
+                raceTimeMs / Math.max(1, Number(player.bestSprintTime) || 1),
+                0,
+                1
+            );
+
+            bike.previousX = previousX;
+            bike.x = Math.min(
+                finishX,
+                ghostStartX + progress * (finishX - ghostStartX)
+            );
+            bike.grounded = true;
+            bike.jumpHeight = 0;
+            bike.rampLift = 0;
+
+            if (bike.x >= finishX && bike.finishFrame === null) {
+                bike.finishFrame = frameCounter;
+            }
+        });
+    } else {
+        activeBots.forEach(bike => updateBotPhysics(bike));
+    }
 
     updatePlayerCollisions();
 
@@ -2531,28 +2624,44 @@ export function initRace(onRaceEnd) {
     }
 
     currentTrackLevel = getTrackLevel();
+    timerStarted = false;
+    raceStartTime = 0;
+    raceTimeMs = 0;
 
     resizeCanvas();
     setTimeout(resizeCanvas, 50);
 
-    finishX = Math.max(
-        6000,
-        (Number(currentTrack.length) || 15000) *
-        TRACK_MULTIPLIER - 1500
-    );
+    finishX = currentTrack.id === 'sprint'
+        ? 4500
+        : Math.max(
+            6000,
+            (Number(currentTrack.length) || 15000) *
+            TRACK_MULTIPLIER - 1500
+        );
 
     playerBike = createBike(false);
+    botBike = null;
+    additionalBots = [];
+    activeBots = [];
 
-    botBike = createBike(true, 1);
-
-    additionalBots = currentTrackLevel >= 3
-        ? [createBike(true, 2)]
-        : [];
-
-    activeBots = [
-        botBike,
-        ...additionalBots
-    ];
+    if (currentTrack.id === 'sprint') {
+        if (Number(player.bestSprintTime) > 0) {
+            botBike = createBike(true, 1);
+            botBike.displayName = 'Твой рекорд';
+            botBike.color = '#94a3b8';
+            botBike.isGhost = true;
+            botBike.ghostStartX = playerBike.x;
+            botBike.x = playerBike.x;
+            botBike.previousX = playerBike.x;
+            activeBots.push(botBike);
+        }
+    } else {
+        botBike = createBike(true, 1);
+        additionalBots = currentTrackLevel >= 3
+            ? [createBike(true, 2)]
+            : [];
+        activeBots = [botBike, ...additionalBots];
+    }
 
     cameraX = 0;
     frameCounter = 0;

@@ -56,14 +56,14 @@ async function loadFromSupabase() {
 
 async function saveToSupabase(playerData) {
     if (!supabaseClient) {
-        console.error('Supabase не подключён: не загружена библиотека @supabase/supabase-js.');
+        console.error('Supabase не подключён.');
         return false;
     }
 
     const identifier = getPlayerKey();
 
     try {
-        const { data, error } = await supabaseClient
+        const { error } = await supabaseClient
             .from('player_saves')
             .upsert(
                 {
@@ -72,17 +72,10 @@ async function saveToSupabase(playerData) {
                     updated_at: new Date().toISOString()
                 },
                 { onConflict: 'player_identifier' }
-            )
-            .select('player_identifier')
-            .single();
+            );
 
         if (error) {
-            console.error('Ошибка записи Supabase:', error.message, error.code || '');
-            return false;
-        }
-
-        if (data?.player_identifier !== identifier) {
-            console.error('Supabase не подтвердил сохранение строки игрока.');
+            console.error('Ошибка записи Supabase:', error.message);
             return false;
         }
 
@@ -147,6 +140,7 @@ function createDefaultPlayer() {
         },
 
         totalWins: 0,
+        bestSprintTime: 0, // <--- ДОБАВЛЕН РЕКОРД СПРИНТА
 
         // =====================================
         // УСТАНОВЛЕННЫЕ ДЕТАЛИ
@@ -216,7 +210,7 @@ function cloudStorageSet(key, value) {
     }
     return new Promise(resolve => {
         try {
-        cloud.setItem(key, value, error => resolve(!error));
+            cloud.setItem(key, value, error => resolve(!error));
         } catch {
             resolve(false);
         }
@@ -270,6 +264,7 @@ function sanitizeLoadedState(raw) {
     merged.coins = Math.max(0, Number(merged.coins) || 0);
     merged.coupons = Math.max(0, Number(merged.coupons) || 0);
     merged.totalWins = Math.max(0, Number(merged.totalWins) || 0);
+    merged.bestSprintTime = Number(merged.bestSprintTime) || 0; // <--- ОБРАБОТКА РЕКОРДА ПРИ ЗАГРУЗКЕ
 
     if (!Array.isArray(merged.inventory)) merged.inventory = deepClone(base.inventory);
     if (!Array.isArray(merged.unlockedTracks)) merged.unlockedTracks = deepClone(base.unlockedTracks);
@@ -465,6 +460,7 @@ function toPlayerSaveData(source) {
         unlockedComponentRarities: source.unlockedComponentRarities,
         componentProgression: source.componentProgression,
         totalWins: source.totalWins,
+        bestSprintTime: source.bestSprintTime, // <--- УПАКОВКА РЕКОРДА ДЛЯ ОТПРАВКИ
         equipped: source.equipped,
         totalSpeed: source.totalSpeed,
         totalAccel: source.totalAccel,
@@ -485,13 +481,17 @@ export async function savePlayerState() {
     const data = getPlayerSaveData();
     const payload = JSON.stringify(data);
 
-    const localSaved = writeLocalSave(data);
-    const [cloudSaved, dbSaved] = await Promise.all([
-        cloudStorageSet(SAVE_KEY, payload),
-        saveToSupabase(data)
-    ]);
+    writeLocalSave(data);
+    cloudStorageSet(SAVE_KEY, payload);
 
-    return { localSaved, cloudSaved, dbSaved };
+    // Фоновое сохранение без блокировки интерфейса
+    saveToSupabase(data).then(dbSaved => {
+        if (!dbSaved) {
+            autosaveDirty = true;
+        }
+    });
+
+    return { localSaved: true, cloudSaved: true, dbSaved: true };
 }
 
 export async function forceSavePlayerState() {
@@ -510,9 +510,9 @@ export async function forceSavePlayerState() {
 
 export async function loadPlayerState() {
     let raw = null;
+    let isNewPlayer = false;
 
     try {
-        // Supabase — главный источник прогресса между устройствами.
         raw = await loadFromSupabase();
     } catch {}
 
@@ -527,6 +527,10 @@ export async function loadPlayerState() {
         raw = readLocalSave();
     }
 
+    if (!raw) {
+        isNewPlayer = true;
+    }
+
     const merged = sanitizeLoadedState(raw);
 
     suppressAutoSave = true;
@@ -539,6 +543,13 @@ export async function loadPlayerState() {
     autosaveDirty = false;
     resetAutosaveTimer();
     startAutosaveHeartbeat();
+
+    // Принудительное создание пустого профиля для новых игроков
+    if (isNewPlayer) {
+        setTimeout(() => {
+            savePlayerState();
+        }, 1000);
+    }
 
     return player;
 }
@@ -566,8 +577,6 @@ export async function clearSavedProgress() {
     const defaults = createDefaultPlayer();
     const defaultSave = toPlayerSaveData(defaults);
 
-    // DELETE намеренно не используется: RLS разрешает upsert, но запрещает
-    // удалять строки. Записываем стартовое состояние в существующую строку.
     const dbSaved = await saveToSupabase(defaultSave);
     if (!dbSaved) {
         throw new Error('Supabase не подтвердил сброс прогресса.');
@@ -608,5 +617,4 @@ export function initTelegramApp() {
     return true;
 }
 
-// Стартуем heartbeat сразу
 startAutosaveHeartbeat();

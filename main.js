@@ -1,24 +1,24 @@
-import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=34';
+import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=35';
 import {
     player,
     loadPlayerState,
     initTelegramApp,
     clearSavedProgress,
     forceSavePlayerState
-} from './state.js?v=34';
+} from './state.js?v=35';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=34';
+} from './race.js?v=35';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=34';
+} from './audio.js?v=35';
 
 const CATEGORY_NAMES = {
     frames: 'Рамы',
@@ -67,6 +67,7 @@ const RARITY_NAMES = {
 };
 
 const TRACK_ICONS = {
+    sprint: '⏱️',
     t1: '🏘️',
     t2: '🌲',
     t3: '🌿',
@@ -1148,11 +1149,16 @@ function getRarityRequirement(rarity) {
 }
 
 function canPlayTrack(trackId) {
+    const targetTrack = TRACKS_DB.find(track => track.id === trackId);
+    if (targetTrack?.alwaysUnlocked) return true;
+
     const index = TRACKS_DB.findIndex(track => track.id === trackId);
     if (index < 0 || !player.unlockedTracks.includes(trackId)) return false;
 
     for (let i = 0; i < index; i++) {
-        if (!player.completedTracks.includes(TRACKS_DB[i].id)) return false;
+        const track = TRACKS_DB[i];
+        if (track.alwaysUnlocked) continue;
+        if (!player.completedTracks.includes(track.id)) return false;
     }
 
     return true;
@@ -2012,25 +2018,33 @@ function updateTracksUI() {
 
     list.innerHTML = '';
 
-    TRACKS_DB.forEach((track, index) => {
-        const discovered = player.unlockedTracks.includes(track.id);
+    const storyTracks = TRACKS_DB.filter(track => !track.alwaysUnlocked);
+
+    TRACKS_DB.forEach(track => {
+        const isSprint = track.id === 'sprint';
+        const storyIndex = storyTracks.findIndex(item => item.id === track.id);
+        const discovered = track.alwaysUnlocked || player.unlockedTracks.includes(track.id);
         const playable = canPlayTrack(track.id);
         const completed = player.completedTracks.includes(track.id);
         const selected = player.selectedTrack === track.id;
-        const previousTrack = TRACKS_DB[index - 1];
+        const previousTrack = storyTracks[storyIndex - 1];
 
-        const winReward = Number(track.winReward) || (500 + index * 250);
-        const lossReward = Number(track.lossReward) || (50 + index * 10);
-        const couponReward = Math.max(1, Number(track.couponReward) || 1);
+        const winReward = isSprint ? 100 : Number(track.winReward) || (500 + storyIndex * 250);
+        const lossReward = isSprint ? 0 : Number(track.lossReward) || (50 + storyIndex * 10);
+        const couponReward = isSprint ? 0 : Math.max(1, Number(track.couponReward) || 1);
         const fourthTrackBonus = track.id === 't4'
             ? `<div class="track-reward track-reward--first-clear">
                     <span>Одноразово за первое прохождение</span>
                     <strong>${player.track4BonusClaimed ? '✓ Награда получена' : '2 редкие + 1 легендарный предмет'}</strong>
                </div>`
             : '';
-        const raceLength = Math.max(1000, Number(track.length) * 3 - 1500);
-        const obstaclesCount = Math.floor((Number(track.obstacles) || 0) * (3 + index * 0.07));
-        const trackNumber = `TRACK ${String(index + 1).padStart(2, '0')}`;
+        const raceLength = isSprint ? 100 : Math.max(1000, Number(track.length) * 3 - 1500);
+        const obstaclesCount = isSprint
+            ? 0
+            : Math.floor((Number(track.obstacles) || 0) * (3 + storyIndex * 0.07));
+        const trackNumber = isSprint
+            ? 'TIME TRIAL'
+            : `TRACK ${String(storyIndex + 1).padStart(2, '0')}`;
         const icon = TRACK_ICONS[track.id] || '🗺️';
 
         let statusClass = 'track-status--locked';
@@ -2079,40 +2093,57 @@ function updateTracksUI() {
                 </div>
 
                 <div class="track-card__stats">
-                    <div class="track-stat">
-                        <span>Длина</span>
-                        <strong>${raceLength.toLocaleString('ru-RU')} м</strong>
-                    </div>
-                    <div class="track-stat">
-                        <span>Препятствия</span>
-                        <strong>${obstaclesCount} шт.</strong>
-                    </div>
-                    <div class="track-stat">
-                        <span>Скорость бота</span>
-                        <strong>${track.botMaxSpeed}</strong>
-                    </div>
+                    ${isSprint ? `
+                        <div class="track-stat"><span>Дистанция</span><strong>100 м</strong></div>
+                        <div class="track-stat"><span>Препятствия</span><strong>Нет</strong></div>
+                        <div class="track-stat"><span>Твой рекорд</span><strong class="text-yellow-400">${Number(player.bestSprintTime) > 0 ? (Number(player.bestSprintTime) / 1000).toFixed(2) + ' сек' : '—'}</strong></div>
+                    ` : `
+                        <div class="track-stat">
+                            <span>Длина</span>
+                            <strong>${raceLength.toLocaleString('ru-RU')} м</strong>
+                        </div>
+                        <div class="track-stat">
+                            <span>Препятствия</span>
+                            <strong>${obstaclesCount} шт.</strong>
+                        </div>
+                        <div class="track-stat">
+                            <span>Скорость бота</span>
+                            <strong>${track.botMaxSpeed}</strong>
+                        </div>
+                    `}
                 </div>
 
                 <div class="track-card__rewards">
                     <div class="track-card__section-label">НАГРАДЫ ЗА ЗАЕЗД</div>
                     <div class="track-card__reward-grid">
-                        <div class="track-reward track-reward--win">
-                            <span>Победа</span>
-                            <strong>+${winReward.toLocaleString('ru-RU')} 🪙</strong>
-                        </div>
-                        <div class="track-reward track-reward--coupon">
-                            <span>Велокупоны</span>
-                            <strong>+${couponReward} 🎟️</strong>
-                        </div>
-                        <div class="track-reward">
-                            <span>Поражение</span>
-                            <strong>+${lossReward.toLocaleString('ru-RU')} 🪙</strong>
-                        </div>
-                        <div class="track-reward">
-                            <span>Соперников</span>
-                            <strong>${index + 1 >= 3 ? '2 бота' : '1 бот'}</strong>
-                        </div>
-                        ${fourthTrackBonus}
+                        ${isSprint ? `
+                            <div class="track-reward track-reward--win">
+                                <span>Тренировка</span>
+                                <strong>+100 🪙 за финиш</strong>
+                            </div>
+                            <div class="track-reward">
+                                <span>Соперник</span>
+                                <strong>Призрак рекорда</strong>
+                            </div>
+                        ` : `
+                            <div class="track-reward track-reward--win">
+                                <span>Победа</span>
+                                <strong>+${winReward.toLocaleString('ru-RU')} 🪙</strong>
+                            </div>
+                            <div class="track-reward track-reward--coupon">
+                                <span>Велокупоны</span>
+                                <strong>+${couponReward} 🎟️</strong>
+                            </div>
+                            <div class="track-reward">
+                                <span>Поражение</span>
+                                <strong>+${lossReward.toLocaleString('ru-RU')} 🪙</strong>
+                            </div>
+                            <div class="track-reward">
+                                <span>Соперников</span>
+                                <strong>${storyIndex + 1 >= 3 ? '2 бота' : '1 бот'}</strong>
+                            </div>
+                            ${fourthTrackBonus}
+                        `}
                     </div>
                 </div>
 
@@ -2484,9 +2515,10 @@ function openContainer(containerId) {
 }
 
 function getRaceReward(track, win) {
+    const storyTracks = TRACKS_DB.filter(item => !item.alwaysUnlocked);
     const index = Math.max(
         0,
-        TRACKS_DB.findIndex(item => item.id === track?.id)
+        storyTracks.findIndex(item => item.id === track?.id)
     );
 
     if (win) {
@@ -2523,10 +2555,38 @@ function showRaceResult(win, reason, bonusText) {
     }
 }
 
-function handleRaceEnd(win, reason = 'finish') {
+function handleRaceEnd(win, reason = 'finish', raceTimeMs = 0) {
     const selectedId = player.selectedTrack;
-    const trackIndex = TRACKS_DB.findIndex(track => track.id === selectedId);
-    const track = trackIndex >= 0 ? TRACKS_DB[trackIndex] : TRACKS_DB[0];
+
+    if (selectedId === 'sprint') {
+        const elapsedMs = Math.max(0, Number(raceTimeMs) || 0);
+        const previousBest = Number(player.bestSprintTime) || 0;
+        const isNewRecord = elapsedMs > 0 && (!previousBest || elapsedMs < previousBest);
+        let bonusText = `<span class="text-white text-xl">⏱ Твоё время: ${(elapsedMs / 1000).toFixed(2)} сек.</span><br><br>`;
+
+        if (isNewRecord) {
+            bonusText += '<span class="text-yellow-400 font-black text-2xl drop-shadow-md">🎉 НОВЫЙ РЕКОРД! 🎉</span><br><br>';
+            player.bestSprintTime = elapsedMs;
+        } else if (previousBest > 0) {
+            bonusText += `<span class="text-gray-400">Лучшее время: ${(previousBest / 1000).toFixed(2)} сек.</span><br><br>`;
+        }
+
+        player.coins = (Number(player.coins) || 0) + 100;
+        bonusText += '<span class="text-green-400 font-bold">+100 🪙 за тренировку</span>';
+
+        updateHUD();
+        updateGarageUI();
+        updateTracksUI();
+        showRaceResult(Boolean(win), reason, bonusText);
+        void forceSavePlayerState();
+        return;
+    }
+
+    const storyTracks = TRACKS_DB.filter(track => !track.alwaysUnlocked);
+    const trackIndex = storyTracks.findIndex(track => track.id === selectedId);
+    const track = trackIndex >= 0
+        ? storyTracks[trackIndex]
+        : storyTracks[0];
     const result = Boolean(win);
     const rewardCoins = getRaceReward(track, result);
 
@@ -2547,7 +2607,7 @@ function handleRaceEnd(win, reason = 'finish') {
         if (firstVictory && trackIndex >= 0) {
             player.completedTracks.push(selectedId);
 
-            const nextTrack = TRACKS_DB[trackIndex + 1];
+            const nextTrack = storyTracks[trackIndex + 1];
             if (nextTrack && !player.unlockedTracks.includes(nextTrack.id)) {
                 player.unlockedTracks.push(nextTrack.id);
                 bonusText += `<br>🏁 Открыта следующая трасса: ${nextTrack.name}`;
@@ -2575,9 +2635,38 @@ function handleRaceEnd(win, reason = 'finish') {
                 grantGuaranteedPart('rare')
             ];
             player.track4BonusClaimed = true;
-            bonusText += '<br>🎁 Награда за 4-ю трассу: легендарная деталь и 2 редкие!';
-            const compensation = guaranteed.reduce((total, reward) => total + (reward?.compensation || 0), 0);
-            if (compensation) bonusText += `<br>🔁 За повторные детали начислено: +${compensation.toLocaleString('ru-RU')} 🪙`;
+            
+            bonusText += '<br><br><span class="text-white text-xl">🎁 Награда за 4-ю трассу:</span>';
+
+            // Создаем красивый список выпавших предметов
+            let itemsHtml = '<div class="mt-3 flex flex-col gap-3 text-base text-left bg-gray-900 p-4 rounded-xl border border-gray-700 shadow-inner">';
+            let totalCompensation = 0;
+
+            guaranteed.forEach(reward => {
+                if (!reward) return;
+                const part = reward.part;
+                const catName = getCategoryName(reward.category);
+                
+                if (reward.compensation > 0) {
+                    // Если дубликат
+                    itemsHtml += `<div>🔁 <span class="text-gray-500 line-through">${part.name}</span> <span class="text-yellow-500 font-bold ml-1">+${reward.compensation} 🪙</span></div>`;
+                    totalCompensation += reward.compensation;
+                } else {
+                    // Если новая деталь
+                    const isLeg = part.rarity === 'legendary';
+                    const rarityColor = isLeg ? 'text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.8)]' : 'text-blue-400';
+                    const icon = isLeg ? '🌟' : '🔵';
+                    
+                    itemsHtml += `<div>${icon} <span class="${rarityColor} font-black">${part.name}</span> <span class="text-gray-400 text-sm ml-1">(${catName})</span></div>`;
+                }
+            });
+            itemsHtml += '</div>';
+            
+            bonusText += itemsHtml;
+
+            if (totalCompensation > 0) {
+                bonusText += `<div class="text-sm text-gray-400 mt-2">За повторы начислено: +${totalCompensation.toLocaleString('ru-RU')} 🪙</div>`;
+            }
         }
 
         syncProgression();

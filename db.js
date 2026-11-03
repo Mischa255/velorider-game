@@ -446,6 +446,23 @@ export const OBSTACLE_TYPES = {
 export const TRACKS_DB = [
 
     {
+        id: 'sprint',
+        musicTheme: 't1',
+        name: 'Спринт 100м',
+        rarity: 'common',
+        alwaysUnlocked: true, // Всегда доступна
+        length: 1000, 
+        hills: 0,
+        botMaxSpeed: 0,
+        botAccel: 0,
+        obstacles: 0,
+        obstacleTypes: [],
+        winReward: 100,
+        lossReward: 10,
+        couponReward: 0
+    },
+
+    {
         id: 't1',
         musicTheme: 't1',
         name: 'Дворы',
