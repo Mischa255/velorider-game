@@ -28,8 +28,6 @@ function getPlayerKey() {
         return `tg_${tgUser.id}`;
     }
 
-    // Запасной вариант для обычного браузера.
-    
     // 3. Запасной вариант для обычного браузера (вне Telegram)
     let devId = localStorage.getItem('velorider_dev_id');
     if (!devId) {
@@ -56,70 +54,38 @@ async function loadFromSupabase() {
     }
 }
 
-// Если сохранение было создано старой версией по Telegram username,
-// забираем его при первом входе после перехода на постоянный Telegram ID.
-async function loadLegacyUsernameSave() {
-    const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
-    if (!supabaseClient || !tgUser?.id || !tgUser?.username) return null;
-
-    try {
-        const { data, error } = await supabaseClient
-            .from('player_saves')
-            .select('save_data')
-            .eq('player_identifier', tgUser.username.trim().toLowerCase())
-            .maybeSingle();
-        if (error) throw error;
-        return data ? data.save_data : null;
-    } catch (e) {
-        console.warn('Ошибка загрузки старого сохранения:', e);
-        return null;
-    }
-}
-
 async function saveToSupabase(playerData) {
-    if (!supabaseClient) return false;
+    if (!supabaseClient) {
+        console.warn('Supabase не подключён: проверь загрузку @supabase/supabase-js.');
+        return false;
+    }
     const identifier = getPlayerKey();
     const telegramId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
 
     try {
-        // 1. Быстро проверяем, есть ли уже этот игрок в базе
-        const { data: existing, error: checkErr } = await supabaseClient
+        if (!telegramId) {
+            throw new Error('Telegram ID не передан Mini App; обязательное поле telegram_id отсутствует.');
+        }
+
+        const { error } = await supabaseClient
             .from('player_saves')
-            .select('player_identifier')
-            .eq('player_identifier', identifier)
-            .maybeSingle();
-
-        if (checkErr) throw checkErr;
-
-        if (existing) {
-            // 2. Если есть — моментально ОБНОВЛЯЕМ
-            const { error: updateErr } = await supabaseClient
-                .from('player_saves')
-                .update({
+            .upsert(
+                {
+                    telegram_id: telegramId,
+                    player_identifier: identifier,
                     save_data: playerData,
                     updated_at: new Date().toISOString()
-                })
-                .eq('player_identifier', identifier);
-            
-            if (updateErr) throw updateErr;
-        } else {
-            // 3. Если профиля нет — СОЗДАЕМ
-            const row = {
-                player_identifier: identifier,
-                save_data: playerData,
-                updated_at: new Date().toISOString()
-            };
-            if (telegramId) row.telegram_id = telegramId;
+                },
+                { onConflict: 'player_identifier' }
+            );
 
-            const { error: insertErr } = await supabaseClient
-                .from('player_saves')
-                .insert([row]);
-                
-            if (insertErr) throw insertErr;
+        if (error) {
+            console.warn('Ошибка записи БД:', error.message);
+            return false;
         }
         return true;
     } catch (e) {
-        console.warn('Скрытая ошибка БД (работает облако ТГ):', e.message);
+        console.warn('Сбой БД:', e.message);
         return false;
     }
 }
@@ -130,7 +96,6 @@ function createDefaultPlayer() {
         // =====================================
         // ЭКОНОМИКА
         // =====================================
-
         coins: 1000,
         coupons: 0,
 
@@ -138,7 +103,6 @@ function createDefaultPlayer() {
         // ИНВЕНТАРЬ КОМПОНЕНТОВ
         // Формат: категория:id
         // =====================================
-
         inventory: [
             'frames:f1',
             'forks:fk1',
@@ -154,38 +118,17 @@ function createDefaultPlayer() {
         // =====================================
         // ПРОГРЕССИЯ ТРАСС
         // =====================================
-
         unlockedTracks: ['t1'],
-
         selectedTrack: 't1',
-
-        // Пройденные трассы
         completedTracks: [],
-
-        // Защита от повторного получения наград
         trackRewardsClaimed: [],
         track4BonusClaimed: false,
-
-        // Совместимость со старым main.js
         track1RewardClaimed: false,
 
         // =====================================
         // ПРОГРЕССИЯ КОМПОНЕНТОВ
         // =====================================
-
-        // В начале доступны только обычные детали
         unlockedComponentRarities: ['common'],
-
-        /*
-            common:
-            Доступны с самого начала.
-
-            rare:
-            Открываются после победы на t2.
-
-            legendary:
-            Открываются после победы на t4.
-        */
 
         componentProgression: {
             rare: {
@@ -193,7 +136,6 @@ function createDefaultPlayer() {
                 requiredTrack: 't2',
                 title: 'Редкие компоненты'
             },
-
             legendary: {
                 unlocked: false,
                 requiredTrack: 't4',
@@ -201,13 +143,11 @@ function createDefaultPlayer() {
             }
         },
 
-        // Количество побед
         totalWins: 0,
 
         // =====================================
         // УСТАНОВЛЕННЫЕ ДЕТАЛИ
         // =====================================
-
         equipped: {
             frames: 'f1',
             forks: 'fk1',
@@ -223,7 +163,6 @@ function createDefaultPlayer() {
         // =====================================
         // ХАРАКТЕРИСТИКИ ВЕЛОСИПЕДА
         // =====================================
-
         totalSpeed: 0,
         totalAccel: 0,
         totalJump: 0,
@@ -253,15 +192,13 @@ function getCloudStorage() {
 
 function cloudStorageGet(key) {
     const cloud = getCloudStorage();
-
     if (!cloud || typeof cloud.getItem !== 'function') {
         return Promise.resolve(null);
     }
-
     return new Promise(resolve => {
         try {
-        cloud.getItem(key, (error, value) => {
-            resolve(error ? null : value ?? null);
+            cloud.getItem(key, (error, value) => {
+                resolve(error ? null : value ?? null);
             });
         } catch {
             resolve(null);
@@ -271,14 +208,12 @@ function cloudStorageGet(key) {
 
 function cloudStorageSet(key, value) {
     const cloud = getCloudStorage();
-
     if (!cloud || typeof cloud.setItem !== 'function') {
         return Promise.resolve(false);
     }
-
     return new Promise(resolve => {
         try {
-        cloud.setItem(key, error => resolve(!error));
+            cloud.setItem(key, error => resolve(!error));
         } catch {
             resolve(false);
         }
@@ -287,14 +222,12 @@ function cloudStorageSet(key, value) {
 
 function cloudStorageDelete(key) {
     const cloud = getCloudStorage();
-
     if (!cloud || typeof cloud.deleteItem !== 'function') {
         return Promise.resolve(false);
     }
-
     return new Promise(resolve => {
         try {
-        cloud.deleteItem(key, error => resolve(!error));
+            cloud.deleteItem(key, error => resolve(!error));
         } catch {
             resolve(false);
         }
@@ -399,25 +332,19 @@ function wrapReactiveState(value) {
             const result = Reflect.get(target, prop, receiver);
             return wrapReactiveState(result);
         },
-
         set(target, prop, newValue, receiver) {
             const wrappedValue = wrapReactiveState(newValue);
             const result = Reflect.set(target, prop, wrappedValue, receiver);
-
             if (!suppressAutoSave) {
                 markAutosaveDirty();
             }
-
             return result;
         },
-
         deleteProperty(target, prop) {
             const result = Reflect.deleteProperty(target, prop);
-
             if (!suppressAutoSave) {
                 markAutosaveDirty();
             }
-
             return result;
         }
     });
@@ -455,13 +382,10 @@ async function flushAutosave() {
         autosaveDirty = false;
         const result = await savePlayerState();
         if (!result.dbSaved) {
-            // Локальная копия не означает, что Supabase принял запись.
             autosaveDirty = true;
             nextDelay = AUTOSAVE_RETRY_DELAY_MS;
-            console.warn('Прогресс сохранён локально, но не в Supabase. Повтор через несколько секунд.');
         }
     } catch (error) {
-        console.warn('Ошибка автосохранения:', error);
         autosaveDirty = true;
         nextDelay = AUTOSAVE_RETRY_DELAY_MS;
     } finally {
@@ -509,16 +433,12 @@ function startAutosaveHeartbeat() {
                 if (cloud && typeof cloud.setItem === 'function') {
                     try {
                         cloud.setItem(SAVE_KEY, payload, () => {});
-                    } catch {
-                        // ignore
-                    }
+                    } catch {}
                 }
             } else {
                 writeLocalSave(getPlayerSaveData());
             }
-        } catch {
-            // ignore
-        }
+        } catch {}
     });
 }
 
@@ -558,20 +478,13 @@ export async function savePlayerState() {
     const data = getPlayerSaveData();
     const payload = JSON.stringify(data);
 
-    // 1. МОМЕНТАЛЬНО сохраняем локально и в быстрое облако Телеграма
     const localSaved = writeLocalSave(data);
-    const cloudSaved = await cloudStorageSet(SAVE_KEY, payload);
+    const [cloudSaved, dbSaved] = await Promise.all([
+        cloudStorageSet(SAVE_KEY, payload),
+        saveToSupabase(data)
+    ]);
 
-    // 2. ФОНОМ отправляем в Supabase (без await, игра не тормозит)
-    saveToSupabase(data).then(dbSaved => {
-        if (!dbSaved) {
-            // Если БД временно недоступна, игра повторит попытку сама
-            autosaveDirty = true;
-        }
-    });
-
-    // Сразу возвращаем успех, чтобы UI обновился без задержек
-    return { localSaved, cloudSaved, dbSaved: true };
+    return { localSaved, cloudSaved, dbSaved };
 }
 
 export async function forceSavePlayerState() {
@@ -590,28 +503,17 @@ export async function forceSavePlayerState() {
 
 export async function loadPlayerState() {
     let raw = null;
-    let loadedLegacySave = false;
 
     try {
+        // Supabase — главный источник прогресса между устройствами.
         raw = await loadFromSupabase();
-    } catch {
-        raw = null;
-    }
-
-    if (!raw) {
-        raw = await loadLegacyUsernameSave();
-        loadedLegacySave = Boolean(raw);
-    }
+    } catch {}
 
     if (!raw) {
         try {
             const cloudValue = await cloudStorageGet(SAVE_KEY);
-            if (cloudValue) {
-                raw = JSON.parse(cloudValue);
-            }
-        } catch {
-            raw = null;
-        }
+            if (cloudValue) raw = JSON.parse(cloudValue);
+        } catch {}
     }
 
     if (!raw) {
@@ -629,13 +531,7 @@ export async function loadPlayerState() {
 
     autosaveDirty = false;
     resetAutosaveTimer();
-
     startAutosaveHeartbeat();
-
-    if (loadedLegacySave) {
-        // Переносим найденную старую запись под стабильный ключ tg_<id>.
-        await savePlayerState();
-    }
 
     return player;
 }
@@ -670,18 +566,16 @@ export async function clearSavedProgress() {
         await cloudStorageDelete(SAVE_KEY);
 
         if (supabaseClient) {
-            const identifier = getPlayerKey(); // Используем наш надежный идентификатор
+            const identifier = getPlayerKey();
             await supabaseClient
                 .from('player_saves')
                 .delete()
-                .eq('player_identifier', identifier); // Удаляем по правильной колонке
+                .eq('player_identifier', identifier);
         }
 
         try {
             localStorage.removeItem(SAVE_KEY);
-        } catch {
-            // ignore
-        }
+        } catch {}
     } finally {
         suppressAutoSave = false;
     }
@@ -705,9 +599,7 @@ export function initTelegramApp() {
     try {
         tg.ready();
         tg.expand();
-    } catch {
-        // ignore
-    }
+    } catch {}
 
     return true;
 }
