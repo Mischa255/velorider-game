@@ -56,33 +56,39 @@ async function loadFromSupabase() {
 
 async function saveToSupabase(playerData) {
     if (!supabaseClient) {
-        console.warn('Supabase не подключён.');
+        console.error('Supabase не подключён: не загружена библиотека @supabase/supabase-js.');
         return false;
     }
-    
-    // Получаем наш единственный правильный ключ
+
     const identifier = getPlayerKey();
 
     try {
-        const { error } = await supabaseClient
+        const { data, error } = await supabaseClient
             .from('player_saves')
             .upsert(
                 {
                     player_identifier: identifier,
                     save_data: playerData,
                     updated_at: new Date().toISOString()
-                    // УБРАЛИ telegram_id, так как этой колонки больше нет в БД!
                 },
                 { onConflict: 'player_identifier' }
-            );
+            )
+            .select('player_identifier')
+            .single();
 
         if (error) {
-            console.warn('Ошибка записи БД:', error.message);
+            console.error('Ошибка записи Supabase:', error.message, error.code || '');
             return false;
         }
+
+        if (data?.player_identifier !== identifier) {
+            console.error('Supabase не подтвердил сохранение строки игрока.');
+            return false;
+        }
+
         return true;
     } catch (e) {
-        console.warn('Сбой БД:', e.message);
+        console.error('Сбой Supabase:', e.message);
         return false;
     }
 }
@@ -210,7 +216,7 @@ function cloudStorageSet(key, value) {
     }
     return new Promise(resolve => {
         try {
-            cloud.setItem(key, error => resolve(!error));
+        cloud.setItem(key, value, error => resolve(!error));
         } catch {
             resolve(false);
         }
@@ -445,26 +451,30 @@ export let player = wrapReactiveState(createDefaultPlayer());
 // ДАННЫЕ ДЛЯ СОХРАНЕНИЯ
 // =====================================
 
-export function getPlayerSaveData() {
+function toPlayerSaveData(source) {
     return {
-        coins: player.coins,
-        coupons: player.coupons,
-        inventory: player.inventory,
-        unlockedTracks: player.unlockedTracks,
-        selectedTrack: player.selectedTrack,
-        completedTracks: player.completedTracks,
-        trackRewardsClaimed: player.trackRewardsClaimed,
-        track4BonusClaimed: player.track4BonusClaimed,
-        track1RewardClaimed: player.track1RewardClaimed,
-        unlockedComponentRarities: player.unlockedComponentRarities,
-        componentProgression: player.componentProgression,
-        totalWins: player.totalWins,
-        equipped: player.equipped,
-        totalSpeed: player.totalSpeed,
-        totalAccel: player.totalAccel,
-        totalJump: player.totalJump,
-        totalBrake: player.totalBrake
+        coins: source.coins,
+        coupons: source.coupons,
+        inventory: source.inventory,
+        unlockedTracks: source.unlockedTracks,
+        selectedTrack: source.selectedTrack,
+        completedTracks: source.completedTracks,
+        trackRewardsClaimed: source.trackRewardsClaimed,
+        track4BonusClaimed: source.track4BonusClaimed,
+        track1RewardClaimed: source.track1RewardClaimed,
+        unlockedComponentRarities: source.unlockedComponentRarities,
+        componentProgression: source.componentProgression,
+        totalWins: source.totalWins,
+        equipped: source.equipped,
+        totalSpeed: source.totalSpeed,
+        totalAccel: source.totalAccel,
+        totalJump: source.totalJump,
+        totalBrake: source.totalBrake
     };
+}
+
+export function getPlayerSaveData() {
+    return toPlayerSaveData(player);
 }
 
 // =====================================
@@ -553,26 +563,23 @@ export function resetPlayerState() {
 }
 
 export async function clearSavedProgress() {
-    suppressAutoSave = true;
+    const defaults = createDefaultPlayer();
+    const defaultSave = toPlayerSaveData(defaults);
 
+    // DELETE намеренно не используется: RLS разрешает upsert, но запрещает
+    // удалять строки. Записываем стартовое состояние в существующую строку.
+    const dbSaved = await saveToSupabase(defaultSave);
+    if (!dbSaved) {
+        throw new Error('Supabase не подтвердил сброс прогресса.');
+    }
+
+    suppressAutoSave = true;
     try {
-        player = wrapReactiveState(createDefaultPlayer());
+        player = wrapReactiveState(defaults);
+        writeLocalSave(defaultSave);
+        await cloudStorageSet(SAVE_KEY, JSON.stringify(defaultSave));
         autosaveDirty = false;
         resetAutosaveTimer();
-
-        await cloudStorageDelete(SAVE_KEY);
-
-        if (supabaseClient) {
-            const identifier = getPlayerKey();
-            await supabaseClient
-                .from('player_saves')
-                .delete()
-                .eq('player_identifier', identifier);
-        }
-
-        try {
-            localStorage.removeItem(SAVE_KEY);
-        } catch {}
     } finally {
         suppressAutoSave = false;
     }
