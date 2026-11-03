@@ -1,5 +1,5 @@
-import { player } from './state.js?v=37';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=37';
+import { player } from './state.js?v=40';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=40';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -9,6 +9,9 @@ import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=37';
 
 const GRAVITY = 0.42;
 const MIN_SPRINT_RECORD_IMPROVEMENT_MS = 10;
+const SIMULATION_STEP_MS = 1000 / 60;
+const MAX_FRAME_DELTA_MS = 100;
+const SPRINT_GHOST_ACCELERATION_SECONDS = 1.2;
 const BIKE_WIDTH = 46;
 const BIKE_HEIGHT = 24;
 const TRACK_MULTIPLIER = 3;
@@ -84,6 +87,8 @@ let ctx = null;
 let viewWidth = 0;
 let viewHeight = 0;
 let animationId = null;
+let lastFrameTime = 0;
+let frameAccumulator = 0;
 let resizeHandlerAttached = false;
 let callbackOnRaceEnd = null;
 let currentTrack = null;
@@ -93,6 +98,7 @@ let obstacles = [];
 let frameCounter = 0;
 let raceFinished = false;
 let raceRunning = false;
+let raceStarted = false;
 let raceStartTime = 0;
 let raceTimeMs = 0;
 let timerStarted = false;
@@ -1485,6 +1491,31 @@ function checkFinish() {
     );
 }
 
+function getSprintGhostProgress(elapsedMs, bestTimeMs) {
+    const durationSeconds = Math.max(0.001, (Number(bestTimeMs) || 0) / 1000);
+    const elapsedSeconds = clamp(
+        (Number(elapsedMs) || 0) / 1000,
+        0,
+        durationSeconds
+    );
+    const accelerationSeconds = Math.min(
+        SPRINT_GHOST_ACCELERATION_SECONDS,
+        durationSeconds * 0.2
+    );
+    const totalDistanceTime = Math.max(
+        0.001,
+        durationSeconds - accelerationSeconds / 2
+    );
+
+    // Призрак разгоняется с нуля, затем держит темп и достигает финиша
+    // ровно в момент личного рекорда.
+    const traveledDistanceTime = elapsedSeconds < accelerationSeconds
+        ? elapsedSeconds * elapsedSeconds / (2 * accelerationSeconds)
+        : elapsedSeconds - accelerationSeconds / 2;
+
+    return clamp(traveledDistanceTime / totalDistanceTime, 0, 1);
+}
+
 // =========================================
 // ОТРИСОВКА ФОНА
 // =========================================
@@ -2470,6 +2501,14 @@ function render() {
 function update() {
     if (!raceRunning || raceFinished) return;
 
+    // Боты не разгоняются, пока игрок сам не начнёт заезд.
+    if (!raceStarted) {
+        if (!input.accelerating && !input.reversing && !input.jumpRequested) {
+            return;
+        }
+        raceStarted = true;
+    }
+
     if (!timerStarted && playerBike.velocityX > 0) {
         timerStarted = true;
         raceStartTime = performance.now();
@@ -2498,10 +2537,9 @@ function update() {
 
             const previousX = bike.x;
             const ghostStartX = Number(bike.ghostStartX) || playerBike.x;
-            const progress = clamp(
-                raceTimeMs / Math.max(1, Number(player.bestSprintTime) || 1),
-                0,
-                1
+            const progress = getSprintGhostProgress(
+                raceTimeMs,
+                player.bestSprintTime
             );
 
             bike.previousX = previousX;
@@ -2543,10 +2581,36 @@ function update() {
     checkFinish();
 }
 
-function gameLoop() {
-    if (!raceRunning || raceFinished) return;
+function gameLoop(timestamp = performance.now()) {
+    if (!raceRunning || raceFinished) {
+        lastFrameTime = 0;
+        frameAccumulator = 0;
+        return;
+    }
 
-    update();
+    if (lastFrameTime === 0) {
+        lastFrameTime = timestamp - SIMULATION_STEP_MS;
+    }
+
+    const elapsedMs = Math.min(
+        Math.max(0, timestamp - lastFrameTime),
+        MAX_FRAME_DELTA_MS
+    );
+    lastFrameTime = timestamp;
+    frameAccumulator = Math.min(
+        frameAccumulator + elapsedMs,
+        MAX_FRAME_DELTA_MS
+    );
+
+    while (
+        frameAccumulator >= SIMULATION_STEP_MS &&
+        raceRunning &&
+        !raceFinished
+    ) {
+        update();
+        frameAccumulator -= SIMULATION_STEP_MS;
+    }
+
     render();
 
     if (raceRunning && !raceFinished) {
@@ -2630,6 +2694,8 @@ export function initRace(onRaceEnd) {
     timerStarted = false;
     raceStartTime = 0;
     raceTimeMs = 0;
+    lastFrameTime = 0;
+    frameAccumulator = 0;
 
     resizeCanvas();
     setTimeout(resizeCanvas, 50);
@@ -2671,6 +2737,7 @@ export function initRace(onRaceEnd) {
 
     raceFinished = false;
     raceRunning = true;
+    raceStarted = false;
 
     input = {
         accelerating: false,
