@@ -2,6 +2,7 @@ const SAVE_KEY = 'velorider_progress_v1';
 
 // Telegram WebView может закрыться без надёжного beforeunload/pagehide.
 const AUTOSAVE_DELAY_MS = 350;
+const AUTOSAVE_RETRY_DELAY_MS = 5000;
 const AUTOSAVE_INTERVAL_MS = 10000;
 
 // === НАСТРОЙКИ SUPABASE ===
@@ -55,38 +56,27 @@ async function loadFromSupabase() {
     }
 }
 
-// Если сохранение было создано старой версией по Telegram username,
-// забираем его при первом входе после перехода на постоянный Telegram ID.
-async function loadLegacyUsernameSave() {
-    const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
-    if (!supabaseClient || !tgUser?.id || !tgUser?.username) return null;
-
-    try {
-        const { data, error } = await supabaseClient
-            .from('player_saves')
-            .select('save_data')
-            .eq('player_identifier', tgUser.username.trim().toLowerCase())
-            .maybeSingle();
-        if (error) throw error;
-        return data ? data.save_data : null;
-    } catch (e) {
-        console.warn('Ошибка загрузки старого сохранения:', e);
-        return null;
-    }
-}
-
 async function saveToSupabase(playerData) {
     if (!supabaseClient) return false;
     const identifier = getPlayerKey();
+    const telegramId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
 
     try {
+        const row = {
+            player_identifier: identifier,
+            save_data: playerData,
+            updated_at: new Date().toISOString()
+        };
+
+        // Таблица проекта содержит отдельную колонку telegram_id.
+        // В Telegram передаём её значение, чтобы запись соответствовала схеме.
+        if (telegramId) {
+            row.telegram_id = telegramId;
+        }
+
         const { error } = await supabaseClient
             .from('player_saves')
-            .upsert({
-                player_identifier: identifier,
-                save_data: playerData,
-                updated_at: new Date().toISOString()
-            }, { onConflict: 'player_identifier' });
+            .upsert(row, { onConflict: 'player_identifier' });
         if (error) throw error;
         return true;
     } catch (e) {
@@ -423,7 +413,12 @@ async function flushAutosave() {
 
     try {
         autosaveDirty = false;
-        await savePlayerState();
+        const result = await savePlayerState();
+        if (!result.dbSaved) {
+            // Локальная копия не означает, что Supabase принял запись.
+            autosaveDirty = true;
+            console.warn('Прогресс сохранён локально, но не в Supabase. Повтор через несколько секунд.');
+        }
     } catch (error) {
         console.warn('Ошибка автосохранения:', error);
         autosaveDirty = true;
@@ -434,7 +429,7 @@ async function flushAutosave() {
             resetAutosaveTimer();
             autosaveTimer = setTimeout(() => {
                 void flushAutosave();
-            }, AUTOSAVE_DELAY_MS);
+            }, AUTOSAVE_RETRY_DELAY_MS);
         }
     }
 }
@@ -527,28 +522,30 @@ export async function savePlayerState() {
         saveToSupabase(data)
     ]);
 
-    return localSaved || cloudSaved || dbSaved;
+    return { localSaved, cloudSaved, dbSaved };
 }
 
 export async function forceSavePlayerState() {
     autosaveDirty = false;
     resetAutosaveTimer();
-    return savePlayerState();
+    const result = await savePlayerState();
+    if (!result.dbSaved) {
+        autosaveDirty = true;
+        resetAutosaveTimer();
+        autosaveTimer = setTimeout(() => {
+            void flushAutosave();
+        }, AUTOSAVE_RETRY_DELAY_MS);
+    }
+    return result;
 }
 
 export async function loadPlayerState() {
     let raw = null;
-    let loadedLegacySave = false;
 
     try {
         raw = await loadFromSupabase();
     } catch {
         raw = null;
-    }
-
-    if (!raw) {
-        raw = await loadLegacyUsernameSave();
-        loadedLegacySave = Boolean(raw);
     }
 
     if (!raw) {
@@ -579,11 +576,6 @@ export async function loadPlayerState() {
     resetAutosaveTimer();
 
     startAutosaveHeartbeat();
-
-    if (loadedLegacySave) {
-        // Переносим найденную старую запись под стабильный ключ tg_<id>.
-        await savePlayerState();
-    }
 
     return player;
 }
