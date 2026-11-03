@@ -56,6 +56,26 @@ async function loadFromSupabase() {
     }
 }
 
+// Если сохранение было создано старой версией по Telegram username,
+// забираем его при первом входе после перехода на постоянный Telegram ID.
+async function loadLegacyUsernameSave() {
+    const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+    if (!supabaseClient || !tgUser?.id || !tgUser?.username) return null;
+
+    try {
+        const { data, error } = await supabaseClient
+            .from('player_saves')
+            .select('save_data')
+            .eq('player_identifier', tgUser.username.trim().toLowerCase())
+            .maybeSingle();
+        if (error) throw error;
+        return data ? data.save_data : null;
+    } catch (e) {
+        console.warn('Ошибка загрузки старого сохранения:', e);
+        return null;
+    }
+}
+
 async function saveToSupabase(playerData) {
     if (!supabaseClient) return false;
     const identifier = getPlayerKey();
@@ -541,11 +561,17 @@ export async function forceSavePlayerState() {
 
 export async function loadPlayerState() {
     let raw = null;
+    let loadedLegacySave = false;
 
     try {
         raw = await loadFromSupabase();
     } catch {
         raw = null;
+    }
+
+    if (!raw) {
+        raw = await loadLegacyUsernameSave();
+        loadedLegacySave = Boolean(raw);
     }
 
     if (!raw) {
@@ -576,6 +602,11 @@ export async function loadPlayerState() {
     resetAutosaveTimer();
 
     startAutosaveHeartbeat();
+
+    if (loadedLegacySave) {
+        // Переносим найденную старую запись под стабильный ключ tg_<id>.
+        await savePlayerState();
+    }
 
     return player;
 }
