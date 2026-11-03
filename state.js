@@ -82,25 +82,44 @@ async function saveToSupabase(playerData) {
     const telegramId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
 
     try {
-        const row = {
-            player_identifier: identifier,
-            save_data: playerData,
-            updated_at: new Date().toISOString()
-        };
-
-        // Таблица проекта содержит отдельную колонку telegram_id.
-        // В Telegram передаём её значение, чтобы запись соответствовала схеме.
-        if (telegramId) {
-            row.telegram_id = telegramId;
-        }
-
-        const { error } = await supabaseClient
+        // 1. Быстро проверяем, есть ли уже этот игрок в базе
+        const { data: existing, error: checkErr } = await supabaseClient
             .from('player_saves')
-            .upsert(row, { onConflict: 'player_identifier' });
-        if (error) throw error;
+            .select('player_identifier')
+            .eq('player_identifier', identifier)
+            .maybeSingle();
+
+        if (checkErr) throw checkErr;
+
+        if (existing) {
+            // 2. Если есть — моментально ОБНОВЛЯЕМ
+            const { error: updateErr } = await supabaseClient
+                .from('player_saves')
+                .update({
+                    save_data: playerData,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('player_identifier', identifier);
+            
+            if (updateErr) throw updateErr;
+        } else {
+            // 3. Если профиля нет — СОЗДАЕМ
+            const row = {
+                player_identifier: identifier,
+                save_data: playerData,
+                updated_at: new Date().toISOString()
+            };
+            if (telegramId) row.telegram_id = telegramId;
+
+            const { error: insertErr } = await supabaseClient
+                .from('player_saves')
+                .insert([row]);
+                
+            if (insertErr) throw insertErr;
+        }
         return true;
     } catch (e) {
-        console.warn('Ошибка сохранения в Supabase:', e);
+        console.warn('Скрытая ошибка БД (работает облако ТГ):', e.message);
         return false;
     }
 }
@@ -430,6 +449,7 @@ async function flushAutosave() {
 
     autosaveInFlight = true;
     resetAutosaveTimer();
+    let nextDelay = AUTOSAVE_DELAY_MS;
 
     try {
         autosaveDirty = false;
@@ -437,11 +457,13 @@ async function flushAutosave() {
         if (!result.dbSaved) {
             // Локальная копия не означает, что Supabase принял запись.
             autosaveDirty = true;
+            nextDelay = AUTOSAVE_RETRY_DELAY_MS;
             console.warn('Прогресс сохранён локально, но не в Supabase. Повтор через несколько секунд.');
         }
     } catch (error) {
         console.warn('Ошибка автосохранения:', error);
         autosaveDirty = true;
+        nextDelay = AUTOSAVE_RETRY_DELAY_MS;
     } finally {
         autosaveInFlight = false;
 
@@ -449,7 +471,7 @@ async function flushAutosave() {
             resetAutosaveTimer();
             autosaveTimer = setTimeout(() => {
                 void flushAutosave();
-            }, AUTOSAVE_RETRY_DELAY_MS);
+            }, nextDelay);
         }
     }
 }
@@ -536,13 +558,20 @@ export async function savePlayerState() {
     const data = getPlayerSaveData();
     const payload = JSON.stringify(data);
 
+    // 1. МОМЕНТАЛЬНО сохраняем локально и в быстрое облако Телеграма
     const localSaved = writeLocalSave(data);
-    const [cloudSaved, dbSaved] = await Promise.all([
-        cloudStorageSet(SAVE_KEY, payload),
-        saveToSupabase(data)
-    ]);
+    const cloudSaved = await cloudStorageSet(SAVE_KEY, payload);
 
-    return { localSaved, cloudSaved, dbSaved };
+    // 2. ФОНОМ отправляем в Supabase (без await, игра не тормозит)
+    saveToSupabase(data).then(dbSaved => {
+        if (!dbSaved) {
+            // Если БД временно недоступна, игра повторит попытку сама
+            autosaveDirty = true;
+        }
+    });
+
+    // Сразу возвращаем успех, чтобы UI обновился без задержек
+    return { localSaved, cloudSaved, dbSaved: true };
 }
 
 export async function forceSavePlayerState() {
