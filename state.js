@@ -56,25 +56,22 @@ async function loadFromSupabase() {
 
 async function saveToSupabase(playerData) {
     if (!supabaseClient) {
-        console.warn('Supabase не подключён: проверь загрузку @supabase/supabase-js.');
+        console.warn('Supabase не подключён.');
         return false;
     }
+    
+    // Получаем наш единственный правильный ключ
     const identifier = getPlayerKey();
-    const telegramId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
 
     try {
-        if (!telegramId) {
-            throw new Error('Telegram ID не передан Mini App; обязательное поле telegram_id отсутствует.');
-        }
-
         const { error } = await supabaseClient
             .from('player_saves')
             .upsert(
                 {
-                    telegram_id: telegramId,
                     player_identifier: identifier,
                     save_data: playerData,
                     updated_at: new Date().toISOString()
+                    // УБРАЛИ telegram_id, так как этой колонки больше нет в БД!
                 },
                 { onConflict: 'player_identifier' }
             );
