@@ -5,8 +5,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
-    <title>VeloRider: Custom Garage</title>
+    <!-- Запрет кэширования HTML в Telegram -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
 
+    <title>VeloRider: Custom Garage</title>
 
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
@@ -38,10 +42,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
 
 
-    <link rel="stylesheet" href="style.css?v=16">
-    <link rel="stylesheet" href="tracks-overrides.css?v=16">
-    <link rel="stylesheet" href="mobile-fix.css?v=16">
-
+    <link rel="stylesheet" href="style.css?v=17">
+    <link rel="stylesheet" href="tracks-overrides.css?v=17">
+    <link rel="stylesheet" href="mobile-fix.css?v=17">
 </head>
 
 
@@ -770,7 +773,15 @@
                 </div>
 
 
-
+                <!-- === НОВАЯ КНОПКА ДОСРОЧНОГО ВЫХОДА === -->
+                <div class="shrink-0 flex justify-center -mt-1 mb-1 relative z-10">
+                    <button
+                        onclick="resetRace()"
+                        class="bg-red-900/60 hover:bg-red-800/80 border border-red-700/50 text-red-200 px-6 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-lg">
+                        <span>🚪</span> Покинуть гонку
+                    </button>
+                </div>
+                <!-- ====================================== -->
 
 
 
@@ -953,7 +964,7 @@
     ====================================== -->
 
 
-    <script type="module" src="main.js?v=16"></script>
+    <script type="module" src="main.js?v=17"></script>
 
 
 
