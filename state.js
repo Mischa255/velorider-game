@@ -1,6 +1,7 @@
 const SAVE_KEY = 'velorider_progress_v1';
 
-const AUTOSAVE_DELAY_MS = 1200;
+// Telegram WebView может закрыться без надёжного beforeunload/pagehide.
+const AUTOSAVE_DELAY_MS = 350;
 const AUTOSAVE_INTERVAL_MS = 10000;
 
 // === НАСТРОЙКИ SUPABASE ===
@@ -12,19 +13,21 @@ if (window.supabase) {
     supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
 
-// Получаем уникальный идентификатор игрока (юзернейм, telegram id или dev-id)
+// Основной ключ — Telegram username: он совпадает с player_identifier
+// существующих записей в Supabase и позволяет обновлять их на месте.
 function getPlayerKey() {
     const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
-    
-    // 1. Если у игрока есть юзернейм в Telegram — используем его как главный ключ
+
     if (tgUser && tgUser.username) {
         return tgUser.username.trim().toLowerCase();
     }
-    
-    // 2. Если юзернейма нет, но есть цифровой ID — используем его
+
+    // Если у аккаунта нет username, используем неизменяемый Telegram ID.
     if (tgUser && tgUser.id) {
         return `tg_${tgUser.id}`;
     }
+
+    // Запасной вариант для обычного браузера.
     
     // 3. Запасной вариант для обычного браузера (вне Telegram)
     let devId = localStorage.getItem('velorider_dev_id');
@@ -48,6 +51,26 @@ async function loadFromSupabase() {
         return data ? data.save_data : null;
     } catch (e) {
         console.warn('Ошибка загрузки из Supabase:', e);
+        return null;
+    }
+}
+
+// Если сохранение было создано старой версией по Telegram username,
+// забираем его при первом входе после перехода на постоянный Telegram ID.
+async function loadLegacyUsernameSave() {
+    const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+    if (!supabaseClient || !tgUser?.id || !tgUser?.username) return null;
+
+    try {
+        const { data, error } = await supabaseClient
+            .from('player_saves')
+            .select('save_data')
+            .eq('player_identifier', tgUser.username.trim().toLowerCase())
+            .maybeSingle();
+        if (error) throw error;
+        return data ? data.save_data : null;
+    } catch (e) {
+        console.warn('Ошибка загрузки старого сохранения:', e);
         return null;
     }
 }
@@ -208,8 +231,8 @@ function cloudStorageGet(key) {
 
     return new Promise(resolve => {
         try {
-            cloud.getItem(key, value => {
-                resolve(value ?? null);
+        cloud.getItem(key, (error, value) => {
+            resolve(error ? null : value ?? null);
             });
         } catch {
             resolve(null);
@@ -226,7 +249,7 @@ function cloudStorageSet(key, value) {
 
     return new Promise(resolve => {
         try {
-            cloud.setItem(key, value, () => resolve(true));
+        cloud.setItem(key, error => resolve(!error));
         } catch {
             resolve(false);
         }
@@ -242,7 +265,7 @@ function cloudStorageDelete(key) {
 
     return new Promise(resolve => {
         try {
-            cloud.deleteItem(key, () => resolve(true));
+        cloud.deleteItem(key, error => resolve(!error));
         } catch {
             resolve(false);
         }
@@ -499,8 +522,10 @@ export async function savePlayerState() {
     const payload = JSON.stringify(data);
 
     const localSaved = writeLocalSave(data);
-    const cloudSaved = await cloudStorageSet(SAVE_KEY, payload);
-    const dbSaved = await saveToSupabase(data);
+    const [cloudSaved, dbSaved] = await Promise.all([
+        cloudStorageSet(SAVE_KEY, payload),
+        saveToSupabase(data)
+    ]);
 
     return localSaved || cloudSaved || dbSaved;
 }
@@ -513,11 +538,17 @@ export async function forceSavePlayerState() {
 
 export async function loadPlayerState() {
     let raw = null;
+    let loadedLegacySave = false;
 
     try {
         raw = await loadFromSupabase();
     } catch {
         raw = null;
+    }
+
+    if (!raw) {
+        raw = await loadLegacyUsernameSave();
+        loadedLegacySave = Boolean(raw);
     }
 
     if (!raw) {
@@ -548,6 +579,11 @@ export async function loadPlayerState() {
     resetAutosaveTimer();
 
     startAutosaveHeartbeat();
+
+    if (loadedLegacySave) {
+        // Переносим найденную старую запись под стабильный ключ tg_<id>.
+        await savePlayerState();
+    }
 
     return player;
 }

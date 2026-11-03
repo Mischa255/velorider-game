@@ -1,24 +1,24 @@
-import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=20';
+import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=22';
 import {
     player,
     loadPlayerState,
     initTelegramApp,
     clearSavedProgress,
     forceSavePlayerState
-} from './state.js?v=20';
+} from './state.js?v=22';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=20';
+} from './race.js?v=22';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=20';
+} from './audio.js?v=22';
 
 const CATEGORY_NAMES = {
     frames: 'Рамы',
@@ -2597,6 +2597,9 @@ function handleRaceEnd(win, reason = 'finish') {
     updateUpgradeUI();
     renderContainerShop();
     showRaceResult(result, reason, bonusText);
+    // Итог гонки меняет награды и прогресс; сразу записываем их на устройства
+    // и запускаем облачное сохранение, не дожидаясь закрытия экрана.
+    void forceSavePlayerState();
 }
 
 window.selectTrack = function (id) {
