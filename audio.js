@@ -14,7 +14,7 @@ let fadeInterval = null;
 
 let enabled = false;
 let volume = 0.65;
-const BGM_MAX_VOLUME = 0.6; // Максимальная громкость музыки относительно общей громкости
+const BGM_MAX_VOLUME = 0.6;
 
 let audioUnlocked = false;
 let currentScene = 'garage';
@@ -70,7 +70,7 @@ function saveSettings() {
 }
 
 // ------------------------------------------------------------
-// Фоновая музыка (MP3)
+// Фоновая музыка (MP3) — с защитой от багов переключения
 // ------------------------------------------------------------
 
 function updateBgmVolume() {
@@ -89,81 +89,34 @@ function playBgm(sceneName) {
     const trackName = sceneName.startsWith('t') ? sceneName : 'garage';
     const fileName = `music/${trackName}.mp3`;
 
-    if (bgm.src.endsWith(fileName)) {
-        if (bgm.paused) bgm.play().catch(e => console.warn('MP3 play error:', e));
+    // Если этот же трек уже играет и не на паузе — не дергаем лишний раз
+    if (bgm.src.endsWith(fileName) && !bgm.paused) {
         return;
     }
 
     if (fadeInterval) clearInterval(fadeInterval);
-    
-    fadeInterval = setInterval(() => {
-        if (bgm.volume > 0.05) {
-            bgm.volume -= 0.05;
-        } else {
-            clearInterval(fadeInterval);
-            bgm.pause();
-            bgm.src = fileName;
-            bgm.volume = 0;
-            
-            if (enabled) {
-                bgm.play().catch(e => console.warn('MP3 play error:', e));
-                const targetVolume = clamp(volume * BGM_MAX_VOLUME, 0, 1);
-                
-                fadeInterval = setInterval(() => {
-                    if (bgm.volume < targetVolume - 0.05) {
-                        bgm.volume += 0.05;
-                    } else {
-                        bgm.volume = targetVolume;
-                        clearInterval(fadeInterval);
-                        fadeInterval = null;
-                    }
-                }, 50);
-            } else {
-                fadeInterval = null;
-            }
-        }
-    }, 40);
-}
 
-// Начинаем загрузку MP3 синхронно с нажатием пользователя.
-// Мобильные WebView могут снять разрешение на autoplay после await/setInterval.
-function startBgmFromGesture(sceneName) {
-    const trackName = sceneName.startsWith('t') ? sceneName : 'garage';
-    const fileName = `music/${trackName}.mp3`;
-
-    if (fadeInterval) {
-        clearInterval(fadeInterval);
-        fadeInterval = null;
-    }
-
-    if (!bgm.src.endsWith(fileName)) {
-        bgm.pause();
-        bgm.src = fileName;
-    }
-
+    // Быстрое переключение с защитой от зависания потока на мобильных
+    bgm.pause();
+    bgm.src = fileName;
+    bgm.currentTime = 0;
     bgm.volume = clamp(volume * BGM_MAX_VOLUME, 0, 1);
-    const playRequest = bgm.play();
-    if (playRequest?.catch) {
-        playRequest.catch(error => {
-            console.warn('Не удалось запустить музыку:', error);
-            setStatus('Не удалось загрузить музыку. Проверь подключение и нажми ещё раз.');
-        });
-    }
+
+    bgm.play().catch(e => {
+        console.warn('MP3 play error (возможно, файл еще грузится или заблокирован):', e);
+        // Попытка повторного запуска через секунду, если браузер сбросил стейт
+        setTimeout(() => {
+            if (enabled && audioUnlocked) {
+                bgm.play().catch(err => console.warn('Повторный запуск не удался:', err));
+            }
+        }, 1000);
+    });
 }
 
 function stopBgm() {
     if (fadeInterval) clearInterval(fadeInterval);
-    
-    fadeInterval = setInterval(() => {
-        if (bgm.volume > 0.05) {
-            bgm.volume -= 0.05;
-        } else {
-            bgm.volume = 0;
-            bgm.pause();
-            clearInterval(fadeInterval);
-            fadeInterval = null;
-        }
-    }, 30);
+    bgm.pause();
+    bgm.currentTime = 0;
 }
 
 export function setAudioScene(scene) {
@@ -332,9 +285,6 @@ async function setEnabled(value) {
     updateUI();
     updateBgmVolume();
 
-    // Вызов play() до первого await сохраняет пользовательский жест на iOS/WebView.
-    startBgmFromGesture(currentScene);
-
     const success = await unlockAudio();
     if (!success) {
         enabled = false;
@@ -456,7 +406,10 @@ function setupAudioUnlock() {
     document.addEventListener('pointerdown', unlock, { passive: true, once: true });
     document.addEventListener('keydown', unlock, { once: true });
     document.addEventListener('visibilitychange', () => {
-        if (!document.hidden && enabled) void unlockAudio();
+        // Автоматически возобновляем музыку, если пользователь вернулся в приложение
+        if (!document.documentHidden && enabled && audioUnlocked) {
+            bgm.play().catch(e => console.warn('Resume play error:', e));
+        }
     });
 }
 
@@ -475,7 +428,7 @@ export function initAudioControls() {
         saveSettings();
         updateUI();
     }
-    console.log('VeloRider Audio System (MP3) initialized');
+    console.log('VeloRider Audio System (Fixed) initialized');
 }
 
 window.addEventListener('beforeunload', saveSettings);
