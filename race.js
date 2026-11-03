@@ -1,5 +1,5 @@
-import { player } from './state.js?v=35';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=35';
+import { player } from './state.js?v=36';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=36';
 
 // =========================================
 // VELOCITY RACE ENGINE

@@ -86,7 +86,7 @@ function updateBgmVolume() {
 function playBgm(sceneName) {
     if (!enabled || !audioUnlocked) return;
 
-    const trackName = sceneName.startsWith('t') ? sceneName : 'garage';
+    const trackName = /^t\d+$/.test(sceneName) ? sceneName : 'garage';
     const fileName = `music/${trackName}.mp3`;
 
     // Если этот же трек уже играет и не на паузе — не дергаем лишний раз
@@ -98,18 +98,29 @@ function playBgm(sceneName) {
 
     // Быстрое переключение с защитой от зависания потока на мобильных
     bgm.pause();
+    bgm.onerror = null;
     bgm.src = fileName;
     bgm.currentTime = 0;
     bgm.volume = clamp(volume * BGM_MAX_VOLUME, 0, 1);
 
+    const fallbackToGarage = () => {
+        if (
+            trackName !== 'garage' &&
+            enabled &&
+            audioUnlocked &&
+            currentScene === sceneName &&
+            bgm.src.endsWith(fileName)
+        ) {
+            console.warn(`Музыка ${fileName} пока недоступна. Включаю музыку гаража.`);
+            bgm.onerror = null;
+            playBgm('garage');
+        }
+    };
+
+    bgm.onerror = fallbackToGarage;
     bgm.play().catch(e => {
         console.warn('MP3 play error (возможно, файл еще грузится или заблокирован):', e);
-        // Попытка повторного запуска через секунду, если браузер сбросил стейт
-        setTimeout(() => {
-            if (enabled && audioUnlocked) {
-                bgm.play().catch(err => console.warn('Повторный запуск не удался:', err));
-            }
-        }, 1000);
+        fallbackToGarage();
     });
 }
 

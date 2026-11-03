@@ -1,24 +1,24 @@
-import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=35';
+import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=36';
 import {
     player,
     loadPlayerState,
     initTelegramApp,
     clearSavedProgress,
     forceSavePlayerState
-} from './state.js?v=35';
+} from './state.js?v=36';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=35';
+} from './race.js?v=36';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=35';
+} from './audio.js?v=36';
 
 const CATEGORY_NAMES = {
     frames: 'Рамы',
@@ -1165,7 +1165,12 @@ function canPlayTrack(trackId) {
 }
 
 function showScreen(screenName) {
-    setAudioScene(screenName === 'race' ? (player.selectedTrack || 'race') : 'garage');
+    const selectedTrack = TRACKS_DB.find(track => track.id === player.selectedTrack);
+    setAudioScene(
+        screenName === 'race'
+            ? (selectedTrack?.musicTheme || player.selectedTrack || 'race')
+            : 'garage'
+    );
 
     document.querySelectorAll('.screen').forEach(el => {
         el.classList.add('hidden');
@@ -2567,12 +2572,19 @@ function handleRaceEnd(win, reason = 'finish', raceTimeMs = 0) {
         if (isNewRecord) {
             bonusText += '<span class="text-yellow-400 font-black text-2xl drop-shadow-md">🎉 НОВЫЙ РЕКОРД! 🎉</span><br><br>';
             player.bestSprintTime = elapsedMs;
+
+            if (previousBest > 0) {
+                player.coins = (Number(player.coins) || 0) + 100;
+                bonusText += '<span class="text-green-400 font-bold">+100 🪙 за улучшение рекорда</span>';
+            } else {
+                bonusText += '<span class="text-gray-300">Первый результат сохранён. Побей его в следующем заезде, чтобы получить +100 🪙.</span>';
+            }
         } else if (previousBest > 0) {
             bonusText += `<span class="text-gray-400">Лучшее время: ${(previousBest / 1000).toFixed(2)} сек.</span><br><br>`;
+            bonusText += '<span class="text-gray-300">Рекорд не побит — награда не начислена.</span>';
+        } else {
+            bonusText += '<span class="text-gray-300">Время не сохранено. Повтори спринт.</span>';
         }
-
-        player.coins = (Number(player.coins) || 0) + 100;
-        bonusText += '<span class="text-green-400 font-bold">+100 🪙 за тренировку</span>';
 
         updateHUD();
         updateGarageUI();

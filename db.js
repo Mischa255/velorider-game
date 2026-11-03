@@ -447,7 +447,7 @@ export const TRACKS_DB = [
 
     {
         id: 'sprint',
-        musicTheme: 't1',
+        musicTheme: 't0',
         name: 'Спринт 100м',
         rarity: 'common',
         alwaysUnlocked: true, // Всегда доступна
@@ -458,7 +458,7 @@ export const TRACKS_DB = [
         obstacles: 0,
         obstacleTypes: [],
         winReward: 100,
-        lossReward: 10,
+        lossReward: 0,
         couponReward: 0
     },
 
