@@ -457,7 +457,7 @@ export const TRACKS_DB = [
         botAccel: 0,
         obstacles: 0,
         obstacleTypes: [],
-        winReward: 100,
+        winReward: 0,
         lossReward: 0,
         couponReward: 0
     },

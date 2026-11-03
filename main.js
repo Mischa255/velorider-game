@@ -1,24 +1,25 @@
-import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=40';
+import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=42';
 import {
     player,
     loadPlayerState,
     initTelegramApp,
     clearSavedProgress,
-    forceSavePlayerState
-} from './state.js?v=40';
+    forceSavePlayerState,
+    getServerTime
+} from './state.js?v=42';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=40';
+} from './race.js?v=42';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=40';
+} from './audio.js?v=42';
 
 const CATEGORY_NAMES = {
     frames: 'Рамы',
@@ -49,6 +50,18 @@ const CATEGORY_NAMES = {
 };
 
 const MIN_SPRINT_RECORD_IMPROVEMENT_MS = 10;
+
+function getSprintCouponWindowKey(serverDate) {
+    if (!(serverDate instanceof Date) || Number.isNaN(serverDate.getTime())) {
+        throw new Error('Некорректное серверное время для спринт-награды.');
+    }
+
+    const pad = value => String(value).padStart(2, '0');
+    const dateKey = `${serverDate.getUTCFullYear()}-${pad(serverDate.getUTCMonth() + 1)}-${pad(serverDate.getUTCDate())}`;
+    const windowStartHour = Math.floor(serverDate.getUTCHours() / 6) * 6;
+
+    return `${dateKey}T${pad(windowStartHour)}Z`;
+}
 
 const CATEGORY_ICONS = {
     frames: '🚲', forks: '🔧', chains: '⛓️',
@@ -2036,7 +2049,7 @@ function updateTracksUI() {
         const selected = player.selectedTrack === track.id;
         const previousTrack = storyTracks[storyIndex - 1];
 
-        const winReward = isSprint ? 100 : Number(track.winReward) || (500 + storyIndex * 250);
+        const winReward = isSprint ? 0 : Number(track.winReward) || (500 + storyIndex * 250);
         const lossReward = isSprint ? 0 : Number(track.lossReward) || (50 + storyIndex * 10);
         const couponReward = isSprint ? 0 : Math.max(1, Number(track.couponReward) || 1);
         const fourthTrackBonus = track.id === 't4'
@@ -2124,9 +2137,9 @@ function updateTracksUI() {
                     <div class="track-card__section-label">НАГРАДЫ ЗА ЗАЕЗД</div>
                     <div class="track-card__reward-grid">
                         ${isSprint ? `
-                            <div class="track-reward track-reward--win">
-                                <span>Тренировка</span>
-                                <strong>+100 🪙 за финиш</strong>
+                            <div class="track-reward track-reward--coupon">
+                                <span>За побитие рекорда</span>
+                                <strong>+2 🎟️ один раз за 6 ч. (UTC)</strong>
                             </div>
                             <div class="track-reward">
                                 <span>Соперник</span>
@@ -2562,7 +2575,7 @@ function showRaceResult(win, reason, bonusText) {
     }
 }
 
-function handleRaceEnd(win, reason = 'finish', raceTimeMs = 0) {
+async function handleRaceEnd(win, reason = 'finish', raceTimeMs = 0) {
     const selectedId = player.selectedTrack;
 
     if (selectedId === 'sprint') {
@@ -2579,14 +2592,27 @@ function handleRaceEnd(win, reason = 'finish', raceTimeMs = 0) {
             player.bestSprintTime = elapsedMs;
 
             if (previousBest > 0) {
-                player.coins = (Number(player.coins) || 0) + 100;
-                bonusText += '<span class="text-green-400 font-bold">+100 🪙 за улучшение рекорда</span>';
+                try {
+                    const serverDate = await getServerTime();
+                    const rewardWindow = getSprintCouponWindowKey(serverDate);
+
+                    if (player.lastSprintCouponWindow !== rewardWindow) {
+                        player.coupons = (Number(player.coupons) || 0) + 2;
+                        player.lastSprintCouponWindow = rewardWindow;
+                        bonusText += '<span class="text-cyan-300 font-bold">+2 🎟️ за новый рекорд</span><br><span class="text-gray-400">Награда доступна один раз за шестичасовой период по UTC.</span>';
+                    } else {
+                        bonusText += '<span class="text-gray-300">Рекорд обновлён, но награда за этот период по UTC уже получена.</span>';
+                    }
+                } catch (error) {
+                    console.error('Не удалось проверить серверное время для спринт-награды:', error);
+                    bonusText += '<span class="text-gray-300">Рекорд обновлён. Серверное время недоступно — купоны не начислены.</span>';
+                }
             } else {
-                bonusText += '<span class="text-gray-300">Первый результат сохранён. Побей его в следующем заезде, чтобы получить +100 🪙.</span>';
+                bonusText += '<span class="text-gray-300">Первый результат сохранён. Улучши его минимум на 0,01 секунды, чтобы получить 2 🎟️.</span>';
             }
         } else if (previousBest > 0) {
             bonusText += `<span class="text-gray-400">Лучшее время: ${(previousBest / 1000).toFixed(2)} сек.</span><br><br>`;
-            bonusText += '<span class="text-gray-300">Рекорд не побит — награда не начислена.</span>';
+            bonusText += '<span class="text-gray-300">Рекорд не побит минимум на 0,01 секунды.</span>';
         } else {
             bonusText += '<span class="text-gray-300">Время не сохранено. Повтори спринт.</span>';
         }

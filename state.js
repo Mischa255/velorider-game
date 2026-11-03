@@ -54,6 +54,22 @@ async function loadFromSupabase() {
     }
 }
 
+export async function getServerTime() {
+    if (!supabaseClient) {
+        throw new Error('Supabase не подключён.');
+    }
+
+    const { data, error } = await supabaseClient.rpc('get_server_time');
+    if (error) throw error;
+
+    const serverDate = new Date(data);
+    if (!data || Number.isNaN(serverDate.getTime())) {
+        throw new Error('Supabase вернул некорректное время.');
+    }
+
+    return serverDate;
+}
+
 async function saveToSupabase(playerData) {
     if (!supabaseClient) {
         console.error('Supabase не подключён.');
@@ -141,6 +157,7 @@ function createDefaultPlayer() {
 
         totalWins: 0,
         bestSprintTime: 0, // <--- ДОБАВЛЕН РЕКОРД СПРИНТА
+        lastSprintCouponWindow: '',
 
         // =====================================
         // УСТАНОВЛЕННЫЕ ДЕТАЛИ
@@ -265,6 +282,11 @@ function sanitizeLoadedState(raw) {
     merged.coupons = Math.max(0, Number(merged.coupons) || 0);
     merged.totalWins = Math.max(0, Number(merged.totalWins) || 0);
     merged.bestSprintTime = Number(merged.bestSprintTime) || 0; // <--- ОБРАБОТКА РЕКОРДА ПРИ ЗАГРУЗКЕ
+    merged.lastSprintCouponWindow =
+        typeof merged.lastSprintCouponWindow === 'string' &&
+        /^\d{4}-\d{2}-\d{2}T(?:00|06|12|18)Z$/.test(merged.lastSprintCouponWindow)
+            ? merged.lastSprintCouponWindow
+            : '';
 
     if (!Array.isArray(merged.inventory)) merged.inventory = deepClone(base.inventory);
     if (!Array.isArray(merged.unlockedTracks)) merged.unlockedTracks = deepClone(base.unlockedTracks);
@@ -461,6 +483,7 @@ function toPlayerSaveData(source) {
         componentProgression: source.componentProgression,
         totalWins: source.totalWins,
         bestSprintTime: source.bestSprintTime, // <--- УПАКОВКА РЕКОРДА ДЛЯ ОТПРАВКИ
+        lastSprintCouponWindow: source.lastSprintCouponWindow,
         equipped: source.equipped,
         totalSpeed: source.totalSpeed,
         totalAccel: source.totalAccel,
