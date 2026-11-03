@@ -1,5 +1,5 @@
-import { player } from './state.js?v=14';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=14';
+import { player } from './state.js?v=15';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=15';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -2127,7 +2127,10 @@ function drawRaceHUD() {
     const rowHeight = mobileLayout ? 29 : 19;
     const panelHeight = (mobileLayout ? 42 : 35) + racers.length * rowHeight;
     const panelX = mobileLayout ? (viewWidth - panelWidth) / 2 : 14;
-    const panelY = mobileLayout ? Math.max(8, viewHeight - panelHeight - 10) : 12;
+    const playerHeadY = getGroundY(playerBike.x, 0) - playerBike.jumpHeight - playerBike.rampLift - 55;
+    const panelY = mobileLayout
+        ? clamp(playerHeadY - panelHeight - 12, 8, Math.max(8, viewHeight - panelHeight - 8))
+        : 12;
 
     ctx.fillStyle = mobileLayout ? 'rgba(15,23,42,0.94)' : 'rgba(15,23,42,0.84)';
     ctx.strokeStyle = 'rgba(148,163,184,0.42)';
