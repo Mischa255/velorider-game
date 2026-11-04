@@ -1,7 +1,7 @@
-import { player } from './state.js?v=56';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=56';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS } from './utils.js?v=56';
-import { playCoinSound, playBoostSound } from './audio.js?v=56';
+import { player } from './state.js?v=59';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=59';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS } from './utils.js?v=59';
+import { playCoinSound, playBoostSound } from './audio.js?v=59';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -184,21 +184,22 @@ function getBotDifficultyStats(botIndex) {
     const rawSpeed = Number(difficultyTrack?.botMaxSpeed) || fallbackSpeed;
     const rawAcceleration = Number(difficultyTrack?.botAccel) || fallbackAccel;
 
-    // Уникальные стили гонщиков: Макс - резкий старт и ускорение, Лера - высокая максималка и накат
-    const styleSpeedMult = botIndex === 1 ? 0.98 : 1.05;
-    const styleAccelMult = botIndex === 1 ? 1.08 : 0.97;
+    // Случайный баланс формы гонщиков на каждый заезд (в пределах ±3% от скорости сложности трассы):
+    // В одном заезде активнее и быстрее Макс, в другом - Лера. Ни один бот не привязан к вечному лидерству.
+    const speedVariation = 0.97 + Math.random() * 0.06;
+    const accelVariation = 0.95 + Math.random() * 0.10;
 
     return {
         trackId: difficultyTrack?.id || currentTrack?.id,
 
         maxSpeed: Math.max(
             1.5,
-            rawSpeed * balance.speed * styleSpeedMult
+            rawSpeed * balance.speed * speedVariation
         ),
 
         acceleration: Math.max(
             0.012,
-            rawAcceleration * balance.accel * styleAccelMult
+            rawAcceleration * balance.accel * accelVariation
         ),
 
         jumpForce: balance.jumpForce
@@ -397,8 +398,8 @@ function getBotAbilities(botIndex) {
         // Оба бота умеют использовать нитро с 3-й трассы!
         nitroUnlocked: currentTrackLevel >= 3,
 
-        // Суперпрыжок доступен для техничных трюков
-        superJumpUnlocked: currentTrackLevel >= 5 && botIndex === 2,
+        // Суперпрыжок доступен любому боту с равной вероятностью с 5-й трассы
+        superJumpUnlocked: currentTrackLevel >= 5 && Math.random() < 0.6,
 
         shieldCharges: currentTrackLevel >= 9 ? 1 : 0
     };
@@ -503,7 +504,7 @@ function createBike(isBot = false, botIndex = 1) {
 
         nitroTimer: 0,
         springBoostTimer: 0,
-        nitroCooldown: 150 + botIndex * 65,
+        nitroCooldown: 120 + Math.floor(Math.random() * 100),
         lastGasTap: 0,
         frameGuardUsed: false,
         landingBoostCooldown: 0,
@@ -775,15 +776,15 @@ function updatePlayerPhysics() {
         GRAVITY
     );
 
-    if (input.accelerating) {
+    if (input.accelerating && playerBike.grounded) {
         playerBike.velocityX += acceleration;
     }
 
-    if (input.reversing) {
+    if (input.reversing && playerBike.grounded) {
         playerBike.velocityX -= acceleration * 0.9;
     }
 
-    if (input.braking) {
+    if (input.braking && playerBike.grounded) {
         if (playerBike.velocityX > 0) {
             playerBike.velocityX = Math.max(
                 0,
@@ -804,6 +805,9 @@ function updatePlayerPhysics() {
     ) {
         const coastBrake = 0.005 + Math.min(brake, 80) * 0.00013;
         playerBike.velocityX *= 1 - coastBrake;
+    } else if (!playerBike.grounded) {
+        // В воздухе педали не цепляют землю: сохраняется инерция с легким сопротивлением воздуха
+        playerBike.velocityX *= 0.998;
     }
 
     let allowedSpeed = maxSpeed * nitroMultiplier;
@@ -819,8 +823,8 @@ function updatePlayerPhysics() {
     // ----------------------------------------------------
     // МЕХАНИКА МОЩНОСТИ (POWER) И ПОДЪЁМОВ В ГОРУ
     // Мощность непосредственно определяет возможность преодолевать уклоны.
-    // Какая бы ни была максимальная скорость на прямой (speed),
-    // на крутом подъеме предел скорости жестко диктуется именно мощностью.
+    // Ограничение действует и на земле, и в прыжке: прыжок не сбрасывает лимит
+    // тяги и не позволяет «перепрыгивать» гору без начальной скорости!
     // ----------------------------------------------------
     const wheelBase = 25;
     const frontY = getGroundY(playerBike.x + wheelBase, 0);
@@ -829,7 +833,7 @@ function updatePlayerPhysics() {
     const slope = (backY - frontY) / (wheelBase * 2);
     const totalPower = Math.max(0, Number(player.totalPower) || 0);
 
-    if (playerBike.grounded && slope > 0.04) {
+    if (slope > 0.04) {
         // Требуемая мощность в зависимости от крутизны склона
         const requiredPower = slope * 165;
         const powerRatio = (totalPower + 6) / Math.max(10, requiredPower);
@@ -837,22 +841,25 @@ function updatePlayerPhysics() {
         if (powerRatio < 1.0) {
             // Какая бы ни была максимальная скорость на прямой (speed),
             // предел скорости в гору непосредственно срезается дефицитом мощности!
+            // В воздухе лимит сохраняется — нельзя прыжком развить скорость выше допустимой!
             const hillSpeedCap = Math.max(0.35, maxSpeed * Math.pow(Math.max(0.08, powerRatio), 1.25));
             allowedSpeed = Math.min(allowedSpeed, hillSpeedCap);
 
-            // Недостаток мощности гасит разгон от педалей (accel не может вытянуть без тяги)
-            const lostAccel = acceleration * (1 - Math.min(1, powerRatio));
-            playerBike.velocityX -= lostAccel;
+            // На земле недостаток мощности режет разгон от педалей
+            if (playerBike.grounded) {
+                const lostAccel = acceleration * (1 - Math.min(1, powerRatio));
+                playerBike.velocityX -= lostAccel;
+            }
 
-            // Гравитационное сопротивление крутого склона
+            // Гравитационное сопротивление крутого склона действует и на земле, и при полете против склона
             const gravityDrag = slope * 0.18 * (1 - powerRatio);
             playerBike.velocityX -= gravityDrag;
 
             if (powerRatio < 0.45) {
                 // Мощность критически мала: велосипед не вытягивает гору и откатывается назад!
-                if (input.accelerating && playerBike.velocityX < 0.5) {
+                if (playerBike.velocityX < 0.5) {
                     playerBike.velocityX = Math.max(-0.8, playerBike.velocityX - 0.05);
-                    if (powerWarningCooldown <= 0) {
+                    if (powerWarningCooldown <= 0 && playerBike.grounded) {
                         addFloatingText(playerBike.x, getGroundY(playerBike.x, 0) - 65, '⚠️ Мало мощности! 🔋', '#ef4444');
                         powerWarningCooldown = 90;
                     }
@@ -860,11 +867,11 @@ function updatePlayerPhysics() {
             }
         } else {
             // Высокая мощность: уверенный заезд в гору и небольшая помощь тяги
-            if (input.accelerating) {
+            if (input.accelerating && playerBike.grounded) {
                 playerBike.velocityX += Math.min(0.04, (powerRatio - 1) * 0.015);
             }
         }
-    } else if (playerBike.grounded && slope < -0.04) {
+    } else if (slope < -0.04) {
         // На спуске сила тяжести помогает разгону вплоть до максимальной скорости
         const downhillBoost = Math.min(0.06, Math.abs(slope) * 0.05);
         playerBike.velocityX += downhillBoost;
@@ -1116,13 +1123,16 @@ function updateBotPhysics(bike) {
             : 1
     );
 
-    bike.velocityX += baseAcceleration;
+    if (bike.grounded) {
+        bike.velocityX += baseAcceleration;
+    }
 
-    // Соревновательный азарт: если бот отстает от игрока на 80-450px, он активнее крутит педали (драфтинг)
-    if (playerBike && !bike.isGhost) {
-        const gap = playerBike.x - bike.x;
-        if (gap > 60 && gap < 500) {
-            bike.velocityX += baseAcceleration * 0.32;
+    // Соревновательный азарт: бот активнее крутит педали (драфтинг), если отстает от лидера или соперника
+    if (bike.grounded && !bike.isGhost) {
+        const competitors = [playerBike, ...activeBots.filter(b => b !== bike && !b.isGhost)];
+        const ahead = competitors.find(c => c && (c.x - bike.x) > 50 && (c.x - bike.x) < 450);
+        if (ahead) {
+            bike.velocityX += baseAcceleration * 0.28;
         }
     }
 
@@ -1916,28 +1926,39 @@ function drawCollectibles() {
 
             ctx.restore();
         } else if (item.type === 'booster') {
+            const halfWidth = 28;
+            const backY = getGroundY(item.x - halfWidth, 0);
+            const frontY = getGroundY(item.x + halfWidth, 0);
+            const trackAngle = Math.atan2(frontY - backY, halfWidth * 2);
             const sy = getGroundY(item.x, 0);
+
             ctx.save();
-            ctx.translate(sx, sy + 1);
+            ctx.translate(sx, sy);
+            ctx.rotate(trackAngle);
 
-            // Неоновая стрелка ускорителя на асфальте
+            // Неоновая стрелка ускорителя, точно уложенная по траектории трассы
+            const isReady = (item.cooldown || 0) <= 0;
             const activePulse = (frameCounter * 0.1) % (Math.PI * 2);
-            ctx.shadowColor = '#38bdf8';
-            ctx.shadowBlur = 12;
 
-            ctx.fillStyle = '#0284c7';
-            ctx.fillRect(-28, -5, 56, 7);
+            ctx.shadowColor = isReady ? '#38bdf8' : 'transparent';
+            ctx.shadowBlur = isReady ? 12 : 0;
 
-            // Шевроны >>>
+            // Разгонная полоса на полотне дороги
+            ctx.fillStyle = isReady ? '#0284c7' : 'rgba(71, 85, 105, 0.6)';
+            ctx.fillRect(-28, -3, 56, 6);
+
+            // Шевроны >>> вдоль траектории движения
             for (let c = -1; c <= 1; c++) {
                 const cx = c * 16;
-                const alpha = 0.5 + 0.5 * Math.sin(activePulse + c);
-                ctx.strokeStyle = `rgba(224, 242, 254, ${alpha})`;
-                ctx.lineWidth = 3;
+                const alpha = isReady ? (0.55 + 0.45 * Math.sin(activePulse + c)) : 0.35;
+                ctx.strokeStyle = isReady ? `rgba(224, 242, 254, ${alpha})` : 'rgba(148, 163, 184, 0.5)';
+                ctx.lineWidth = 2.5;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
                 ctx.beginPath();
-                ctx.moveTo(cx - 5, -8);
-                ctx.lineTo(cx + 4, -2);
-                ctx.lineTo(cx - 5, 4);
+                ctx.moveTo(cx - 5, -6);
+                ctx.lineTo(cx + 4, 0);
+                ctx.lineTo(cx - 5, 6);
                 ctx.stroke();
             }
 
