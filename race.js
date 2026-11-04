@@ -1,7 +1,7 @@
-import { player } from './state.js?v=53';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=53';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS } from './utils.js?v=53';
-import { playCoinSound, playBoostSound } from './audio.js?v=53';
+import { player } from './state.js?v=55';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=55';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS } from './utils.js?v=55';
+import { playCoinSound, playBoostSound } from './audio.js?v=55';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -1223,14 +1223,6 @@ function updatePlayerCollisions() {
             if (playerBike.jumpHeight < obstacle.height + 8) applyPlayerImpact(obstacle, 0.9);
             continue;
         }
-        if (obstacle.type === 'spring_pad') {
-            if (!obstacle.playerHit && playerBike.grounded) {
-                obstacle.playerHit = true;
-                playerBike.velocityX += 1.6;
-                playerBike.springBoostTimer = 36;
-            }
-            continue;
-        }
         if (obstacle.type === 'mud' || obstacle.type === 'water_splash' || obstacle.type === 'ice_patch' || obstacle.type === 'wind_fan') {
             if (playerBike.grounded) {
                 if (playerBike.abilities?.mudGrip && ['mud', 'water_splash'].includes(obstacle.type)) {
@@ -1365,14 +1357,6 @@ function updateBotCollisions(bike) {
         if (obstacle.type === 'pulse_gate') {
             if (Math.sin(frameCounter * 0.045 + obstacle.x) > 0.15) continue;
             if (bike.jumpHeight < obstacle.height + 8) applyBotImpact(bike, obstacle, 0.5, 38);
-            continue;
-        }
-        if (obstacle.type === 'spring_pad') {
-            if (!obstacle.botHitBy.has(bike.botIndex) && bike.grounded) {
-                obstacle.botHitBy.add(bike.botIndex);
-                bike.velocityX += 1.6;
-                bike.springBoostTimer = 36;
-            }
             continue;
         }
         if (obstacle.type === 'mud' || obstacle.type === 'water_splash' || obstacle.type === 'ice_patch' || obstacle.type === 'wind_fan') {
@@ -2015,10 +1999,9 @@ function drawObstacle(obstacle) {
     const width = obstacle.width;
     const height = obstacle.height;
 
-    if (obstacle.type === 'mud' || obstacle.type === 'ice_patch' || obstacle.type === 'water_splash' || obstacle.type === 'spring_pad') {
+    if (obstacle.type === 'mud' || obstacle.type === 'ice_patch' || obstacle.type === 'water_splash') {
         ctx.fillStyle = obstacle.color; ctx.beginPath();
         ctx.ellipse(screenX + width / 2, groundY + 1, width / 2, Math.max(5, height / 2), 0, 0, Math.PI * 2); ctx.fill();
-        if (obstacle.type === 'spring_pad') { ctx.strokeStyle = '#dcfce7'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(screenX + 8, groundY - 2); ctx.lineTo(screenX + width - 8, groundY - 2); ctx.stroke(); }
         if (obstacle.type === 'ice_patch') { ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.moveTo(screenX + 10, groundY - 3); ctx.lineTo(screenX + width - 10, groundY - 3); ctx.stroke(); }
         return;
     }

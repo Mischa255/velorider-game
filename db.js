@@ -165,11 +165,11 @@ export const ITEMS_DB = {
     // =====================================
 
     electronics: [
-        part('e1', 'Педальная тяга', 'common', 0, 0, 2, 0, 200, 5),
-        part('e2', 'Shimano Steps E5000', 'rare', 4, 5, -1, 0, 1800, 25),
-        part('e3', 'Bosch Performance Line', 'rare', 6, 7, -2, 0, 2500, 45),
-        part('e4', 'Bosch Performance Line CX', 'legendary', 10, 12, -3, 0, 4000, 70),
-        part('e5', 'Specialized 2.2 Motor', 'legendary', 11, 13, -3, 0, 4500, 90)
+        part('e1', 'Педальная тяга', 'common', 0, 0, 2, 0, 200, 2),
+        part('e2', 'Shimano Steps E5000', 'rare', 4, 5, -1, 0, 1800, 10),
+        part('e3', 'Bosch Performance Line', 'rare', 6, 7, -2, 0, 2500, 18),
+        part('e4', 'Bosch Performance Line CX', 'legendary', 10, 12, -3, 0, 4000, 28),
+        part('e5', 'Specialized 2.2 Motor', 'legendary', 11, 13, -3, 0, 4500, 36)
     ],
 
 
@@ -455,7 +455,6 @@ export const OBSTACLE_TYPES = {
     fallen_branch: { name: '\u041d\u0438\u0437\u043a\u0430\u044f \u0432\u0435\u0442\u043a\u0430', width: 78, height: 30, color: '#65a30d' },
     water_splash: { name: '\u0412\u043e\u0434\u043d\u0430\u044f \u043b\u0443\u0436\u0430', width: 90, height: 14, color: '#38bdf8' },
     wind_fan: { name: '\u0412\u0435\u0442\u0440\u043e\u0432\u043e\u0439 \u0432\u0435\u0435\u0440', width: 46, height: 58, color: '#a5f3fc' },
-    spring_pad: { name: '\u041f\u0440\u0443\u0436\u0438\u043d\u043d\u0430\u044f \u043f\u043b\u0438\u0442\u0430', width: 68, height: 12, color: '#4ade80' },
     ice_patch: { name: '\u041b\u0451\u0434', width: 110, height: 12, color: '#bae6fd' },
     bridge_gap: { name: '\u0420\u0430\u0437\u0440\u0443\u0448\u0435\u043d\u043d\u044b\u0439 \u043c\u043e\u0441\u0442', width: 90, height: 22, color: '#0f172a' },
     pulse_gate: { name: '\u0421\u0432\u0435\u0442\u043e\u0432\u043e\u0439 \u0437\u0430\u0442\u0432\u043e\u0440', width: 52, height: 56, color: '#c084fc' },
@@ -498,7 +497,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 4,
         botAccel: 0.05,
         obstacles: 8,
-        obstacleTypes: ['rock', 'log', 'ramp', 'cone', 'spring_pad', 'mud'],
+        obstacleTypes: ['rock', 'log', 'ramp', 'cone', 'mud'],
         winReward: 500,
         lossReward: 50,
         couponReward: 1
@@ -546,7 +545,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 14,
         botAccel: 0.18,
         obstacles: 45,
-        obstacleTypes: ['barrier', 'log', 'ramp', 'pulse_gate', 'cone', 'spring_pad'],
+        obstacleTypes: ['barrier', 'log', 'ramp', 'pulse_gate', 'cone'],
         winReward: 1000,
         lossReward: 80,
         couponReward: 1
@@ -562,7 +561,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 16,
         botAccel: 0.20,
         obstacles: 50,
-        obstacleTypes: ['log', 'spring_pad', 'wind_fan', 'water_splash', 'cone', 'fallen_branch'],
+        obstacleTypes: ['log', 'wind_fan', 'water_splash', 'cone', 'fallen_branch'],
         winReward: 1200,
         lossReward: 90,
         couponReward: 2
@@ -578,7 +577,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 18,
         botAccel: 0.23,
         obstacles: 60,
-        obstacleTypes: ['rock', 'rolling_boulder', 'mud', 'bridge_gap', 'wind_fan', 'spring_pad'],
+        obstacleTypes: ['rock', 'rolling_boulder', 'mud', 'bridge_gap', 'wind_fan'],
         winReward: 1450,
         lossReward: 100,
         couponReward: 2
@@ -642,7 +641,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 28,
         botAccel: 0.36,
         obstacles: 110,
-        obstacleTypes: ['rock', 'log', 'pit', 'ramp', 'barrier', 'cone', 'mud', 'fallen_branch', 'water_splash', 'wind_fan', 'spring_pad', 'ice_patch', 'bridge_gap', 'pulse_gate', 'rolling_boulder'],
+        obstacleTypes: ['rock', 'log', 'pit', 'ramp', 'barrier', 'cone', 'mud', 'fallen_branch', 'water_splash', 'wind_fan', 'ice_patch', 'bridge_gap', 'pulse_gate', 'rolling_boulder'],
         winReward: 2750,
         lossReward: 160,
         couponReward: 3
