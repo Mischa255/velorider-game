@@ -1,4 +1,4 @@
-import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=42';
+import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=45';
 import {
     player,
     loadPlayerState,
@@ -6,20 +6,20 @@ import {
     clearSavedProgress,
     forceSavePlayerState,
     getServerTime
-} from './state.js?v=42';
+} from './state.js?v=45';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=42';
+} from './race.js?v=45';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=42';
+} from './audio.js?v=45';
 
 const CATEGORY_NAMES = {
     frames: 'Рамы',
@@ -50,6 +50,9 @@ const CATEGORY_NAMES = {
 };
 
 const MIN_SPRINT_RECORD_IMPROVEMENT_MS = 10;
+let sprintRewardCountdownInterval = null;
+let sprintRewardRefreshId = 0;
+let sprintRewardCountdown = { status: 'loading', targetPerformanceTime: 0 };
 
 function getSprintCouponWindowKey(serverDate) {
     if (!(serverDate instanceof Date) || Number.isNaN(serverDate.getTime())) {
@@ -61,6 +64,94 @@ function getSprintCouponWindowKey(serverDate) {
     const windowStartHour = Math.floor(serverDate.getUTCHours() / 6) * 6;
 
     return `${dateKey}T${pad(windowStartHour)}Z`;
+}
+
+function renderSprintRewardCountdown() {
+    const outputs = document.querySelectorAll('.sprint-reward-countdown');
+    if (!outputs.length) {
+        if (sprintRewardCountdownInterval) {
+            clearInterval(sprintRewardCountdownInterval);
+            sprintRewardCountdownInterval = null;
+        }
+        return;
+    }
+
+    let message = '';
+    if (sprintRewardCountdown.status === 'loading') {
+        message = 'Сверяю время…';
+    } else if (sprintRewardCountdown.status === 'error') {
+        message = 'Нет связи с сервером';
+    } else if (sprintRewardCountdown.status === 'baseline') {
+        message = 'Сначала установи рекорд';
+    } else if (sprintRewardCountdown.status === 'available') {
+        message = 'Доступно — побей рекорд';
+    } else {
+        const remainingMs = sprintRewardCountdown.targetPerformanceTime - performance.now();
+        if (remainingMs <= 0) {
+            sprintRewardCountdown.status = 'available';
+            message = 'Доступно — побей рекорд';
+            if (sprintRewardCountdownInterval) {
+                clearInterval(sprintRewardCountdownInterval);
+                sprintRewardCountdownInterval = null;
+            }
+        } else {
+            const totalSeconds = Math.ceil(remainingMs / 1000);
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+            message = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')} UTC`;
+        }
+    }
+
+    outputs.forEach(output => {
+        output.textContent = message;
+    });
+}
+
+async function refreshSprintRewardCountdown() {
+    const refreshId = ++sprintRewardRefreshId;
+    if (sprintRewardCountdownInterval) {
+        clearInterval(sprintRewardCountdownInterval);
+        sprintRewardCountdownInterval = null;
+    }
+
+    sprintRewardCountdown = { status: 'loading', targetPerformanceTime: 0 };
+    renderSprintRewardCountdown();
+
+    try {
+        const serverDate = await getServerTime();
+        if (refreshId !== sprintRewardRefreshId) return;
+
+        const currentWindow = getSprintCouponWindowKey(serverDate);
+
+        if (!(Number(player.bestSprintTime) > 0)) {
+            sprintRewardCountdown.status = 'baseline';
+        } else if (player.lastSprintCouponWindow !== currentWindow) {
+            sprintRewardCountdown.status = 'available';
+        } else {
+            const nextWindow = new Date(serverDate.getTime());
+            nextWindow.setUTCHours(
+                (Math.floor(serverDate.getUTCHours() / 6) + 1) * 6,
+                0,
+                0,
+                0
+            );
+
+            sprintRewardCountdown.status = 'cooldown';
+            sprintRewardCountdown.targetPerformanceTime =
+                performance.now() + (nextWindow.getTime() - serverDate.getTime());
+        }
+
+        renderSprintRewardCountdown();
+        if (sprintRewardCountdown.status === 'cooldown') {
+            sprintRewardCountdownInterval = setInterval(renderSprintRewardCountdown, 1000);
+        }
+    } catch (error) {
+        if (refreshId !== sprintRewardRefreshId) return;
+        console.warn('Не удалось обновить отсчёт спринт-награды:', error);
+        sprintRewardCountdown.status = 'error';
+        renderSprintRewardCountdown();
+    }
 }
 
 const CATEGORY_ICONS = {
@@ -1210,7 +1301,12 @@ function showScreen(screenName) {
 
     if (screenName === 'race') {
         document.getElementById('race-ui')?.classList.add('hidden');
+        const sprintCountdown = document.getElementById('sprint-race-countdown');
+        sprintCountdown?.classList.toggle('hidden', player.selectedTrack !== 'sprint');
         initRace(handleRaceEnd);
+        if (player.selectedTrack === 'sprint') {
+            void refreshSprintRewardCountdown();
+        }
     }
 
     updateHUD();
@@ -2142,6 +2238,10 @@ function updateTracksUI() {
                                 <strong>+2 🎟️ один раз за 6 ч. (UTC)</strong>
                             </div>
                             <div class="track-reward">
+                                <span>До следующего пакета</span>
+                                <strong class="sprint-reward-countdown">Сверяю время…</strong>
+                            </div>
+                            <div class="track-reward">
                                 <span>Соперник</span>
                                 <strong>Призрак рекорда</strong>
                             </div>
@@ -2244,6 +2344,10 @@ function updateTracksUI() {
 
         list.appendChild(card);
     });
+
+    if (list.querySelector('.sprint-reward-countdown')) {
+        void refreshSprintRewardCountdown();
+    }
 }
 
 function randomItem(items) {

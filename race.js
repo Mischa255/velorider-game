@@ -1,5 +1,5 @@
-import { player } from './state.js?v=42';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=42';
+import { player } from './state.js?v=45';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=45';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -99,7 +99,6 @@ let frameCounter = 0;
 let raceFinished = false;
 let raceRunning = false;
 let raceStarted = false;
-let raceStartTime = 0;
 let raceTimeMs = 0;
 let timerStarted = false;
 
@@ -2509,13 +2508,12 @@ function update() {
         raceStarted = true;
     }
 
-    if (!timerStarted && playerBike.velocityX > 0) {
+    // Запускаем секундомер на том же шаге, что и первое ускорение.
+    // Время считается симуляционными кадрами, чтобы лаги браузера не
+    // ускоряли призрака относительно физики игрока.
+    if (!timerStarted && (input.accelerating || playerBike.velocityX > 0.05)) {
         timerStarted = true;
-        raceStartTime = performance.now();
-    }
-
-    if (timerStarted) {
-        raceTimeMs = performance.now() - raceStartTime;
+        raceTimeMs = 0;
     }
 
     frameCounter++;
@@ -2523,6 +2521,10 @@ function update() {
     updatePlayerPhysics();
 
     if (raceFinished) return;
+
+    if (timerStarted) {
+        raceTimeMs += SIMULATION_STEP_MS;
+    }
 
     if (
         playerBike.x >= finishX &&
@@ -2536,7 +2538,9 @@ function update() {
             if (!bike.isGhost || !timerStarted) return;
 
             const previousX = bike.x;
-            const ghostStartX = Number(bike.ghostStartX) || playerBike.x;
+            // Координата 0 — корректная линия старта, её нельзя заменять
+            // текущей позицией игрока через проверку на ложное значение.
+            const ghostStartX = Number(bike.ghostStartX ?? playerBike.x);
             const progress = getSprintGhostProgress(
                 raceTimeMs,
                 player.bestSprintTime
@@ -2692,7 +2696,6 @@ export function initRace(onRaceEnd) {
 
     currentTrackLevel = getTrackLevel();
     timerStarted = false;
-    raceStartTime = 0;
     raceTimeMs = 0;
     lastFrameTime = 0;
     frameAccumulator = 0;
