@@ -1,4 +1,4 @@
-import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=45';
+import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=53';
 import {
     player,
     loadPlayerState,
@@ -6,20 +6,21 @@ import {
     clearSavedProgress,
     forceSavePlayerState,
     getServerTime
-} from './state.js?v=45';
+} from './state.js?v=53';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=45';
+} from './race.js?v=53';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=45';
+} from './audio.js?v=53';
+import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS } from './utils.js?v=53';
 
 const CATEGORY_NAMES = {
     frames: 'Рамы',
@@ -46,10 +47,10 @@ const CATEGORY_NAMES = {
     suspension: 'Подвеска',
     tires: 'Покрышки',
     tubes: 'Камеры',
-    hubs: 'Втулки'
+    hubs: 'Втулки',
+    riders: 'Райдеры'
 };
 
-const MIN_SPRINT_RECORD_IMPROVEMENT_MS = 10;
 let sprintRewardCountdownInterval = null;
 let sprintRewardRefreshId = 0;
 let sprintRewardCountdown = { status: 'loading', targetPerformanceTime: 0 };
@@ -163,7 +164,7 @@ const CATEGORY_ICONS = {
     pedals: '🦶', handlebars: '↔️', stems: '🔧',
     saddles: '🚴', seatposts: '↕️', cassettes: '⚙️',
     shifters: '🎚️', derailleurs: '⚙️', suspension: '〰️',
-    tires: '⭕', tubes: '⭕', hubs: '⚙️'
+    tires: '⭕', tubes: '⭕', hubs: '⚙️', riders: '🚴'
 };
 
 const RARITY_NAMES = {
@@ -280,594 +281,7 @@ function escapeHTML(value) {
 }
 
 function ensureGarageStyles() {
-    if (document.getElementById('garage-v2-styles')) return;
-
-    const style = document.createElement('style');
-    style.id = 'garage-v2-styles';
-
-    style.textContent = `
-        #screen-garage.garage-v2 {
-            display:block;
-            width:100%;
-            height:100%;
-            min-height:0;
-        }
-
-        #screen-garage.garage-v2.hidden {
-            display:none;
-        }
-
-        .garage-v2,
-        .garage-v2 * {
-            box-sizing:border-box;
-        }
-
-        .garage-page {
-            height:100%;
-            width:100%;
-            overflow-y:auto;
-            overflow-x:hidden;
-            padding:clamp(12px,2vw,28px);
-            color:#e5edf5;
-        }
-
-        .garage-page::-webkit-scrollbar { width:8px; }
-        .garage-page::-webkit-scrollbar-thumb {
-            background:#334155;
-            border-radius:20px;
-        }
-
-        .garage-heading {
-            display:flex;
-            align-items:flex-end;
-            justify-content:space-between;
-            gap:18px;
-            margin:0 auto 22px;
-            max-width:1500px;
-        }
-
-        .garage-eyebrow {
-            color:#67e8a5;
-            font-size:11px;
-            font-weight:900;
-            letter-spacing:.22em;
-            text-transform:uppercase;
-        }
-
-        .garage-title {
-            margin:5px 0 0;
-            font-size:clamp(25px,3vw,38px);
-            line-height:1.05;
-            font-weight:950;
-            letter-spacing:-.04em;
-            color:#f8fafc;
-        }
-
-        .garage-subtitle {
-            color:#94a3b8;
-            font-size:13px;
-            margin-top:8px;
-        }
-
-        .garage-actions {
-            display:flex;
-            flex-wrap:wrap;
-            gap:9px;
-        }
-
-        .garage-action {
-            border:1px solid #334155;
-            border-radius:12px;
-            padding:11px 15px;
-            font-size:12px;
-            font-weight:900;
-            letter-spacing:.04em;
-            background:#172334;
-            color:#dbeafe;
-            transition:.18s ease;
-        }
-
-        .garage-action:hover {
-            transform:translateY(-2px);
-            border-color:#64748b;
-            background:#22334a;
-        }
-
-        .garage-action.primary {
-            background:linear-gradient(135deg,#16a34a,#15803d);
-            color:white;
-            border-color:#22c55e;
-            box-shadow:0 8px 25px #16a34a2c;
-        }
-
-        .garage-overview {
-            max-width:1500px;
-            margin:0 auto;
-            display:grid;
-            grid-template-columns:minmax(0,1.2fr) minmax(310px,.8fr);
-            gap:16px;
-        }
-
-        .garage-panel {
-            background:linear-gradient(145deg,#182536,#111b2a);
-            border:1px solid #29394d;
-            border-radius:21px;
-            box-shadow:0 16px 42px #02061738;
-            min-width:0;
-        }
-
-        .garage-bike-panel {
-            padding:clamp(16px,2vw,26px);
-            position:relative;
-            overflow:hidden;
-            isolation:isolate;
-        }
-
-        .garage-bike-panel:before {
-            content:'';
-            position:absolute;
-            z-index:-1;
-            inset:0;
-            opacity:.3;
-            background:
-                radial-gradient(ellipse at 65% 45%,#0f766e55,transparent 58%),
-                linear-gradient(135deg,transparent 55%,#38bdf811);
-        }
-
-        .garage-panel-top {
-            display:flex;
-            align-items:center;
-            justify-content:space-between;
-            gap:12px;
-        }
-
-        .garage-section-label {
-            color:#94a3b8;
-            font-size:11px;
-            font-weight:900;
-            text-transform:uppercase;
-            letter-spacing:.16em;
-        }
-
-        .garage-status {
-            border:1px solid #166534;
-            color:#86efac;
-            background:#14532d40;
-            border-radius:999px;
-            padding:6px 10px;
-            font-size:10px;
-            font-weight:900;
-            letter-spacing:.08em;
-        }
-
-        .garage-bike-stage {
-            min-height:250px;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            position:relative;
-            padding:15px 0 0;
-        }
-
-        .garage-bike-stage:after {
-            content:'';
-            position:absolute;
-            left:8%;
-            right:8%;
-            bottom:24px;
-            height:1px;
-            background:linear-gradient(90deg,transparent,#64748b88,transparent);
-        }
-
-        .garage-bike-svg {
-            width:min(100%,680px);
-            height:auto;
-            overflow:visible;
-            filter:drop-shadow(0 18px 20px #0007);
-        }
-
-        .garage-bike-svg .bike-frame { stroke:var(--garage-bike-accent,#38bdf8); }
-        .garage-bike-svg .bike-metal { stroke:#cbd5e1; }
-        .garage-bike-svg .bike-tire { stroke:#020617; }
-        .garage-bike-svg .bike-spoke { stroke:#64748b; }
-        .garage-bike-svg .bike-detail { stroke:#f8fafc; }
-
-        .garage-bike-name {
-            display:flex;
-            align-items:center;
-            justify-content:space-between;
-            flex-wrap:wrap;
-            gap:10px;
-            border-top:1px solid #334155a6;
-            padding-top:17px;
-            margin-top:4px;
-        }
-
-        .garage-bike-model {
-            font-size:clamp(18px,2vw,24px);
-            font-weight:950;
-            color:#f8fafc;
-        }
-
-        .garage-bike-caption {
-            font-size:12px;
-            color:#94a3b8;
-            margin-top:4px;
-        }
-
-        .garage-frame-rarity {
-            font-size:10px;
-            font-weight:900;
-            letter-spacing:.1em;
-            text-transform:uppercase;
-            border:1px solid #475569;
-            background:#0f172a88;
-            padding:7px 10px;
-            border-radius:9px;
-        }
-
-        .garage-completeness {
-            display:flex;
-            align-items:center;
-            gap:10px;
-            color:#94a3b8;
-            font-size:11px;
-            margin-top:17px;
-        }
-
-        .garage-completeness-track {
-            height:6px;
-            background:#0f172a;
-            border-radius:99px;
-            overflow:hidden;
-            flex:1;
-        }
-
-        .garage-completeness-fill {
-            height:100%;
-            background:linear-gradient(90deg,#22c55e,#5eead4);
-            border-radius:99px;
-        }
-
-        .garage-stats-panel { padding:clamp(16px,2vw,24px); }
-
-        .garage-stats-title {
-            font-size:17px;
-            font-weight:950;
-            margin:7px 0 4px;
-            color:#f8fafc;
-        }
-
-        .garage-stats-desc {
-            color:#94a3b8;
-            font-size:12px;
-            margin-bottom:16px;
-        }
-
-        .garage-stat-grid {
-            display:grid;
-            grid-template-columns:repeat(2,minmax(0,1fr));
-            gap:10px;
-        }
-
-        .garage-stat-card {
-            position:relative;
-            overflow:hidden;
-            border:1px solid #334155;
-            background:linear-gradient(145deg,#0f1b2a,#111827);
-            border-radius:15px;
-            padding:13px;
-            min-height:106px;
-        }
-
-        .garage-stat-card:after {
-            content:'';
-            position:absolute;
-            width:80px;
-            height:80px;
-            right:-25px;
-            bottom:-35px;
-            border-radius:50%;
-            background:var(--stat-glow,#38bdf8);
-            opacity:.08;
-            filter:blur(5px);
-        }
-
-        .garage-stat-top {
-            display:flex;
-            align-items:center;
-            gap:7px;
-            color:#94a3b8;
-            font-size:11px;
-            font-weight:800;
-        }
-
-        .garage-stat-icon { font-size:15px; }
-
-        .garage-stat-value {
-            font-size:27px;
-            line-height:1;
-            font-weight:950;
-            color:#f8fafc;
-            margin-top:14px;
-            letter-spacing:-.04em;
-        }
-
-        .garage-stat-unit {
-            font-size:10px;
-            color:#64748b;
-            margin-left:5px;
-            font-weight:700;
-        }
-
-        .garage-extra-stats {
-            display:flex;
-            flex-wrap:wrap;
-            gap:7px;
-            margin-top:12px;
-        }
-
-        .garage-extra-stat {
-            display:inline-flex;
-            gap:6px;
-            align-items:center;
-            border:1px solid #334155;
-            background:#0f172a88;
-            border-radius:9px;
-            padding:7px 9px;
-            color:#cbd5e1;
-            font-size:11px;
-        }
-
-        .garage-lower {
-            max-width:1500px;
-            display:grid;
-            grid-template-columns:minmax(0,1fr);
-            gap:16px;
-            margin:16px auto 0;
-        }
-
-        .garage-equipment-panel,
-        .garage-workshop-panel {
-            padding:clamp(16px,2vw,23px);
-        }
-
-        .garage-section-head {
-            display:flex;
-            justify-content:space-between;
-            align-items:flex-end;
-            gap:12px;
-            margin-bottom:15px;
-        }
-
-        .garage-section-title {
-            font-size:18px;
-            font-weight:950;
-            color:#f8fafc;
-            margin-top:5px;
-        }
-
-        .garage-section-note {
-            color:#94a3b8;
-            font-size:11px;
-        }
-
-        .garage-equipped-grid {
-            display:grid;
-            grid-template-columns:repeat(auto-fill,minmax(min(100%,250px),1fr));
-            gap:9px;
-        }
-
-        .garage-equipped-card {
-            display:flex;
-            flex-direction:column;
-            gap:10px;
-            min-width:0;
-            padding:13px;
-            border-radius:14px;
-            border:1px solid #334155;
-            background:linear-gradient(135deg,#111d2c,#0f172a);
-        }
-
-        .garage-equipped-card.is-empty {
-            border-style:dashed;
-            background:#0f172a55;
-        }
-
-        .garage-part-head {
-            display:flex;
-            align-items:flex-start;
-            gap:10px;
-        }
-
-        .garage-part-icon {
-            width:36px;
-            height:36px;
-            display:grid;
-            place-items:center;
-            flex-shrink:0;
-            border-radius:10px;
-            background:#33415566;
-            font-size:17px;
-        }
-
-        .garage-part-info {
-            flex:1;
-            min-width:0;
-        }
-
-        .garage-part-category {
-            color:#64748b;
-            font-size:9px;
-            font-weight:900;
-            letter-spacing:.12em;
-            text-transform:uppercase;
-        }
-
-        .garage-part-name {
-            color:#e2e8f0;
-            font-weight:850;
-            font-size:13px;
-            line-height:1.35;
-            overflow-wrap:anywhere;
-            margin-top:3px;
-        }
-
-        .garage-part-rarity {
-            font-size:9px;
-            font-weight:900;
-            padding:5px 7px;
-            border-radius:7px;
-            background:#1e293b;
-            white-space:nowrap;
-        }
-
-        .garage-part-stats {
-            display:flex;
-            flex-wrap:wrap;
-            gap:5px;
-        }
-
-        .garage-part-stat {
-            display:inline-flex;
-            gap:4px;
-            align-items:center;
-            color:#cbd5e1;
-            background:#1e293b;
-            padding:5px 7px;
-            border-radius:7px;
-            font-size:10px;
-        }
-
-        .garage-empty-text {
-            color:#94a3b8;
-            font-size:12px;
-        }
-
-        .garage-empty-button {
-            align-self:flex-start;
-            border:1px solid #475569;
-            color:#bfdbfe;
-            font-size:10px;
-            font-weight:900;
-            border-radius:8px;
-            padding:7px 9px;
-            background:#1e293b;
-        }
-
-        .garage-workshop-intro {
-            color:#94a3b8;
-            font-size:12px;
-            margin-top:5px;
-        }
-
-        #garage-upgrade-categories {
-            display:flex;
-            flex-wrap:wrap;
-            gap:8px;
-            margin:15px 0;
-        }
-
-        #garage-upgrade-categories button {
-            border:1px solid #334155;
-            border-radius:11px;
-            background:#111d2c;
-            padding:10px 12px;
-            color:#cbd5e1;
-            min-width:125px;
-            font-size:12px;
-        }
-
-        #garage-upgrade-categories button:hover {
-            border-color:#64748b;
-            background:#243449;
-        }
-
-        #garage-upgrade-categories button.garage-selected-category {
-            border-color:#22c55e;
-            background:#14532d66;
-            color:#dcfce7;
-        }
-
-        #garage-upgrade-category-title {
-            font-size:16px;
-            font-weight:900;
-            color:#f8fafc;
-            margin:16px 0 12px;
-        }
-
-        #garage-upgrade-parts {
-            display:grid;
-            grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr));
-            gap:10px;
-        }
-
-        #garage-upgrade-parts > div {
-            border-color:#334155 !important;
-            background:linear-gradient(145deg,#111d2c,#0f172a) !important;
-            border-radius:14px !important;
-        }
-
-        .upgrade-part-title-row { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
-        .upgrade-part-title { min-width:0; overflow-wrap:anywhere; }
-        .upgrade-part-info { position:relative; flex:0 0 auto; }
-        .upgrade-part-info-button {
-            display:grid; place-items:center; width:25px; height:25px; padding:0 !important;
-            border:1px solid #fbbf24 !important; border-radius:50% !important;
-            color:#fde68a !important; background:#78350f !important;
-            font-size:14px !important; font-weight:900; line-height:1;
-        }
-        .upgrade-part-info-panel {
-            display:none; position:absolute; z-index:20; top:31px; right:0;
-            width:min(260px, calc(100vw - 48px)); padding:11px;
-            border:1px solid #a16207; border-radius:10px; color:#fef3c7;
-            background:#1c1917; box-shadow:0 8px 24px #0009;
-            font-size:11px; font-weight:500; line-height:1.5;
-        }
-        .upgrade-part-info-panel.is-open { display:block; }
-        .upgrade-part-info-panel .garage-part-stats { margin-top:8px; }
-        .upgrade-part-info-close {
-            float:right; margin:-5px -5px 4px 8px; padding:0 5px !important;
-            color:#fde68a !important; background:transparent !important;
-            font-size:22px !important; line-height:1.1;
-        }
-
-        #garage-upgrade-parts button {
-            border-radius:10px;
-            font-size:11px;
-            font-weight:900;
-        }
-
-        .garage-catalog-summary {
-            font-size:11px;
-            color:#64748b;
-            margin-top:10px;
-        }
-
-        @media (max-width:950px) {
-            .garage-overview { grid-template-columns:1fr; }
-            .garage-bike-stage { min-height:210px; }
-        }
-
-        @media (max-width:600px) {
-            .garage-heading {
-                align-items:flex-start;
-                flex-direction:column;
-            }
-
-            .garage-actions { width:100%; }
-
-            .garage-action { flex:1; }
-
-            .garage-stat-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
-
-            .garage-bike-stage { min-height:165px; }
-
-            .garage-equipped-grid { grid-template-columns:1fr; }
-        }
-    `;
-
-    document.head.appendChild(style);
+    // Стили перенесены в garage.css
 }
 
 function ensureGarageLayout() {
@@ -1094,7 +508,12 @@ const DUPLICATE_COMPENSATION = {
 };
 
 function getUpgradePrice(part) {
+    if (!part) return 0;
+    if (part.currency === 'coupon' || part.id === 'r5') return Number(part.price) || 100;
     const basePrice = Math.max(0, Number(part?.price) || 0);
+    if (part.category === 'riders' || (part.id && part.id.startsWith('r'))) {
+        return basePrice;
+    }
     const multiplier = part?.rarity === 'common' ? 1.3 : part?.rarity === 'rare' ? 1.5 : 1;
     return Math.round(basePrice * multiplier / 10) * 10;
 }
@@ -1466,7 +885,8 @@ function calculateBikeStats() {
         speed: 0,
         accel: 0,
         jump: 0,
-        brake: 0
+        brake: 0,
+        power: 0
     };
 
     const equippedParts = [];
@@ -1487,6 +907,7 @@ function calculateBikeStats() {
     player.totalAccel = totals.accel || 0;
     player.totalJump = totals.jump || 0;
     player.totalBrake = totals.brake || 0;
+    player.totalPower = totals.power || 0;
     player.totalStats = { ...totals };
 
     return {
@@ -1598,7 +1019,8 @@ function renderGarageStats(stats) {
         { key: 'speed', label: 'Максимальная скорость', icon: '🏁', glow: '#38bdf8' },
         { key: 'accel', label: 'Ускорение', icon: '⚡', glow: '#fb923c' },
         { key: 'jump', label: 'Сила прыжка', icon: '🪂', glow: '#a78bfa' },
-        { key: 'brake', label: 'Торможение', icon: '🛑', glow: '#fb7185' }
+        { key: 'brake', label: 'Торможение', icon: '🛑', glow: '#fb7185' },
+        { key: 'power', label: 'Мощность подъёма', icon: '🔋', glow: '#eab308' }
     ];
 
     grid.innerHTML = mainStats.map(stat => `
@@ -1889,7 +1311,7 @@ function updateUpgradeUI() {
     categoryItems.forEach(part => {
         const owned = hasPart(category, part.id);
         const equipped = player.equipped?.[category] === part.id;
-        const unlocked = isRarityUnlocked(part.rarity);
+        const unlocked = category === 'riders' ? true : isRarityUnlocked(part.rarity);
         const price = getUpgradePrice(part);
 
         const card = document.createElement('div');
@@ -1939,6 +1361,9 @@ function updateUpgradeUI() {
         const equippedId = player.equipped?.[category];
         const slotOccupied = equippedId !== undefined && equippedId !== null && equippedId !== '';
 
+        const isCouponItem = part.currency === 'coupon' || part.id === 'r5';
+        const priceLabel = isCouponItem ? `${price} 🎟️` : `${price.toLocaleString('ru-RU')} 🪙`;
+
         if (equipped) {
             actionHTML = `
                 <button disabled
@@ -1950,30 +1375,42 @@ function updateUpgradeUI() {
             if (owned) {
                 actionHTML = `
                     <button class="replace-part-button bg-blue-700 hover:bg-blue-600 py-3 rounded-lg font-bold w-full">
-                        🔄 Заменить
+                        🔄 Выбрать райдера
                     </button>
                 `;
-            } else if (part.rarity === 'legendary') {
+            } else if (isCouponItem) {
+                actionHTML = `
+                    <button class="replace-part-button bg-amber-600 hover:bg-amber-500 py-3 rounded-lg font-bold w-full text-white shadow-lg">
+                        🎟️ Нанять за ${priceLabel}
+                    </button>
+                `;
+            } else if (part.rarity === 'legendary' && category !== 'riders') {
                 actionHTML = '<div class="text-xs text-amber-300">🌟 Можно получить только из контейнера</div>';
             } else {
                 actionHTML = `
                     <button class="replace-part-button bg-blue-700 hover:bg-blue-600 py-3 rounded-lg font-bold w-full">
-                        🪙 Купить и заменить за ${price} 🪙
+                        🪙 Купить и выбрать за ${priceLabel}
                     </button>
                 `;
             }
         } else if (owned) {
             actionHTML = `
                 <button class="install-part-button bg-blue-700 hover:bg-blue-600 py-3 rounded-lg font-bold w-full">
-                    Установить
+                    Выбрать
                 </button>
             `;
-        } else if (part.rarity === 'legendary') {
+        } else if (isCouponItem) {
+            actionHTML = `
+                <button class="buy-part-button bg-amber-600 hover:bg-amber-500 py-3 rounded-lg font-bold w-full text-white shadow-lg">
+                    🎟️ Нанять за ${priceLabel}
+                </button>
+            `;
+        } else if (part.rarity === 'legendary' && category !== 'riders') {
             actionHTML = '<div class="text-xs text-amber-300">🌟 Можно получить только из контейнера</div>';
         } else {
             actionHTML = `
                 <button class="buy-part-button bg-yellow-600 hover:bg-yellow-500 py-3 rounded-lg font-bold w-full">
-                    Купить за ${price} 🪙
+                    Купить за ${priceLabel}
                 </button>
             `;
         }
@@ -2033,7 +1470,28 @@ function buyPart(category, id) {
     const part = ITEMS_DB[category]?.find(item => item.id === id);
     if (!part) return;
 
-    if (part.rarity === 'legendary') {
+    if (hasPart(category, id)) {
+        alert('Этот предмет уже есть в инвентаре!');
+        return;
+    }
+
+    if (part.currency === 'coupon' || part.id === 'r5') {
+        const couponPrice = Number(part.price) || 100;
+        const coupons = Math.max(0, Number(player.coupons) || 0);
+        if (coupons < couponPrice) {
+            alert(`Недостаточно Велокупонов! Нужно ${couponPrice} 🎟️ (у вас: ${coupons} 🎟️)`);
+            return;
+        }
+        player.coupons = coupons - couponPrice;
+        player.inventory.push(partKey(category, id));
+        updateHUD();
+        updateUpgradeUI();
+        updateGarageUI();
+        void forceSavePlayerState();
+        return;
+    }
+
+    if (part.rarity === 'legendary' && category !== 'riders') {
         alert('Легендарные детали можно получить только из контейнеров!');
         return;
     }
@@ -2068,7 +1526,29 @@ function buyAndReplacePart(category, id) {
     const part = ITEMS_DB[category]?.find(item => item.id === id);
     if (!part) return;
 
-    if (part.rarity === 'legendary') {
+    if (hasPart(category, id)) {
+        installPart(category, id);
+        return;
+    }
+
+    if (part.currency === 'coupon' || part.id === 'r5') {
+        const couponPrice = Number(part.price) || 100;
+        const coupons = Math.max(0, Number(player.coupons) || 0);
+        if (coupons < couponPrice) {
+            alert(`Недостаточно Велокупонов! Нужно ${couponPrice} 🎟️ (у вас: ${coupons} 🎟️)`);
+            return;
+        }
+        player.coupons = coupons - couponPrice;
+        player.inventory.push(partKey(category, id));
+        installPart(category, id);
+        updateHUD();
+        updateUpgradeUI();
+        updateGarageUI();
+        void forceSavePlayerState();
+        return;
+    }
+
+    if (part.rarity === 'legendary' && category !== 'riders') {
         alert('Легендарные детали можно получить только из контейнеров!');
         return;
     }
@@ -2348,11 +1828,6 @@ function updateTracksUI() {
     if (list.querySelector('.sprint-reward-countdown')) {
         void refreshSprintRewardCountdown();
     }
-}
-
-function randomItem(items) {
-    if (!items || !items.length) return null;
-    return items[Math.floor(Math.random() * items.length)];
 }
 
 function grantGuaranteedPart(rarity) {
@@ -2679,7 +2154,7 @@ function showRaceResult(win, reason, bonusText) {
     }
 }
 
-async function handleRaceEnd(win, reason = 'finish', raceTimeMs = 0) {
+async function handleRaceEnd(win, reason = 'finish', raceTimeMs = 0, collectedCoins = 0) {
     const selectedId = player.selectedTrack;
 
     if (selectedId === 'sprint') {
@@ -2742,6 +2217,9 @@ async function handleRaceEnd(win, reason = 'finish', raceTimeMs = 0) {
     let bonusText = result
         ? `Победа: +${rewardCoins.toLocaleString('ru-RU')} 🪙`
         : `Поражение: +${rewardCoins.toLocaleString('ru-RU')} 🪙`;
+    if (collectedCoins > 0) {
+        bonusText += `<br>🪙 Собрано на трассе: +${collectedCoins.toLocaleString('ru-RU')} 🪙 (уже на балансе)`;
+    }
 
     if (result) {
         player.totalWins = (Number(player.totalWins) || 0) + 1;

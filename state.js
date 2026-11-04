@@ -124,7 +124,8 @@ function createDefaultPlayer() {
             'cranks:cr1',
             'wheels:w1',
             'brakes:b1',
-            'electronics:e1'
+            'electronics:e1',
+            'riders:r1'
         ],
 
         // =====================================
@@ -171,7 +172,8 @@ function createDefaultPlayer() {
             cranks: 'cr1',
             wheels: 'w1',
             brakes: 'b1',
-            electronics: 'e1'
+            electronics: 'e1',
+            riders: 'r1'
         },
 
         // =====================================
@@ -180,7 +182,8 @@ function createDefaultPlayer() {
         totalSpeed: 0,
         totalAccel: 0,
         totalJump: 0,
-        totalBrake: 0
+        totalBrake: 0,
+        totalPower: 0
     };
 }
 
@@ -324,6 +327,9 @@ function sanitizeLoadedState(raw) {
     merged.totalAccel = Number(merged.totalAccel) || 0;
     merged.totalJump = Number(merged.totalJump) || 0;
     merged.totalBrake = Number(merged.totalBrake) || 0;
+    merged.totalPower = Number(merged.totalPower) || 0;
+    if (!merged.equipped.riders) merged.equipped.riders = 'r1';
+    if (!merged.inventory.includes('riders:r1')) merged.inventory.push('riders:r1');
     merged.selectedTrack = String(merged.selectedTrack || 't1');
     merged.track1RewardClaimed = Boolean(merged.track1RewardClaimed);
 
@@ -488,7 +494,8 @@ function toPlayerSaveData(source) {
         totalSpeed: source.totalSpeed,
         totalAccel: source.totalAccel,
         totalJump: source.totalJump,
-        totalBrake: source.totalBrake
+        totalBrake: source.totalBrake,
+        totalPower: source.totalPower
     };
 }
 

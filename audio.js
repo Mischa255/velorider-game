@@ -1,3 +1,5 @@
+import { clamp } from './utils.js?v=53';
+
 const AUDIO_STORAGE_KEY = 'velorider_audio_settings_v9';
 
 // ============================================================
@@ -25,10 +27,6 @@ let resumePromise = null;
 // ------------------------------------------------------------
 // Вспомогательные функции
 // ------------------------------------------------------------
-
-function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
-}
 
 function setStatus(message) {
     const status = document.getElementById('audio-status');
@@ -223,6 +221,20 @@ function midiToFrequency(note) {
 // ------------------------------------------------------------
 // Звуки победы/поражения
 // ------------------------------------------------------------
+
+export function playCoinSound() {
+    if (!audioContext || !audioUnlocked || !enabled) return;
+    const now = audioContext.currentTime;
+    scheduleTone(987.77, now, 0.07, { type: 'sine', gain: 0.1, attack: 0.002, release: 0.05 });
+    scheduleTone(1318.51, now + 0.05, 0.12, { type: 'sine', gain: 0.12, attack: 0.002, release: 0.08 });
+}
+
+export function playBoostSound() {
+    if (!audioContext || !audioUnlocked || !enabled) return;
+    const now = audioContext.currentTime;
+    scheduleTone(260, now, 0.18, { type: 'triangle', gain: 0.12, attack: 0.01, release: 0.15, cutoff: 3500 });
+    scheduleTone(520, now + 0.07, 0.22, { type: 'sine', gain: 0.14, attack: 0.01, release: 0.18 });
+}
 
 export function playRaceResult(win) {
     if (!audioContext || !audioUnlocked || !enabled) return;

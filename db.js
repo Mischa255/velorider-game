@@ -7,9 +7,11 @@ const part = (
     accel,
     jump,
     brake,
-    price
+    price,
+    power = 0
 ) => {
     const partData = { id, name, rarity, speed, accel, jump, brake, price };
+    if (power) partData.power = power;
     const legendaryAbilities = {
         f3: { id: 'frameGuard', name: 'Карбоновый монокок', description: 'Первое столкновение с твёрдым препятствием за гонку наносит меньше потери скорости.' },
         f8: { id: 'shockFrame', name: 'Гибкая рама', description: 'После удара велосипед восстанавливает скорость на 15% быстрее.' },
@@ -163,11 +165,11 @@ export const ITEMS_DB = {
     // =====================================
 
     electronics: [
-        part('e1', 'Педальная тяга', 'common', 0, 0, 2, 0, 200),
-        part('e2', 'Shimano Steps E5000', 'rare', 4, 5, -1, 0, 1800),
-        part('e3', 'Bosch Performance Line', 'rare', 6, 7, -2, 0, 2500),
-        part('e4', 'Bosch Performance Line CX', 'legendary', 10, 12, -3, 0, 4000),
-        part('e5', 'Specialized 2.2 Motor', 'legendary', 11, 13, -3, 0, 4500)
+        part('e1', 'Педальная тяга', 'common', 0, 0, 2, 0, 200, 5),
+        part('e2', 'Shimano Steps E5000', 'rare', 4, 5, -1, 0, 1800, 25),
+        part('e3', 'Bosch Performance Line', 'rare', 6, 7, -2, 0, 2500, 45),
+        part('e4', 'Bosch Performance Line CX', 'legendary', 10, 12, -3, 0, 4000, 70),
+        part('e5', 'Specialized 2.2 Motor', 'legendary', 11, 13, -3, 0, 4500, 90)
     ],
 
 
@@ -304,6 +306,30 @@ export const ITEMS_DB = {
         part('hu4', 'DT Swiss 350', 'rare', 4, 4, 0, 3, 900),
         part('hu5', 'DT Swiss 240 EXP', 'legendary', 7, 7, 0, 4, 1800),
         part('hu6', 'Industry Nine Hydra', 'legendary', 8, 8, 0, 5, 2500)
+    ],
+
+    // =====================================
+    // РАЙДЕРЫ (ГОНЩИКИ)
+    // Добавляют только мощность подъёма!
+    // =====================================
+
+    riders: [
+        part('r1', 'Школьник', 'common', 0, 0, 0, 0, 1000, 10),
+        part('r2', 'Велолюбитель', 'common', 0, 0, 0, 0, 2800, 24),
+        part('r3', 'Дорожник', 'common', 0, 0, 0, 0, 5800, 40),
+        part('r4', 'Велокурьер', 'rare', 0, 0, 0, 0, 10000, 65),
+        {
+            id: 'r5',
+            name: 'Джон',
+            rarity: 'legendary',
+            speed: 0,
+            accel: 0,
+            jump: 0,
+            brake: 0,
+            price: 100,
+            power: 100,
+            currency: 'coupon'
+        }
     ]
 };
 

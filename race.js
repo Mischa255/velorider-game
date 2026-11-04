@@ -1,5 +1,7 @@
-import { player } from './state.js?v=45';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=45';
+import { player } from './state.js?v=53';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=53';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS } from './utils.js?v=53';
+import { playCoinSound, playBoostSound } from './audio.js?v=53';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -8,7 +10,6 @@ import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=45';
 // =========================================
 
 const GRAVITY = 0.42;
-const MIN_SPRINT_RECORD_IMPROVEMENT_MS = 10;
 const SIMULATION_STEP_MS = 1000 / 60;
 const MAX_FRAME_DELTA_MS = 100;
 const SPRINT_GHOST_ACCELERATION_SECONDS = 1.2;
@@ -113,23 +114,19 @@ let playerBike = null;
 let botBike = null;
 let additionalBots = [];
 let activeBots = [];
+let collectedRaceCoins = 0;
+let collectibles = [];
+let floatingTexts = [];
+let powerWarningCooldown = 0;
+
 let currentTrackLevel = 1;
 
 // =========================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 // =========================================
 
-function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
-}
 function isMobileScreen() {
     return window.matchMedia('(max-width: 768px)').matches;
-}
-
-function randomItem(items) {
-    if (!items || !items.length) return null;
-
-    return items[Math.floor(Math.random() * items.length)];
 }
 
 function getTrackBalance(trackId) {
@@ -166,7 +163,8 @@ function getBotDifficultyTrack(botIndex) {
     }
 
     if (botIndex === 2) {
-        return storyTracks[Math.max(0, currentIndex - 1)];
+        // Лера получает ту же трассу сложности, что и Макс, для честной борьбы!
+        return storyTracks[currentIndex];
     }
 
     return storyTracks[currentIndex];
@@ -183,27 +181,71 @@ function getBotDifficultyStats(botIndex) {
     const fallbackAccel =
         Number(currentTrack?.botAccel) || 0.05;
 
-    const rawSpeed =
-        Number(difficultyTrack?.botMaxSpeed) || fallbackSpeed;
+    const rawSpeed = Number(difficultyTrack?.botMaxSpeed) || fallbackSpeed;
+    const rawAcceleration = Number(difficultyTrack?.botAccel) || fallbackAccel;
 
-    const rawAcceleration =
-        Number(difficultyTrack?.botAccel) || fallbackAccel;
+    // Уникальные стили гонщиков: Макс - резкий старт и ускорение, Лера - высокая максималка и накат
+    const styleSpeedMult = botIndex === 1 ? 0.98 : 1.05;
+    const styleAccelMult = botIndex === 1 ? 1.08 : 0.97;
 
     return {
         trackId: difficultyTrack?.id || currentTrack?.id,
 
         maxSpeed: Math.max(
             1.5,
-            rawSpeed * balance.speed
+            rawSpeed * balance.speed * styleSpeedMult
         ),
 
         acceleration: Math.max(
             0.012,
-            rawAcceleration * balance.accel
+            rawAcceleration * balance.accel * styleAccelMult
         ),
 
         jumpForce: balance.jumpForce
     };
+}
+
+
+function addFloatingText(x, y, text, color = '#facc15') {
+    floatingTexts.push({
+        x,
+        y,
+        text,
+        color,
+        opacity: 1.0,
+        vy: -1.2,
+        life: 45
+    });
+}
+
+function updateFloatingTexts() {
+    for (let i = floatingTexts.length - 1; i >= 0; i--) {
+        const item = floatingTexts[i];
+        item.y += item.vy;
+        item.life--;
+        item.opacity = Math.max(0, item.life / 45);
+        if (item.life <= 0) {
+            floatingTexts.splice(i, 1);
+        }
+    }
+}
+
+function drawFloatingTexts() {
+    if (!floatingTexts.length) return;
+    ctx.save();
+    ctx.font = 'bold 14px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    floatingTexts.forEach(item => {
+        const sx = item.x - cameraX;
+        if (sx < -80 || sx > viewWidth + 80) return;
+        ctx.globalAlpha = item.opacity;
+        ctx.fillStyle = '#000000';
+        ctx.fillText(item.text, sx + 1, item.y + 1);
+        ctx.fillStyle = item.color;
+        ctx.fillText(item.text, sx, item.y);
+    });
+    ctx.restore();
 }
 
 // =========================================
@@ -291,114 +333,167 @@ function isTouchingObstacle(bike, obstacle) {
         bikeLeft <= obstacle.x + obstacle.width;
 }
 
+function createObstacles() {
+    if (!currentTrack || currentTrack.id === 'sprint') return [];
+
+    const typePool = Array.isArray(currentTrack.obstacleTypes)
+        ? currentTrack.obstacleTypes.filter(type => OBSTACLE_TYPES[type])
+        : Object.keys(OBSTACLE_TYPES);
+    if (!typePool.length) return [];
+
+    const configuredCount = Math.max(1, Number(currentTrack.obstacles) || 1);
+    const obstacleCount = Math.max(
+        1,
+        Math.floor(configuredCount * (3 + Math.max(0, currentTrackLevel - 1) * 0.07))
+    );
+    const firstObstacleX = 900;
+    const lastObstacleX = Math.max(firstObstacleX, finishX - 1200);
+    const usableLength = Math.max(1, lastObstacleX - firstObstacleX);
+    const spacing = obstacleCount > 1
+        ? usableLength / (obstacleCount - 1)
+        : usableLength;
+    const generated = [];
+    let previousRight = firstObstacleX - 120;
+
+    for (let index = 0; index < obstacleCount; index++) {
+        const type = randomItem(typePool);
+        const definition = OBSTACLE_TYPES[type];
+        if (!definition) continue;
+
+        const jitter = (Math.random() - 0.5) * Math.min(260, spacing * 0.32);
+        const targetX = firstObstacleX + spacing * index + jitter;
+        const x = Math.max(
+            targetX,
+            previousRight + 90,
+            firstObstacleX
+        );
+        if (x > finishX - definition.width - 500) break;
+
+        generated.push({
+            id: `${currentTrack.id}-obstacle-${index}`,
+            type,
+            x,
+            width: definition.width,
+            height: definition.height,
+            color: definition.color,
+            playerHit: false,
+            botHitBy: new Set(),
+            botJumpAttemptedBy: new Set(),
+            playerRampUsed: false,
+            botRampUsedBy: new Set()
+        });
+        previousRight = x + definition.width;
+    }
+
+    return generated.sort((a, b) => a.x - b.x);
+}
+
 // =========================================
 // СПОСОБНОСТИ БОТОВ
 // =========================================
 
 function getBotAbilities(botIndex) {
     return {
-        nitroUnlocked:
-            currentTrackLevel >= 5 &&
-            botIndex === 1,
+        // Оба бота умеют использовать нитро с 3-й трассы!
+        nitroUnlocked: currentTrackLevel >= 3,
 
-        superJumpUnlocked:
-            currentTrackLevel >= 8 &&
-            botIndex === 2,
+        // Суперпрыжок доступен для техничных трюков
+        superJumpUnlocked: currentTrackLevel >= 5 && botIndex === 2,
 
-        shieldCharges:
-            currentTrackLevel >= 10
-                ? (botIndex === 1 ? 2 : 1)
-                : 0
+        shieldCharges: currentTrackLevel >= 9 ? 1 : 0
     };
 }
 
-// =========================================
-// СОЗДАНИЕ ВЕЛОСИПЕДА
-// =========================================
-
-function getBikeVisualProfile() {
-    const part = category => ITEMS_DB[category]?.find(item => item.id === player.equipped?.[category]) || null;
-    const rank = rarity => rarity === 'legendary' ? 2 : rarity === 'rare' ? 1 : 0;
-    const color = rarity => rarity === 'legendary' ? '#fbbf24' : rarity === 'rare' ? '#38bdf8' : '#94a3b8';
-    const frame = part('frames'), fork = part('forks'), wheels = part('wheels');
-    const tires = part('tires'), brakes = part('brakes'), electronics = part('electronics');
-    const chains = part('chains'), cranks = part('cranks'), handlebars = part('handlebars');
-    const saddle = part('saddles'), seatpost = part('seatposts');
-    return {
-        frameColor: color(frame?.rarity), forkColor: color(fork?.rarity),
-        chainColor: color(chains?.rarity), crankColor: color(cranks?.rarity),
-        saddleColor: color(saddle?.rarity), seatpostColor: color(seatpost?.rarity),
-        handlebarColor: color(handlebars?.rarity),
-        wheelRadius: 9.5 + rank(wheels?.rarity) * 0.6,
-        tireWidth: 2.4 + rank(tires?.rarity) * 0.8,
-        frameWidth: 2.8 + rank(frame?.rarity) * 0.7,
-        handlebarWidth: 2 + rank(handlebars?.rarity) * 0.6,
-        discBrakes: Boolean(brakes && !['b1', 'b2'].includes(brakes.id)),
-        suspension: Boolean(fork && fork.id !== 'fk1'),
-        motor: Boolean(electronics && electronics.id !== 'e1'),
-        hubColor: color(wheels?.rarity)
-    };
+function getEquippedPart(category) {
+    const equippedId = player.equipped?.[category];
+    const categoryItems = ITEMS_DB?.[category];
+    if (!equippedId || !Array.isArray(categoryItems)) return null;
+    return categoryItems.find(item => item.id === equippedId) || null;
 }
 
 function getPlayerPartAbilities() {
-    const equippedParts = Object.entries(player.equipped || {}).map(([category, id]) =>
-        ITEMS_DB[category]?.find(item => item.id === id)
-    ).filter(Boolean);
+    const equippedParts = Object.entries(player.equipped || {})
+        .map(([category, equippedId]) => {
+            const categoryItems = ITEMS_DB?.[category];
+            return Array.isArray(categoryItems)
+                ? categoryItems.find(item => item.id === equippedId)
+                : null;
+        })
+        .filter(Boolean);
+    const abilityIds = new Set(
+        equippedParts.map(item => item.ability?.id).filter(Boolean)
+    );
+
     return {
-        nitroUnlocked: equippedParts.some(item => item.ability?.id === 'nitro'),
-        superJumpUnlocked: equippedParts.some(item => item.ability?.id === 'superJump'),
-        frameGuard: equippedParts.some(item => item.ability?.id === 'frameGuard'),
-        shockFrame: equippedParts.some(item => item.ability?.id === 'shockFrame'),
-        flowFrame: equippedParts.some(item => item.ability?.id === 'flowFrame'),
-        landingFrame: equippedParts.some(item => item.ability?.id === 'landingFrame'),
-        mudGrip: equippedParts.some(item => item.ability?.id === 'mudGrip'),
-        impactBrake: equippedParts.some(item => item.ability?.id === 'impactBrake')
+        frameGuard: abilityIds.has('frameGuard'),
+        shockFrame: abilityIds.has('shockFrame'),
+        flowFrame: abilityIds.has('flowFrame'),
+        landingFrame: abilityIds.has('landingFrame'),
+        nitroUnlocked: abilityIds.has('nitro'),
+        superJumpUnlocked: abilityIds.has('superJump'),
+        mudGrip: abilityIds.has('mudGrip'),
+        impactBrake: abilityIds.has('impactBrake'),
+        shieldCharges: 0
+    };
+}
+
+function getBikeVisualProfile() {
+    const frame = getEquippedPart('frames');
+    const fork = getEquippedPart('forks');
+    const wheel = getEquippedPart('wheels');
+    const tire = getEquippedPart('tires');
+    const brakes = getEquippedPart('brakes');
+    const rider = getEquippedPart('riders');
+    const drivetrain = getEquippedPart('drivetrain');
+    const rarityColors = {
+        common: '#22c55e',
+        rare: '#38bdf8',
+        legendary: '#fbbf24'
+    };
+
+    return {
+        riderId: rider?.id || 'r1',
+        frameColor: rarityColors[frame?.rarity] || '#22c55e',
+        forkColor: rarityColors[fork?.rarity] || '#cbd5e1',
+        chainColor: rarityColors[drivetrain?.rarity] || '#cbd5e1',
+        hubColor: rarityColors[wheel?.rarity] || '#94a3b8',
+        wheelRadius: 9.5 + Math.min(1.2, Math.max(0, Number(wheel?.speed) || 0) * 0.08),
+        tireWidth: tire?.rarity === 'legendary' ? 4.2 : tire?.rarity === 'rare' ? 3.7 : 3.2,
+        discBrakes: Boolean(brakes && !['b1', 'b2'].includes(brakes.id)),
+        suspension: Boolean(fork && !['fk1', 'fk2'].includes(fork.id))
     };
 }
 
 function createBike(isBot = false, botIndex = 1) {
-    const botColor = botIndex === 2
-        ? '#38bdf8'
-        : '#f97316';
-
-    const startX = isBot
-        ? (botIndex === 2 ? 145 : 245)
-        : 350;
-
-    const difficulty = isBot
-        ? getBotDifficultyStats(botIndex)
-        : null;
+    const difficulty = isBot ? getBotDifficultyStats(botIndex) : null;
+    const botColor = botIndex === 1 ? '#ef4444' : '#a855f7';
+    const startX = 0;
 
     return {
         id: isBot ? `bot-${botIndex}` : 'player',
-        displayName: isBot ? (botIndex === 1 ? '\u041c\u0430\u043a\u0441' : '\u041b\u0435\u0440\u0430') : '\u0418\u0433\u0440\u043e\u043a',
+        displayName: isBot ? (botIndex === 1 ? 'Макс' : 'Лера') : 'Игрок',
         visuals: isBot ? null : getBikeVisualProfile(),
 
         x: startX,
         previousX: startX,
-
         velocityX: 0,
 
         jumpHeight: 0,
         jumpVelocity: 0,
         jumpGravity: GRAVITY,
         airY: null,
-
         grounded: true,
+        pitchAngle: 0,
 
         rampLift: 0,
         currentRamp: null,
-
         impactSlowTimer: 0,
         impactSpeedLimit: 0,
-
         collidedObstacles: new Set(),
 
         isBot,
         botIndex: isBot ? botIndex : 0,
-
         color: isBot ? botColor : '#22c55e',
-
         abilities: isBot ? getBotAbilities(botIndex) : getPlayerPartAbilities(),
 
         botDifficultyTrackId: difficulty?.trackId || null,
@@ -412,166 +507,11 @@ function createBike(isBot = false, botIndex = 1) {
         lastGasTap: 0,
         frameGuardUsed: false,
         landingBoostCooldown: 0,
-
         shieldActiveTimer: 0,
-
-        finishFrame: null
+        finishFrame: null,
+        wheelRotation: 0,
+        pedalPhase: 0
     };
-}
-
-// =========================================
-// ГЕНЕРАЦИЯ ОБЩЕЙ ТРАССЫ И ПРЕПЯТСТВИЙ
-// =========================================
-
-function createObstacles() {
-    if (currentTrack?.id === 'sprint') {
-        return [];
-    }
-
-    let typePool = Array.isArray(currentTrack?.obstacleTypes)
-        ? currentTrack.obstacleTypes.filter(
-            type => OBSTACLE_TYPES[type]
-        )
-        : Object.keys(OBSTACLE_TYPES);
-
-    if (currentTrackLevel === 5) {
-        typePool = [
-            ...typePool,
-            'ramp',
-            'ramp',
-            'rock'
-        ];
-    } else if (currentTrackLevel === 8) {
-        typePool = [
-            ...typePool,
-            'pit',
-            'pit',
-            'barrier',
-            'ramp'
-        ];
-    } else if (currentTrackLevel === 10) {
-        typePool = [
-            ...typePool,
-            'pit',
-            'pit',
-            'rock',
-            'barrier',
-            'ramp',
-            'ramp'
-        ];
-    }
-
-    typePool = typePool.filter(
-        type => OBSTACLE_TYPES[type]
-    );
-
-    const obstacleMultiplier = 3 + (currentTrackLevel - 1) * 0.07;
-
-    const obstacleCount = Math.max(
-        8,
-        Math.floor(
-            (Number(currentTrack?.obstacles) || 8) *
-            obstacleMultiplier
-        )
-    );
-
-    const usableLength = Math.max(1000, finishX - 1800);
-    const spacing = usableLength / (obstacleCount + 1);
-
-    const generated = [];
-    const pitCount = currentTrackLevel * 2;
-    const pitIndices = new Set(
-        Array.from({ length: pitCount }, (_, index) =>
-            Math.floor((index + 0.5) * obstacleCount / pitCount)
-        )
-    );
-    const nonPitPool = typePool.filter(type => type !== 'pit');
-
-    for (let i = 0; i < obstacleCount; i++) {
-        const type = pitIndices.has(i)
-            ? 'pit'
-            : randomItem(nonPitPool) || 'rock';
-        const definition = OBSTACLE_TYPES[type];
-
-        const x =
-            900 +
-            spacing * (i + 1) +
-            (Math.random() - 0.5) * spacing * 0.35;
-
-        const specialRampScale = type === 'ramp'
-            ? (
-                currentTrackLevel === 5
-                    ? 1.18
-                    : currentTrackLevel === 8
-                        ? 1.32
-                        : currentTrackLevel === 10
-                            ? 1.45
-                            : 1
-            )
-            : 1;
-
-        const specialObstacleScale =
-            currentTrackLevel === 10 && type !== 'ramp'
-                ? 1.12
-                : 1;
-
-        generated.push({
-            id: `${type}-${i}`,
-
-            type,
-            x,
-
-            width: Math.round(
-                (Number(definition.width) || 40) *
-                specialRampScale
-            ),
-
-            height: Math.round(
-                (Number(definition.height) || 25) *
-                specialRampScale *
-                specialObstacleScale
-            ),
-
-            color: definition.color || '#777777',
-
-            playerHit: false,
-            botHit: false,
-
-            playerRampUsed: false,
-            botRampUsed: false,
-
-            botRampUsedBy: new Set(),
-            botJumpAttemptedBy: new Set(),
-            botHitBy: new Set()
-        });
-    }
-
-    return generated.sort((a, b) => a.x - b.x);
-}
-
-// =========================================
-// ЗАВЕРШЕНИЕ ГОНКИ
-// =========================================
-
-function finishRace(playerWon, reason = 'finish') {
-    if (raceFinished) return;
-
-    raceFinished = true;
-    raceRunning = false;
-
-    input.accelerating = false;
-    input.braking = false;
-    input.reversing = false;
-    input.jumpRequested = false;
-
-    if (animationId !== null) {
-        cancelAnimationFrame(animationId);
-        animationId = null;
-    }
-
-    if (typeof callbackOnRaceEnd === 'function') {
-        callbackOnRaceEnd(Boolean(playerWon), reason, raceTimeMs);
-    }
 }
 
 // =========================================
@@ -876,6 +816,46 @@ function updatePlayerPhysics() {
         allowedSpeed *= 1.18;
     }
 
+    // ----------------------------------------------------
+    // МЕХАНИКА МОЩНОСТИ (POWER) И ПОДЪЁМОВ В ГОРУ
+    // ----------------------------------------------------
+    const wheelBase = 25;
+    const frontY = getGroundY(playerBike.x + wheelBase, 0);
+    const backY = getGroundY(playerBike.x - wheelBase, 0);
+    // frontY < backY означает, что впереди земля выше (Y меньше) -> подъем!
+    const slope = (backY - frontY) / (wheelBase * 2);
+    const totalPower = Math.max(0, Number(player.totalPower) || 0);
+
+    if (playerBike.grounded && slope > 0.04) {
+        // Требуемая мощность в зависимости от крутизны склона
+        const requiredPower = slope * 165;
+        const powerRatio = (totalPower + 6) / Math.max(10, requiredPower);
+
+        if (powerRatio < 0.45) {
+            // Мощность критически мала: сильное замедление вплоть до отката со склона!
+            const gravityDrag = slope * 0.16 * (1 - powerRatio);
+            playerBike.velocityX -= gravityDrag;
+
+            // Если игрок жмет газ, но мощности не хватает, скорость падает до отката
+            if (input.accelerating && playerBike.velocityX < 0.4) {
+                playerBike.velocityX = Math.max(-0.7, playerBike.velocityX - 0.04);
+                if (powerWarningCooldown <= 0) {
+                    addFloatingText(playerBike.x, getGroundY(playerBike.x, 0) - 65, '⚠️ Мало мощности! 🔋', '#ef4444');
+                    powerWarningCooldown = 90;
+                }
+            }
+        } else if (powerRatio < 1.0) {
+            // Мощности хватает, но подъем дается с трудом
+            const resistance = slope * 0.075 * (1 - powerRatio);
+            playerBike.velocityX -= resistance;
+        } else {
+            // Высокая мощность: уверенный заезд и легкая помощь на подъёме
+            if (input.accelerating) {
+                playerBike.velocityX += Math.min(0.04, (powerRatio - 1) * 0.015);
+            }
+        }
+    }
+
     if (playerBike.impactSlowTimer > 0) {
         playerBike.impactSlowTimer--;
 
@@ -1123,6 +1103,14 @@ function updateBotPhysics(bike) {
     );
 
     bike.velocityX += baseAcceleration;
+
+    // Соревновательный азарт: если бот отстает от игрока на 80-450px, он активнее крутит педали (драфтинг)
+    if (playerBike && !bike.isGhost) {
+        const gap = playerBike.x - bike.x;
+        if (gap > 60 && gap < 500) {
+            bike.velocityX += baseAcceleration * 0.32;
+        }
+    }
 
     let allowedSpeed = maxSpeed;
 
@@ -1436,6 +1424,41 @@ function updateBotCollisions(bike) {
 // ПРОВЕРКА ФИНИША
 // =========================================
 
+function finishRace(playerWon, reason = 'finish') {
+    if (raceFinished) return;
+
+    raceFinished = true;
+    raceRunning = false;
+    animationId = null;
+    input = {
+        accelerating: false,
+        braking: false,
+        reversing: false,
+        jumpRequested: false
+    };
+
+    if (typeof callbackOnRaceEnd !== 'function') {
+        console.error('Не задан обработчик завершения гонки.');
+        return;
+    }
+
+    try {
+        const result = callbackOnRaceEnd(
+            Boolean(playerWon),
+            reason,
+            raceTimeMs,
+            collectedRaceCoins
+        );
+        if (result && typeof result.catch === 'function') {
+            result.catch(error => {
+                console.error('Ошибка обработки результата гонки:', error);
+            });
+        }
+    } catch (error) {
+        console.error('Ошибка обработки результата гонки:', error);
+    }
+}
+
 function checkFinish() {
     const playerFinished =
         playerBike.x >= finishX;
@@ -1645,6 +1668,272 @@ function drawBackground() {
             ctx.fill();
         }
     }
+}
+
+
+// =========================================
+// БОНУСЫ И МОНЕТЫ НА ТРАССЕ (2-е ОБНОВЛЕНИЕ)
+// =========================================
+
+function isObstacleNear(x, margin = 60) {
+    return obstacles.some(obs => {
+        const left = obs.x - margin;
+        const right = obs.x + obs.width + margin;
+        return x >= left && x <= right;
+    });
+}
+
+function findFreeTrackSpot(startX, minSpacing = 120, maxAttempts = 15) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const offset = (attempt === 0 ? 0 : (attempt % 2 === 1 ? attempt * 85 : -attempt * 85));
+        const testX = startX + offset;
+        if (testX > 1100 && testX < finishX - 700 && !isObstacleNear(testX, minSpacing)) {
+            return testX;
+        }
+    }
+    return null;
+}
+
+function createCollectibles() {
+    if (currentTrack?.id === 'sprint') {
+        return [];
+    }
+
+    const items = [];
+    const usableLength = Math.max(1000, finishX - 1500);
+
+    // 1. Монетки высоко в воздухе над трамплинами (гарантированно выше рампы и препятствий)
+    let rampIndex = 0;
+    obstacles.forEach(obstacle => {
+        if (obstacle.type === 'ramp') {
+            rampIndex++;
+            if (rampIndex % 2 !== 1) return; // Каждый второй трамплин
+
+            const rampTopX = obstacle.x + obstacle.width;
+            const baseY = getGroundY(rampTopX, 0);
+            const rampH = Number(obstacle.height) || 35;
+            const coinCount = 3;
+
+            for (let i = 0; i < coinCount; i++) {
+                const t = (i + 1) / (coinCount + 1); // 0.25, 0.5, 0.75
+                const arcX = obstacle.x + obstacle.width * 0.4 + t * 130;
+                // Монетки висят на 25-70px ВЫШЕ вершины трамплина в воздухе
+                const arcY = baseY - rampH - 24 - Math.sin(t * Math.PI) * 45;
+
+                items.push({
+                    id: `coin-ramp-${obstacle.id}-${i}`,
+                    type: 'coin',
+                    x: arcX,
+                    y: arcY,
+                    value: 10,
+                    collected: false
+                });
+            }
+        }
+    });
+
+    // 2. Турбо-ускорители (Nitro Boost Pads) — только на гарантированно чистых участках!
+    const boosterSpacing = 8500;
+    const boosterCount = Math.floor(usableLength / boosterSpacing);
+    for (let i = 0; i < boosterCount; i++) {
+        const targetX = 2200 + i * boosterSpacing + (Math.random() - 0.5) * 500;
+        const bx = findFreeTrackSpot(targetX, 130);
+        if (bx !== null && bx < finishX - 800) {
+            items.push({
+                id: `booster-${i}`,
+                type: 'booster',
+                x: bx,
+                y: 0,
+                cooldown: 0
+            });
+        }
+    }
+
+    // 3. Цепочки монеток на дороге — строго там, где нет камней, ям и брёвен!
+    const clusterSpacing = 5200;
+    const clusterCount = Math.floor(usableLength / clusterSpacing);
+    for (let i = 0; i < clusterCount; i++) {
+        const targetX = 1500 + i * clusterSpacing + (Math.random() - 0.5) * 500;
+        const cx = findFreeTrackSpot(targetX, 100);
+        if (cx !== null && cx < finishX - 700) {
+            const count = 2 + Math.floor(Math.random() * 2);
+            for (let j = 0; j < count; j++) {
+                const coinX = cx + j * 45;
+                if (!isObstacleNear(coinX, 50)) {
+                    items.push({
+                        id: `coin-line-${i}-${j}`,
+                        type: 'coin',
+                        x: coinX,
+                        y: null, // вычисляется по рельефу
+                        value: 10,
+                        collected: false
+                    });
+                }
+            }
+        }
+    }
+
+    return items;
+}
+
+function updateCollectibles() {
+    if (!playerBike || raceFinished) return;
+
+    if (powerWarningCooldown > 0) {
+        powerWarningCooldown--;
+    }
+
+    // Все участники заезда: игрок и боты
+    const allBikes = [playerBike, ...activeBots.filter(b => !b.isGhost)];
+
+    collectibles.forEach(item => {
+        if (item.type === 'coin') {
+            if (item.collected) return;
+            const itemY = item.y !== null ? item.y : getGroundY(item.x, 0) - 22;
+
+            for (const bike of allBikes) {
+                if (item.collected) break;
+                const bx = bike.x;
+                const by = bike.grounded
+                    ? getGroundY(bike.x, 0)
+                    : (bike.airY ?? getGroundY(bike.x, 0) - bike.jumpHeight);
+                const dist = Math.hypot(bx - item.x, by - itemY);
+
+                if (dist < 32) {
+                    item.collected = true;
+                    if (!bike.isBot) {
+                        // Игрок собрал монетку — сразу начисляем на баланс!
+                        collectedRaceCoins += item.value;
+                        player.coins = (Number(player.coins) || 0) + item.value;
+                        const coinsEl = document.getElementById('coins-count');
+                        if (coinsEl) coinsEl.innerText = Math.floor(player.coins).toLocaleString('ru-RU');
+                        const upgradeCoinsEl = document.getElementById('upgrade-coins');
+                        if (upgradeCoinsEl) upgradeCoinsEl.innerText = Math.floor(player.coins).toLocaleString('ru-RU');
+
+                        if (typeof playCoinSound === 'function') {
+                            try { playCoinSound(); } catch (e) {}
+                        }
+                        addFloatingText(item.x, itemY - 10, `+${item.value} 🪙`, '#facc15');
+                    } else {
+                        // Бот перехватил монетку первым!
+                        if (typeof playCoinSound === 'function' && Math.abs(bike.x - playerBike.x) < 550) {
+                            try { playCoinSound(); } catch (e) {}
+                        }
+                        addFloatingText(item.x, itemY - 10, `${bike.displayName}: +${item.value} 🪙`, bike.color);
+                    }
+                }
+            }
+        } else if (item.type === 'booster') {
+            if (item.cooldown > 0) {
+                item.cooldown--;
+                return;
+            }
+            const itemY = getGroundY(item.x, 0);
+
+            for (const bike of allBikes) {
+                const bx = bike.x;
+                const by = bike.grounded
+                    ? getGroundY(bike.x, 0)
+                    : (bike.airY ?? getGroundY(bike.x, 0) - bike.jumpHeight);
+
+                if (Math.abs(bx - item.x) < 38 && Math.abs(by - itemY) < 32) {
+                    item.cooldown = 90;
+                    if (!bike.isBot) {
+                        playerBike.velocityX = Math.max(playerBike.velocityX + 3.2, 11);
+                        playerBike.nitroTimer = Math.max(playerBike.nitroTimer, 50);
+                        if (typeof playBoostSound === 'function') {
+                            try { playBoostSound(); } catch (e) {}
+                        }
+                        addFloatingText(playerBike.x, by - 40, '⚡ ТУРБО БУСТ! ⚡', '#38bdf8');
+                    } else {
+                        // Бот наехал на турбо-ускоритель и рванул вперед!
+                        bike.velocityX = Math.max(bike.velocityX + 3.0, (bike.botBaseMaxSpeed || 4) * 1.35);
+                        bike.nitroTimer = Math.max(bike.nitroTimer, 50);
+                        if (typeof playBoostSound === 'function' && Math.abs(bike.x - playerBike.x) < 650) {
+                            try { playBoostSound(); } catch (e) {}
+                        }
+                        addFloatingText(bike.x, by - 40, `⚡ ${bike.displayName}: ТУРБО! ⚡`, bike.color);
+                    }
+                    break;
+                }
+            }
+        }
+    });
+
+    updateFloatingTexts();
+}
+
+function drawCollectibles() {
+    collectibles.forEach(item => {
+        const sx = item.x - cameraX;
+        if (sx < -80 || sx > viewWidth + 80) return;
+
+        if (item.type === 'coin') {
+            if (item.collected) return;
+            const sy = item.y !== null ? item.y : getGroundY(item.x, 0) - 22;
+            const pulse = Math.sin(frameCounter * 0.12 + item.x * 0.05);
+            const scaleX = Math.cos(frameCounter * 0.08 + item.x * 0.03);
+
+            ctx.save();
+            ctx.translate(sx, sy + pulse * 2);
+            ctx.scale(Math.max(0.2, Math.abs(scaleX)), 1);
+
+            // Золотая сияющая монетка
+            ctx.beginPath();
+            ctx.arc(0, 0, 11, 0, Math.PI * 2);
+            ctx.fillStyle = '#f59e0b';
+            ctx.shadowColor = '#fbbf24';
+            ctx.shadowBlur = 10;
+            ctx.fill();
+
+            ctx.lineWidth = 1.8;
+            ctx.strokeStyle = '#fef08a';
+            ctx.stroke();
+
+            // Внутренний кант
+            ctx.beginPath();
+            ctx.arc(0, 0, 7.5, 0, Math.PI * 2);
+            ctx.strokeStyle = '#b45309';
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+
+            // Знак монетки
+            ctx.fillStyle = '#fef08a';
+            ctx.font = 'bold 9px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('★', 0, 0.5);
+
+            ctx.restore();
+        } else if (item.type === 'booster') {
+            const sy = getGroundY(item.x, 0);
+            ctx.save();
+            ctx.translate(sx, sy + 1);
+
+            // Неоновая стрелка ускорителя на асфальте
+            const activePulse = (frameCounter * 0.1) % (Math.PI * 2);
+            ctx.shadowColor = '#38bdf8';
+            ctx.shadowBlur = 12;
+
+            ctx.fillStyle = '#0284c7';
+            ctx.fillRect(-28, -5, 56, 7);
+
+            // Шевроны >>>
+            for (let c = -1; c <= 1; c++) {
+                const cx = c * 16;
+                const alpha = 0.5 + 0.5 * Math.sin(activePulse + c);
+                ctx.strokeStyle = `rgba(224, 242, 254, ${alpha})`;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(cx - 5, -8);
+                ctx.lineTo(cx + 4, -2);
+                ctx.lineTo(cx - 5, 4);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+    });
 }
 
 // =========================================
@@ -2101,17 +2390,54 @@ function drawBike(bike, label, color) {
     const head = { x: x + 4, y: wheelY - 53 };
     const kneeA = { x: (hip.x + leftPedal.x) / 2 + 3, y: (hip.y + leftPedal.y) / 2 - 3 };
     const kneeB = { x: (hip.x + rightPedal.x) / 2 - 3, y: (hip.y + rightPedal.y) / 2 - 3 };
-    const jersey = bike.isBot ? color : '#16a34a';
+
+    // Стиль текущего райдера
+    const riderId = (!bike.isBot && visuals?.riderId) ? visuals.riderId : 'r1';
+    let jersey = '#16a34a';
+    let helmetColor = '#16a34a';
+    let pantsColor = '#172033';
+
+    if (bike.isBot) {
+        jersey = color;
+        helmetColor = color;
+    } else {
+        if (riderId === 'r1') {
+            // Школьник: синяя худи, красная кепка
+            jersey = '#2563eb';
+            helmetColor = '#ef4444';
+            pantsColor = '#1e293b';
+        } else if (riderId === 'r2') {
+            // Велолюбитель: зеленое велоджерси, оранжевый шлем
+            jersey = '#16a34a';
+            helmetColor = '#f97316';
+            pantsColor = '#0f172a';
+        } else if (riderId === 'r3') {
+            // Дорожник: оранжевый сигнальный жилет, желтая каска
+            jersey = '#ea580c';
+            helmetColor = '#eab308';
+            pantsColor = '#334155';
+        } else if (riderId === 'r4') {
+            // Велокурьер: темный технологичный костюм, бирюзовый акцент
+            jersey = '#0f172a';
+            helmetColor = '#06b6d4';
+            pantsColor = '#020617';
+        } else if (riderId === 'r5') {
+            // Джон: черно-золотой чемпионский даунхилл-костюм
+            jersey = '#18181b';
+            helmetColor = '#d97706';
+            pantsColor = '#09090b';
+        }
+    }
 
     ctx.lineCap = 'round';
-    ctx.strokeStyle = '#172033';
+    ctx.strokeStyle = pantsColor;
     ctx.lineWidth = 3.4;
     ctx.beginPath();
     ctx.moveTo(hip.x, hip.y);
     ctx.lineTo(kneeB.x, kneeB.y);
     ctx.lineTo(rightPedal.x, rightPedal.y);
     ctx.stroke();
-    ctx.strokeStyle = '#0f172a';
+    ctx.strokeStyle = pantsColor;
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.moveTo(hip.x, hip.y);
@@ -2128,6 +2454,7 @@ function drawBike(bike, label, color) {
     ctx.fillStyle = '#cbd5e1';
     ctx.fillRect(rightPedal.x - 2, rightPedal.y - 1.2, 5, 2.4);
 
+    // Торс / Джерси
     ctx.fillStyle = jersey;
     ctx.beginPath();
     ctx.moveTo(shoulder.x - 4, shoulder.y - 1);
@@ -2139,12 +2466,49 @@ function drawBike(bike, label, color) {
     ctx.strokeStyle = '#0f172a';
     ctx.lineWidth = 1;
     ctx.stroke();
-    ctx.strokeStyle = bike.isBot ? '#f8fafc' : '#bbf7d0';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(shoulder.x - 1, shoulder.y + 1);
-    ctx.lineTo(hip.x, hip.y - 1);
-    ctx.stroke();
+
+    // Особые детали одежды райдеров
+    if (!bike.isBot) {
+        if (riderId === 'r1') {
+            // Школьный рюкзак за спиной!
+            ctx.fillStyle = '#dc2626';
+            ctx.fillRect(hip.x - 8, shoulder.y + 2, 7, 10);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(hip.x - 8, shoulder.y + 7);
+            ctx.lineTo(hip.x - 1, shoulder.y + 7);
+            ctx.stroke();
+        } else if (riderId === 'r3') {
+            // Сигнальные светоотражающие полосы дорожника
+            ctx.strokeStyle = '#facc15';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(shoulder.x - 3, shoulder.y + 3);
+            ctx.lineTo(hip.x + 3, hip.y - 4);
+            ctx.moveTo(shoulder.x + 1, shoulder.y + 3);
+            ctx.lineTo(hip.x - 2, hip.y - 4);
+            ctx.stroke();
+        } else if (riderId === 'r4') {
+            // Большой терморюкзак курьера (Delivery Box)
+            ctx.fillStyle = '#eab308';
+            ctx.fillRect(hip.x - 11, shoulder.y - 2, 10, 14);
+            ctx.strokeStyle = '#713f12';
+            ctx.lineWidth = 1.2;
+            ctx.strokeRect(hip.x - 11, shoulder.y - 2, 10, 14);
+            // Логотип полоска
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(hip.x - 10, shoulder.y + 4, 8, 3);
+        } else if (riderId === 'r5') {
+            // Джон: золотые полосы чемпиона
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.moveTo(shoulder.x - 2, shoulder.y + 1);
+            ctx.lineTo(hip.x + 1, hip.y);
+            ctx.stroke();
+        }
+    }
 
     const elbow = { x: x + 10, y: wheelY - 42 };
     const hand = { x: headX + 13, y: wheelY - 37 };
@@ -2165,6 +2529,7 @@ function drawBike(bike, label, color) {
     ctx.arc(hand.x, hand.y, 1.8, 0, Math.PI * 2);
     ctx.fill();
 
+    // Шея и голова
     ctx.strokeStyle = '#f1c9a5';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -2175,16 +2540,39 @@ function drawBike(bike, label, color) {
     ctx.beginPath();
     ctx.arc(head.x, head.y, 3.4, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = bike.isBot ? color : '#16a34a';
-    ctx.beginPath();
-    ctx.ellipse(head.x - 0.3, head.y - 2.5, 4.5, 2.1, -0.08, Math.PI, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 0.8;
-    ctx.beginPath();
-    ctx.moveTo(head.x - 4.5, head.y - 2.2);
-    ctx.lineTo(head.x + 3.5, head.y - 2.2);
-    ctx.stroke();
+
+    // Головной убор / шлем
+    ctx.fillStyle = helmetColor;
+    if (!bike.isBot && riderId === 'r1') {
+        // Кепка козырьком назад
+        ctx.beginPath();
+        ctx.ellipse(head.x - 0.2, head.y - 2.5, 4.3, 2.2, -0.08, Math.PI, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#b91c1c';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(head.x - 4, head.y - 2);
+        ctx.lineTo(head.x - 7, head.y - 1); // козырек назад
+        ctx.stroke();
+    } else if (!bike.isBot && riderId === 'r5') {
+        // Джон: крутой фуллфейс-шлем с визором
+        ctx.beginPath();
+        ctx.arc(head.x, head.y - 1, 4.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#0f172a'; // черный зеркальный визор
+        ctx.fillRect(head.x - 0.5, head.y - 2.5, 5, 2.8);
+    } else {
+        // Стандартный велошлем или каска
+        ctx.beginPath();
+        ctx.ellipse(head.x - 0.3, head.y - 2.5, 4.6, 2.3, -0.08, Math.PI, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(head.x - 4.5, head.y - 2.2);
+        ctx.lineTo(head.x + 4, head.y - 2.2);
+        ctx.stroke();
+    }
 
     ctx.strokeStyle = visuals.handlebarColor || '#f8fafc';
     ctx.lineWidth = visuals.handlebarWidth || 2;
@@ -2458,6 +2846,7 @@ function render() {
     drawBackground();
     drawTrack();
     drawObstacles();
+    drawCollectibles();
     drawFinishLine();
 
     const drawBot = bike => {
@@ -2490,6 +2879,7 @@ function render() {
     // Рисуем призрака поверх игрока, чтобы он оставался заметен при совпадении позиций.
     activeBots.filter(bike => bike.isGhost).forEach(drawBot);
 
+    drawFloatingTexts();
     drawRaceHUD();
 }
 
@@ -2519,6 +2909,7 @@ function update() {
     frameCounter++;
 
     updatePlayerPhysics();
+    updateCollectibles();
 
     if (raceFinished) return;
 
@@ -2729,7 +3120,7 @@ export function initRace(onRaceEnd) {
         }
     } else {
         botBike = createBike(true, 1);
-        additionalBots = currentTrackLevel >= 3
+        additionalBots = currentTrackLevel >= 2
             ? [createBike(true, 2)]
             : [];
         activeBots = [botBike, ...additionalBots];
@@ -2750,6 +3141,9 @@ export function initRace(onRaceEnd) {
     };
 
     obstacles = createObstacles();
+    collectedRaceCoins = 0;
+    floatingTexts = [];
+    collectibles = createCollectibles();
 
     if (!resizeHandlerAttached) {
         window.addEventListener(
