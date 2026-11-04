@@ -1,7 +1,7 @@
-import { player } from './state.js?v=63';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=63';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=63';
-import { playCoinSound, playBoostSound } from './audio.js?v=63';
+import { player } from './state.js?v=66';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=66';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=66';
+import { playCoinSound, playBoostSound } from './audio.js?v=66';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -459,49 +459,115 @@ function getPlayerPartAbilities() {
 function getBikeVisualProfile() {
     const frame = getEquippedPart('frames');
     const fork = getEquippedPart('forks');
+    const shock = getEquippedPart('suspension');
     const wheel = getEquippedPart('wheels');
     const tire = getEquippedPart('tires');
     const brakes = getEquippedPart('brakes');
     const rider = getEquippedPart('riders');
     const chain = getEquippedPart('chains');
+    const drivetrain = getEquippedPart('drivetrain');
+    const derailleur = getEquippedPart('derailleurs');
     const crank = getEquippedPart('cranks');
     const seatpost = getEquippedPart('seatposts');
     const saddle = getEquippedPart('saddles');
     const handlebar = getEquippedPart('handlebars');
+    const electronics = getEquippedPart('electronics'); // Добавили электронику
+    const fullSuspension = frame?.visuals?.type === 'dh';
+    const stability = Math.min(100,
+        (Number(frame?.stability) || 0) +
+        (Number(fork?.stability) || 0) +
+        (fullSuspension ? Number(shock?.stability) || 0 : 0)
+    );
 
     return {
         riderId: rider?.id || 'r1',
-        frameColor: getRarityAccent(frame?.rarity),
-        forkColor: getRarityAccent(fork?.rarity),
-        chainColor: getRarityAccent(chain?.rarity),
-        crankColor: getRarityAccent(crank?.rarity),
-        seatpostColor: getRarityAccent(seatpost?.rarity),
-        saddleColor: getRarityAccent(saddle?.rarity),
-        handlebarColor: getRarityAccent(handlebar?.rarity),
-        handlebarWidth: handlebar?.rarity === 'legendary' ? 2.4 : handlebar?.rarity === 'rare' ? 2.1 : 1.8,
-        rimColor: wheel?.rarity === 'legendary'
-            ? '#fbbf24'
-            : wheel?.rarity === 'rare'
-                ? '#38bdf8'
-                : '#64748b',
-        hubColor: '#e2e8f0',
-        wheelRadius: 9.5 + Math.min(1.2, Math.max(0, Number(wheel?.speed) || 0) * 0.08),
-        tireWidth: tire?.rarity === 'legendary' ? 4.2 : tire?.rarity === 'rare' ? 3.7 : 3.2,
+        
+        // --- РАМА ---
+        frameColor: frame?.visuals?.color || getRarityAccent(frame?.rarity),
+        frameWidth: frame?.visuals?.width || (frame?.rarity === 'legendary' ? 3.5 : frame?.rarity === 'rare' ? 3 : 2.5),
+        frameType: frame?.visuals?.type || 'normal',
+        fullSuspension,
+        rearSuspension: Boolean(fullSuspension && shock),
+        rearShockColor: shock?.visuals?.color || getRarityAccent(shock?.rarity),
+        rearShockStability: fullSuspension ? Number(shock?.stability) || 0 : 0,
+        stability,
+        
+        // --- ВИЛКА ---
+        forkColor: fork?.visuals?.color || getRarityAccent(fork?.rarity),
+        
+        // --- ТРАНСМИССИЯ И ПОСАДКА ---
+        chainColor: chain?.visuals?.color || getRarityAccent(chain?.rarity),
+        gearColor: getRarityAccent(derailleur?.rarity),
+        chainringCount: ['d1', 'd2', 'd3'].includes(drivetrain?.id) ? 3 : 1,
+        crankColor: crank?.visuals?.color || getRarityAccent(crank?.rarity),
+        seatpostColor: seatpost?.visuals?.color || getRarityAccent(seatpost?.rarity),
+        saddleColor: saddle?.visuals?.color || getRarityAccent(saddle?.rarity),
+        
+        // --- РУЛЬ ---
+        handlebarColor: handlebar?.visuals?.color || getRarityAccent(handlebar?.rarity),
+        handlebarWidth: handlebar?.visuals?.width || (handlebar?.rarity === 'legendary' ? 2.4 : handlebar?.rarity === 'rare' ? 2.1 : 1.8),
+        
+        // --- КОЛЕСА ---
+        rimColor: wheel?.visuals?.rimColor || (wheel?.rarity === 'legendary' ? '#fbbf24' : wheel?.rarity === 'rare' ? '#38bdf8' : '#64748b'),
+        hubColor: wheel?.visuals?.hubColor || '#e2e8f0',
+        wheelRadius: wheel?.visuals?.radius || (9.5 + Math.min(1.2, Math.max(0, Number(wheel?.speed) || 0) * 0.08)),
+        tireWidth: tire?.visuals?.width || (tire?.rarity === 'legendary' ? 4.2 : tire?.rarity === 'rare' ? 3.7 : 3.2),
+        
+        // --- МОДИФИКАТОРЫ ---
         discBrakes: Boolean(brakes && !['b1', 'b2'].includes(brakes.id)),
-        suspension: Boolean(fork && !['fk1', 'fk2'].includes(fork.id))
+        suspension: Boolean(fork && fork.id !== 'fk1'),
+        frontSuspension: Boolean(fork && fork.id !== 'fk1'),
+        frontForkStability: Number(fork?.stability) || 0,
+        motor: Boolean(electronics && electronics.id !== 'e1')
+    };
+}
+
+function getBotVisualProfile(botIndex) {
+    const fullSuspension = botIndex === 2;
+    return {
+        riderId: 'r1',
+        frameColor: botIndex === 1 ? '#ef4444' : '#a855f7',
+        frameWidth: 3.2,
+        frameType: fullSuspension ? 'dh' : 'hardtail',
+        fullSuspension,
+        rearSuspension: fullSuspension,
+        rearShockColor: fullSuspension ? '#fbbf24' : '#94a3b8',
+        rearShockStability: fullSuspension ? 38 : 0,
+        forkColor: botIndex === 1 ? '#cbd5e1' : '#d8b4fe',
+        frontForkStability: botIndex === 1 ? 14 : 20,
+        stability: fullSuspension ? 78 : 43,
+        chainColor: '#cbd5e1',
+        gearColor: '#94a3b8',
+        chainringCount: 1,
+        crankColor: '#e2e8f0',
+        seatpostColor: '#cbd5e1',
+        saddleColor: '#f8fafc',
+        handlebarColor: '#e2e8f0',
+        handlebarWidth: 2,
+        rimColor: botIndex === 1 ? '#fecaca' : '#e9d5ff',
+        hubColor: '#f8fafc',
+        wheelRadius: 9.5,
+        tireWidth: 3.8,
+        discBrakes: true,
+        suspension: true,
+        frontSuspension: true,
+        motor: false
     };
 }
 
 function createBike(isBot = false, botIndex = 1) {
     const difficulty = isBot ? getBotDifficultyStats(botIndex) : null;
     const botColor = botIndex === 1 ? '#ef4444' : '#a855f7';
-    const visuals = isBot ? null : getBikeVisualProfile();
+    const visuals = isBot ? getBotVisualProfile(botIndex) : getBikeVisualProfile();
     const startX = 0;
 
     return {
         id: isBot ? `bot-${botIndex}` : 'player',
         displayName: isBot ? (botIndex === 1 ? 'Макс' : 'Лера') : 'Игрок',
         visuals,
+        stability: clamp(Number(visuals?.stability) || 0, 0, 100),
+        frontSuspension: Boolean(visuals?.frontSuspension),
+        rearSuspension: Boolean(visuals?.rearSuspension),
 
         x: startX,
         previousX: startX,
@@ -513,6 +579,15 @@ function createBike(isBot = false, botIndex = 1) {
         airY: null,
         grounded: true,
         pitchAngle: 0,
+        pitchVelocity: 0,
+        flippedTimer: 0,
+        flipDirection: 1,
+        bumpCooldown: 0,
+        previousGroundDelta: 0,
+        frontCompression: 0,
+        frontCompressionVelocity: 0,
+        rearCompression: 0,
+        rearCompressionVelocity: 0,
 
         rampLift: 0,
         currentRamp: null,
@@ -547,6 +622,119 @@ function createBike(isBot = false, botIndex = 1) {
 // ФИЗИКА ПРЫЖКА
 // =========================================
 
+function startBikeFlip(bike, direction = 1, message = 'ПЕРЕВОРОТ! Низкая стабильность') {
+    if (!bike || bike.flippedTimer > 0) return false;
+    bike.flippedTimer = 72;
+    bike.flipDirection = direction < 0 ? -1 : 1;
+    bike.pitchAngle = bike.flipDirection * 1.65;
+    bike.pitchVelocity = 0;
+    bike.velocityX = Math.max(0.45, bike.velocityX * 0.12);
+    bike.impactSlowTimer = Math.max(bike.impactSlowTimer || 0, 72);
+    bike.impactSpeedLimit = 0.55;
+    bike.bumpCooldown = 90;
+    if (!bike.isBot) {
+        addFloatingText(bike.x, getGroundY(bike.x, 0) - 58, message, '#fb7185');
+    }
+    return true;
+}
+
+function updateBikeFlipRecovery(bike) {
+    if (bike.bumpCooldown > 0) bike.bumpCooldown--;
+    if (!(bike.flippedTimer > 0)) return false;
+
+    bike.flippedTimer--;
+    bike.pitchAngle = bike.flipDirection * (1.65 * (bike.flippedTimer / 72));
+    bike.pitchVelocity = 0;
+    bike.velocityX = Math.max(0.3, bike.velocityX * 0.985);
+    if (bike.impactSlowTimer > 0) bike.impactSlowTimer--;
+    bike.frontCompression *= 0.72;
+    bike.rearCompression *= 0.72;
+    if (bike.flippedTimer === 0) {
+        bike.pitchAngle = bike.flipDirection * 0.18;
+        bike.bumpCooldown = 75;
+    }
+    return true;
+}
+
+function advanceSuspension(compression, velocity, relativeTravel, enabled, quality, maxTravel) {
+    if (!enabled) return { compression: 0, velocity: 0, residual: Math.abs(relativeTravel) };
+
+    const springResponse = 0.62 + quality * 0.18;
+    const springRate = 0.12 + quality * 0.08;
+    const reboundDamping = 0.66 + quality * 0.14;
+    velocity += -relativeTravel * springResponse;
+    velocity = (velocity - compression * springRate) * reboundDamping;
+
+    const nextCompression = clamp(compression + velocity, 0, maxTravel);
+    if (nextCompression <= 0 || nextCompression >= maxTravel) velocity *= 0.25;
+
+    const remainingImpact = Math.abs(relativeTravel) * (0.42 - quality * 0.22);
+    const nearBottomOut = Math.max(0, nextCompression / maxTravel - 0.88) * Math.abs(relativeTravel);
+    return {
+        compression: nextCompression,
+        velocity,
+        residual: remainingImpact + nearBottomOut
+    };
+}
+
+function updateSuspensionResponse(bike) {
+    if (!bike.grounded) {
+        bike.frontCompression *= 0.72;
+        bike.frontCompressionVelocity *= 0.72;
+        bike.rearCompression *= 0.72;
+        bike.rearCompressionVelocity *= 0.72;
+        return;
+    }
+
+    const previousX = Number.isFinite(bike.previousX) ? bike.previousX : bike.x;
+    const frontDelta = getGroundY(bike.x + 25, 0) - getGroundY(previousX + 25, 0);
+    const rearDelta = getGroundY(bike.x - 25, 0) - getGroundY(previousX - 25, 0);
+    const averageDelta = (frontDelta + rearDelta) / 2;
+    const surfaceKick = Math.abs(averageDelta - (bike.previousGroundDelta || 0));
+    const frontRelativeTravel = frontDelta - averageDelta;
+    const rearRelativeTravel = rearDelta - averageDelta;
+    bike.previousGroundDelta = averageDelta;
+
+    const forkQuality = clamp((Number(bike.visuals?.frontForkStability) || 0) / 24, 0.15, 1);
+    const shockQuality = clamp((Number(bike.visuals?.rearShockStability) || 0) / 48, 0.15, 1);
+    const front = advanceSuspension(
+        bike.frontCompression,
+        bike.frontCompressionVelocity,
+        frontRelativeTravel,
+        bike.frontSuspension,
+        forkQuality,
+        5
+    );
+    const rear = advanceSuspension(
+        bike.rearCompression,
+        bike.rearCompressionVelocity,
+        rearRelativeTravel,
+        bike.rearSuspension,
+        shockQuality,
+        5.5
+    );
+    bike.frontCompression = front.compression;
+    bike.frontCompressionVelocity = front.velocity;
+    bike.rearCompression = rear.compression;
+    bike.rearCompressionVelocity = rear.velocity;
+
+    const suspensionSupport = (
+        (bike.frontSuspension ? forkQuality : 0) +
+        (bike.rearSuspension ? shockQuality : 0)
+    ) / 2;
+    const chassisKick = surfaceKick * (1 - suspensionSupport * 0.48);
+    const bodyKick = Math.max(front.residual, rear.residual, chassisKick);
+    if (bike.velocityX > 5 && bodyKick > 1.8) {
+        bike.velocityX *= 1 - Math.min(0.12, bodyKick * 0.004);
+        bike.pitchVelocity += (front.residual - rear.residual) * (1 - bike.stability / 140) * 0.012;
+
+        const flipThreshold = 2.7 + bike.stability * 0.045;
+        if (bike.stability < 30 && bike.velocityX > 5.5 && bodyKick > flipThreshold && bike.bumpCooldown <= 0) {
+            startBikeFlip(bike, frontDelta - rearDelta, 'КОЧКА! Низкая стабильность');
+        }
+    }
+}
+
 function updateJumpPhysics(bike) {
     if (!bike.isBot && bike.landingBoostCooldown > 0) bike.landingBoostCooldown--;
 
@@ -562,9 +750,12 @@ function updateJumpPhysics(bike) {
     } else {
         targetPitch = -bike.jumpVelocity * 0.04; 
     }
+    const stabilityRatio = clamp(Number(bike.stability) || 0, 0, 100) / 100;
     bike.pitchAngle = bike.pitchAngle || 0;
-    bike.pitchAngle += (targetPitch - bike.pitchAngle) * 0.18;
-    // --- НОВЫЙ КОД НАКЛОНА КОНЕЦ ---
+    bike.pitchVelocity = (bike.pitchVelocity || 0) + (targetPitch - bike.pitchAngle) * (0.09 + stabilityRatio * 0.035);
+    bike.pitchVelocity *= 0.78 - stabilityRatio * 0.16;
+    bike.pitchAngle = clamp(bike.pitchAngle + bike.pitchVelocity, -1.5, 1.5);
+    // Более стабильная сборка гасит раскачку корпуса быстрее.
 
     if (bike.grounded) {
         bike.airY = null;
@@ -616,6 +807,7 @@ function startJump(bike, force, gravity = GRAVITY) {
         4,
         Number(force) || 9
     ) + terrainSlopeVy;
+    bike.pitchVelocity = 0;
 
     bike.jumpGravity = clamp(
         Number(gravity) || GRAVITY,
@@ -761,6 +953,8 @@ function updateRamp(bike, isBot) {
 // =========================================
 
 function updatePlayerPhysics() {
+    if (updateBikeFlipRecovery(playerBike)) return;
+
     const speed = Math.max(
         0,
         Number(player.totalSpeed) || 0
@@ -940,6 +1134,7 @@ function updatePlayerPhysics() {
 
     updateJumpPhysics(playerBike);
     updateRamp(playerBike, false);
+    updateSuspensionResponse(playerBike);
 }
 
 // =========================================
@@ -1124,6 +1319,8 @@ function updateBotAbilities(bike) {
 // =========================================
 
 function updateBotPhysics(bike) {
+    if (updateBikeFlipRecovery(bike)) return;
+
     updateBotAbilities(bike);
     if (bike.springBoostTimer > 0) bike.springBoostTimer--;
 
@@ -1215,6 +1412,7 @@ function updateBotPhysics(bike) {
 
     updateJumpPhysics(bike);
     updateRamp(bike, true);
+    updateSuspensionResponse(bike);
 }
 
 // =========================================
@@ -1239,6 +1437,19 @@ function applyPlayerImpact(obstacle, speedLimit = 1.0) {
     }
     if (playerBike.abilities?.flowFrame && ['ice_patch', 'wind_fan'].includes(obstacle.type)) {
         speedLimit = Math.max(speedLimit, Math.min(playerBike.velocityX, speedLimit * 1.15));
+    }
+
+    const roughObstacle = ['rock', 'rolling_boulder', 'log', 'fallen_branch'].includes(obstacle.type);
+    const stability = clamp(Number(playerBike.stability) || 0, 0, 100);
+    if (roughObstacle) {
+        const retainedSpeed = (playerBike.velocityX - speedLimit) * stability * 0.0018;
+        speedLimit += retainedSpeed;
+        impactDuration = Math.round(impactDuration * (1 - stability * 0.002));
+
+        const severity = obstacle.type === 'rolling_boulder' ? 1.35 : obstacle.type === 'rock' ? 1.2 : 1;
+        if (stability < 30 && playerBike.velocityX * severity > 12 + stability * 0.14) {
+            startBikeFlip(playerBike, obstacle.type === 'rock' ? -1 : 1, 'УДАР! Низкая стабильность');
+        }
     }
 
     playerBike.impactSlowTimer = impactDuration;
@@ -1367,6 +1578,18 @@ function applyBotImpact(
         );
 
         bike.impactSlowTimer = duration;
+    }
+
+    const roughObstacle = ['rock', 'rolling_boulder', 'log', 'fallen_branch'].includes(obstacle.type);
+    if (roughObstacle) {
+        const stability = clamp(Number(bike.stability) || 0, 0, 100);
+        speedFactor = Math.min(0.94, speedFactor + stability * 0.0018);
+        duration = Math.round(duration * (1 - stability * 0.002));
+        bike.impactSlowTimer = duration;
+        const severity = obstacle.type === 'rolling_boulder' ? 1.35 : obstacle.type === 'rock' ? 1.2 : 1;
+        if (stability < 30 && bike.velocityX * severity > 12 + stability * 0.14) {
+            startBikeFlip(bike, obstacle.type === 'rock' ? -1 : 1);
+        }
     }
 
     const reducedSpeed = Math.max(
@@ -2370,14 +2593,67 @@ function drawBike(bike, label, color) {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.beginPath();
-    ctx.moveTo(rearWheelX, wheelY);
-    ctx.lineTo(bottomX, wheelY);
-    ctx.lineTo(seatX, wheelY - 27);
-    ctx.lineTo(rearWheelX, wheelY);
-    ctx.moveTo(seatX, wheelY - 27);
-    ctx.lineTo(headX, wheelY - 19);
-    ctx.lineTo(bottomX, wheelY);
+    if (visuals.fullSuspension) {
+        ctx.moveTo(bottomX, wheelY);
+        ctx.lineTo(seatX, wheelY - 27);
+        ctx.lineTo(headX, wheelY - 19);
+        ctx.lineTo(bottomX, wheelY);
+    } else {
+        ctx.moveTo(rearWheelX, wheelY);
+        ctx.lineTo(bottomX, wheelY);
+        ctx.lineTo(seatX, wheelY - 27);
+        ctx.lineTo(rearWheelX, wheelY);
+        ctx.moveTo(seatX, wheelY - 27);
+        ctx.lineTo(headX, wheelY - 19);
+        ctx.lineTo(bottomX, wheelY);
+    }
     ctx.stroke();
+
+    if (visuals.fullSuspension) {
+        const swingPivot = { x: rearWheelX + 11, y: wheelY - 4 };
+        const rocker = { x: seatX - 7, y: wheelY - 15 };
+        ctx.strokeStyle = frameColor;
+        ctx.lineWidth = (visuals.frameWidth || 3) * 0.82;
+        ctx.beginPath();
+        ctx.moveTo(rearWheelX, wheelY);
+        ctx.lineTo(swingPivot.x, swingPivot.y);
+        ctx.lineTo(bottomX, wheelY);
+        ctx.moveTo(rearWheelX, wheelY);
+        ctx.lineTo(rocker.x, rocker.y);
+        ctx.lineTo(seatX, wheelY - 27);
+        ctx.moveTo(rocker.x, rocker.y);
+        ctx.lineTo(swingPivot.x, swingPivot.y);
+        ctx.stroke();
+        ctx.fillStyle = '#e2e8f0';
+        for (const joint of [swingPivot, rocker]) {
+            ctx.beginPath();
+            ctx.arc(joint.x, joint.y, 1.7, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        if (visuals.rearSuspension) {
+            const upper = { x: seatX + 1, y: wheelY - 22 };
+            const lower = { x: swingPivot.x + 2, y: swingPivot.y - 2 + (bike.rearCompression || 0) * 0.45 };
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.moveTo(upper.x, upper.y);
+            ctx.lineTo(lower.x, lower.y);
+            ctx.stroke();
+            ctx.strokeStyle = visuals.rearShockColor || '#fbbf24';
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.moveTo(upper.x, upper.y);
+            ctx.lineTo(lower.x, lower.y);
+            ctx.stroke();
+            ctx.strokeStyle = '#f8fafc';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo((upper.x + lower.x) / 2, (upper.y + lower.y) / 2);
+            ctx.lineTo(lower.x + 1, lower.y - 2);
+            ctx.stroke();
+        }
+    }
 
     ctx.strokeStyle = visuals.forkColor || '#cbd5e1';
     ctx.lineWidth = 3;
@@ -2389,18 +2665,36 @@ function drawBike(bike, label, color) {
         ctx.strokeStyle = '#fbbf24';
         ctx.lineWidth = 1.2;
         ctx.beginPath();
+        const forkCompression = bike.frontCompression || 0;
         ctx.moveTo(headX + 3, wheelY - 16);
-        ctx.lineTo(headX + 6, wheelY - 12);
-        ctx.lineTo(headX + 3, wheelY - 8);
-        ctx.lineTo(headX + 7, wheelY - 4);
+        ctx.lineTo(headX + 6, wheelY - 12 + forkCompression * 0.3);
+        ctx.lineTo(headX + 3, wheelY - 8 + forkCompression * 0.45);
+        ctx.lineTo(headX + 7, wheelY - 4 + forkCompression * 0.6);
         ctx.stroke();
     }
+
+    ctx.strokeStyle = visuals.gearColor || '#94a3b8';
+    ctx.lineWidth = 0.8;
+    for (const gearRadius of [2.4, 3.4, 4.2]) {
+        ctx.beginPath();
+        ctx.arc(rearWheelX, wheelY, gearRadius, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(rearWheelX + 1, wheelY + 3);
+    ctx.lineTo(rearWheelX + 5, wheelY + 7);
+    ctx.lineTo(rearWheelX + 9, wheelY + 4);
+    ctx.arc(rearWheelX + 9, wheelY + 2, 2, 0.5, Math.PI * 1.5);
+    ctx.stroke();
 
     ctx.strokeStyle = visuals.chainColor || '#cbd5e1';
     ctx.lineWidth = 1.3;
     ctx.beginPath();
-    ctx.moveTo(rearWheelX + 2, wheelY + 1);
-    ctx.lineTo(bottomX, wheelY + 1);
+    ctx.moveTo(rearWheelX + 3, wheelY - 2.6);
+    ctx.lineTo(bottomX - 4, wheelY - 3.5);
+    ctx.moveTo(bottomX - 4, wheelY + 3.5);
+    ctx.lineTo(rearWheelX + 3, wheelY + 2.6);
     ctx.arc(bottomX, wheelY, 4.5, 0, Math.PI * 2);
     ctx.stroke();
 
@@ -2417,6 +2711,12 @@ function drawBike(bike, label, color) {
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(bottomX, wheelY, 4.5, 0, Math.PI * 2);
+    if (visuals.chainringCount > 1) {
+        ctx.moveTo(bottomX + 6, wheelY);
+        ctx.arc(bottomX, wheelY, 6, 0, Math.PI * 2);
+        ctx.moveTo(bottomX + 7.5, wheelY);
+        ctx.arc(bottomX, wheelY, 7.5, 0, Math.PI * 2);
+    }
     ctx.moveTo(bottomX, wheelY);
     ctx.lineTo(leftPedal.x, leftPedal.y);
     ctx.moveTo(bottomX, wheelY);
@@ -3170,6 +3470,9 @@ export function initRace(onRaceEnd) {
             botBike = createBike(true, 1);
             botBike.displayName = 'Твой рекорд';
             botBike.color = '#94a3b8';
+            botBike.visuals.frameColor = '#94a3b8';
+            botBike.visuals.forkColor = '#cbd5e1';
+            botBike.visuals.rimColor = '#cbd5e1';
             botBike.isGhost = true;
             botBike.ghostStartX = playerBike.x;
             botBike.x = playerBike.x;

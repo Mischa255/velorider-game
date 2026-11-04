@@ -1,4 +1,4 @@
-import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=63';
+import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=66';
 import {
     player,
     loadPlayerState,
@@ -6,21 +6,21 @@ import {
     clearSavedProgress,
     forceSavePlayerState,
     getServerTime
-} from './state.js?v=63';
+} from './state.js?v=66';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=63';
+} from './race.js?v=66';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=63';
-import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=63';
+} from './audio.js?v=66';
+import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=66';
 
 const CATEGORY_NAMES = {
     frames: 'Рамы',
@@ -384,8 +384,21 @@ function ensureGarageLayout() {
                                     <path d="M185 184 L196 174 L203 187" stroke="#fbbf24" stroke-width="4"/>
                                 </g>
                                 <g id="garage-bike-suspension" fill="none" stroke="#fbbf24" stroke-width="3"><path d="M465 150 L478 156 L473 164 L490 170 L485 178"/></g>
+                                <g id="garage-bike-rear-triangle" display="none" fill="none" stroke="url(#garage-frame-gloss)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M150 185 L232 164 L300 185"/><path d="M150 185 L218 121 L250 80"/>
+                                    <path d="M218 121 L232 164 L270 132" stroke-width="7"/><circle cx="218" cy="121" r="5" fill="#e2e8f0"/><circle cx="232" cy="164" r="5" fill="#e2e8f0"/>
+                                </g>
+                                <g id="garage-bike-rear-shock" display="none" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M278 121 L235 157" stroke="#0f172a" stroke-width="10"/><path id="garage-bike-shock-body" d="M278 121 L235 157" stroke="#94a3b8" stroke-width="5"/>
+                                    <path d="M270 128 L265 125 L260 133 L255 130 L250 138 L245 135 L240 143" stroke="#fbbf24" stroke-width="3"/>
+                                    <circle cx="278" cy="121" r="4" fill="#e2e8f0"/><circle cx="235" cy="157" r="4" fill="#e2e8f0"/>
+                                </g>
                                 <g id="garage-bike-motor" display="none"><path d="M300 157 L326 157 L337 178 L326 194 L300 194 L290 178 Z" fill="#334155" stroke="#fbbf24" stroke-width="3"/><rect x="329" y="125" width="45" height="15" rx="5" fill="#0f172a" stroke="#94a3b8" stroke-width="2"/><circle cx="312" cy="176" r="9" fill="#fbbf24"/></g>
-                                <g class="bike-chain-detail" fill="none" stroke="#cbd5e1" stroke-width="2"><path d="M150 185 L300 185"/><circle cx="300" cy="185" r="21"/><circle cx="150" cy="185" r="10"/></g>
+                                <g id="garage-bike-gearset" fill="none" stroke="var(--garage-drive-accent,#94a3b8)" stroke-width="2">
+                                    <circle cx="150" cy="185" r="8"/><circle cx="150" cy="185" r="12"/><circle cx="150" cy="185" r="16"/>
+                                    <path d="M150 195 L160 204 L166 194 L159 188" stroke-width="4"/><circle cx="160" cy="204" r="3" fill="#0f172a"/><circle cx="166" cy="194" r="3" fill="#0f172a"/>
+                                </g>
+                                <g class="bike-chain-detail" fill="none" stroke="#cbd5e1" stroke-width="2"><path d="M157 177 L283 166 M283 204 L157 193"/><circle cx="300" cy="185" r="21"/><circle id="garage-bike-chainring-outer" cx="300" cy="185" r="25" display="none"/><circle id="garage-bike-chainring-inner" cx="300" cy="185" r="17" display="none"/><circle cx="150" cy="185" r="10"/></g>
                                 <g fill="#e2e8f0" stroke="#0f172a" stroke-width="2"><circle cx="150" cy="185" r="6"/><circle cx="520" cy="185" r="6"/><circle cx="300" cy="185" r="6"/></g>
                                 <path d="M415 135 Q427 143 417 151" stroke="#fbbf24" stroke-width="4"/>
                                 <path class="bike-vbrakes" d="M160 157 Q150 149 140 157 M550 157 Q520 149 530 157" stroke="#ef4444" stroke-width="3"/>
@@ -886,12 +899,17 @@ function calculateBikeStats() {
         accel: 0,
         jump: 0,
         brake: 0,
-        power: 0
+        power: 0,
+        stability: 0
     };
+
+    const equippedFrame = ITEMS_DB.frames.find(item => item.id === player.equipped?.frames);
+    const hasRearSuspensionFrame = equippedFrame?.visuals?.type === 'dh';
 
     const equippedParts = [];
 
     getCategoryOrder().forEach(category => {
+        if (category === 'suspension' && !hasRearSuspensionFrame) return;
         const equippedId = player.equipped?.[category];
         const part = ITEMS_DB[category].find(item => item.id === equippedId);
         if (!part) return;
@@ -908,6 +926,8 @@ function calculateBikeStats() {
     player.totalJump = totals.jump || 0;
     player.totalBrake = totals.brake || 0;
     player.totalPower = totals.power || 0;
+    totals.stability = Math.min(100, totals.stability || 0);
+    player.totalStability = totals.stability;
     player.totalStats = { ...totals };
 
     return {
@@ -1014,11 +1034,12 @@ function renderGarageStats(stats) {
         { key: 'accel', label: 'Ускорение', icon: '⚡', glow: '#fb923c' },
         { key: 'jump', label: 'Сила прыжка', icon: '🪂', glow: '#a78bfa' },
         { key: 'brake', label: 'Торможение', icon: '🛑', glow: '#fb7185' },
+        { key: 'stability', label: 'Стабильность', icon: '🧭', glow: '#38bdf8' },
         { key: 'power', label: 'Мощность подъёма', icon: '🔋', glow: '#eab308' }
     ];
 
     grid.innerHTML = mainStats.map(stat => `
-        <div class="garage-stat-card" style="--stat-glow:${stat.glow}">
+        <div class="garage-stat-card" style="--stat-glow:${stat.glow}" title="${stat.key === 'stability' ? 'Вилка и задний амортизатор гасят толчки. При низкой стабильности на крупных кочках велосипед может перевернуться.' : ''}">
             <div class="garage-stat-top">
                 <span class="garage-stat-icon">${stat.icon}</span>
                 <span>${stat.label}</span>
@@ -1074,7 +1095,7 @@ function updateGarageUI() {
 
     if (frameCaption) {
         frameCaption.textContent = frame
-            ? `${getCategoryName(frameCategory)} · ${getRarityName(frame.rarity)} · Основа твоей сборки`
+            ? `${frame.visuals?.type === 'dh' ? 'Двухподвес · передняя вилка и задний амортизатор' : 'Хардтейл · передняя вилка'} · ${getRarityName(frame.rarity)}`
             : 'Выбери раму во вкладке «Модернизация», чтобы завершить сборку.';
     }
 
@@ -1089,6 +1110,7 @@ function updateGarageUI() {
         const id = player.equipped?.[category];
         return ITEMS_DB[category]?.find(item => item.id === id) || null;
     };
+
     if (bikeSvg) {
         const fork = getEquippedPart('forks');
         const wheels = getEquippedPart('wheels');
@@ -1096,79 +1118,152 @@ function updateGarageUI() {
         const brakes = getEquippedPart('brakes');
         const electronics = getEquippedPart('electronics');
         const chain = getEquippedPart('chains');
+        const drivetrain = getEquippedPart('drivetrain');
+        const derailleur = getEquippedPart('derailleurs');
+        const cassette = getEquippedPart('cassettes');
         const crank = getEquippedPart('cranks');
         const handlebar = getEquippedPart('handlebars');
         const saddle = getEquippedPart('saddles');
         const seatpost = getEquippedPart('seatposts');
-        const frameColor = getRarityAccent(frame?.rarity);
+        const rearShock = getEquippedPart('suspension');
+        const isFullSuspension = frame?.visuals?.type === 'dh';
+        
+        // --- ЦВЕТА И СТИЛИ ИЗ VISUALS ---
+        const frameColor = frame?.visuals?.color || getRarityAccent(frame?.rarity);
         bikeSvg.style.setProperty('--garage-bike-accent', frameColor);
-        bikeSvg.style.setProperty('--garage-fork-accent', getRarityAccent(fork?.rarity));
-        bikeSvg.style.setProperty('--garage-drive-accent', getRarityAccent(chain?.rarity));
-        bikeSvg.style.setProperty('--garage-crank-accent', getRarityAccent(crank?.rarity));
-        bikeSvg.style.setProperty('--garage-seat-accent', getRarityAccent(seatpost?.rarity));
-        bikeSvg.style.setProperty('--garage-saddle-accent', getRarityAccent(saddle?.rarity));
-        bikeSvg.style.setProperty('--garage-handlebar-width', handlebar?.rarity === 'legendary' ? '8px' : handlebar?.rarity === 'rare' ? '7px' : '6px');
-        bikeSvg.style.setProperty('--garage-handlebar-accent', getRarityAccent(handlebar?.rarity));
+        bikeSvg.style.setProperty('--garage-fork-accent', fork?.visuals?.color || getRarityAccent(fork?.rarity));
+        bikeSvg.style.setProperty('--garage-drive-accent', chain?.visuals?.color || getRarityAccent(chain?.rarity));
+        bikeSvg.style.setProperty('--garage-crank-accent', crank?.visuals?.color || getRarityAccent(crank?.rarity));
+        bikeSvg.style.setProperty('--garage-seat-accent', seatpost?.visuals?.color || getRarityAccent(seatpost?.rarity));
+        bikeSvg.style.setProperty('--garage-saddle-accent', saddle?.visuals?.color || getRarityAccent(saddle?.rarity));
+        
+        const hbWidth = handlebar?.visuals?.width ? `${handlebar.visuals.width * 3}px` : (handlebar?.rarity === 'legendary' ? '8px' : handlebar?.rarity === 'rare' ? '7px' : '6px');
+        bikeSvg.style.setProperty('--garage-handlebar-width', hbWidth);
+        bikeSvg.style.setProperty('--garage-handlebar-accent', handlebar?.visuals?.color || getRarityAccent(handlebar?.rarity));
+        
         bikeSvg.dataset.frameId = frame?.id || 'none';
         bikeSvg.dataset.wheelId = wheels?.id || 'none';
+        
         bikeSvg.classList.toggle('has-motor', Boolean(electronics && electronics.id !== 'e1'));
         bikeSvg.classList.toggle('has-suspension', Boolean(fork && fork.id !== 'fk1'));
+        bikeSvg.classList.toggle('has-full-suspension', isFullSuspension);
         bikeSvg.classList.toggle('has-disc-brakes', Boolean(brakes && !['b1', 'b2'].includes(brakes.id)));
+
+        // --- ГЕОМЕТРИЯ РАМЫ ---
         const frameGroup = bikeSvg.querySelector('.bike-frame');
         if (frameGroup) {
-            const geometry = frame?.rarity === 'legendary'
-                ? { seat: [250, 80], head: [435, 88], lower: [447, 135] }
-                : frame?.rarity === 'rare'
-                    ? { seat: [242, 85], head: [440, 92], lower: [452, 140] }
-                    : { seat: [235, 88], head: [445, 96], lower: [457, 145] };
+            let geometry;
+            if (frame?.visuals?.type === 'dh') {
+                geometry = { seat: [250, 80], head: [435, 88], lower: [447, 135] };
+            } else if (frame?.visuals?.type === 'hardtail') {
+                geometry = { seat: [235, 88], head: [445, 96], lower: [457, 145] };
+            } else {
+                geometry = frame?.rarity === 'legendary'
+                    ? { seat: [250, 80], head: [435, 88], lower: [447, 135] }
+                    : frame?.rarity === 'rare'
+                        ? { seat: [242, 85], head: [440, 92], lower: [452, 140] }
+                        : { seat: [235, 88], head: [445, 96], lower: [457, 145] };
+            }
             const points = geometry;
             const xy = pair => pair.join(' ');
+            const fWidth = frame?.visuals?.width || (frame?.rarity === 'legendary' ? '15' : frame?.rarity === 'rare' ? '13' : '11');
             const paths = frameGroup.querySelectorAll('path');
             const values = [
-                `M150 185 L300 185 L${xy(points.seat)} L150 185`,
+                isFullSuspension
+                    ? `M300 185 L${xy(points.seat)}`
+                    : `M150 185 L300 185 L${xy(points.seat)} L150 185`,
                 `M${xy(points.seat)} L${xy(points.head)} L300 185`,
                 `M${xy(points.head)} L${xy(points.lower)} L520 185`,
                 `M${xy(points.seat)} L${xy(points.lower)}`
             ];
             paths.forEach((path, index) => { if (values[index]) path.setAttribute('d', values[index]); });
+            if (paths[3]) paths[3].setAttribute('display', isFullSuspension ? 'none' : 'inline');
+
+            const rearTriangle = bikeSvg.querySelector('#garage-bike-rear-triangle');
+            if (rearTriangle) {
+                rearTriangle.setAttribute('display', isFullSuspension ? 'inline' : 'none');
+                rearTriangle.setAttribute('stroke-width', fWidth);
+            }
+            const rearShockGroup = bikeSvg.querySelector('#garage-bike-rear-shock');
+            if (rearShockGroup) rearShockGroup.setAttribute('display', isFullSuspension && rearShock ? 'inline' : 'none');
+            const rearShockBody = bikeSvg.querySelector('#garage-bike-shock-body');
+            if (rearShockBody) rearShockBody.setAttribute('stroke', rearShock?.visuals?.color || getRarityAccent(rearShock?.rarity));
+            
             bikeSvg.querySelectorAll('.bike-fork, .bike-fork-highlight').forEach(path =>
                 path.setAttribute('d', `M${xy(points.lower)} L520 185`)
             );
             const cockpitPaths = bikeSvg.querySelectorAll('#garage-bike-cockpit path');
             if (cockpitPaths[0]) cockpitPaths[0].setAttribute('d', `M${xy(points.head)} L${points.head[0] + 16} 27 L${points.head[0] + 33} 27`);
             if (cockpitPaths[1]) cockpitPaths[1].setAttribute('d', `M${points.head[0] - 5} 23 L${points.head[0] + 37} 23`);
+
+            // Индивидуальная толщина рамы
+            frameGroup.setAttribute('stroke-width', fWidth);
         }
-        if (frameGroup) frameGroup.setAttribute('stroke-width', frame?.rarity === 'legendary' ? '15' : frame?.rarity === 'rare' ? '13' : '11');
-        const seatCoordinates = frame?.rarity === 'legendary' ? { x: 250, y: 80 } : frame?.rarity === 'rare' ? { x: 242, y: 85 } : { x: 235, y: 88 };
+        
+        // --- КООРДИНАТЫ ПОДСЕДЕЛА ---
+        let seatCoordinates;
+        if (frame?.visuals?.type === 'dh') {
+            seatCoordinates = { x: 250, y: 80 };
+        } else if (frame?.visuals?.type === 'hardtail') {
+            seatCoordinates = { x: 235, y: 88 };
+        } else {
+            seatCoordinates = frame?.rarity === 'legendary' ? { x: 250, y: 80 } : frame?.rarity === 'rare' ? { x: 242, y: 85 } : { x: 235, y: 88 };
+        }
+
         const seatpostLine = bikeSvg.querySelector('#garage-bike-seatpost');
         if (seatpostLine) seatpostLine.setAttribute('d', `M${seatCoordinates.x} ${seatCoordinates.y} L${seatCoordinates.x - 7} 53`);
         const saddleLine = bikeSvg.querySelector('#garage-bike-saddle');
         if (saddleLine) saddleLine.setAttribute('d', `M${seatCoordinates.x - 20} 51 Q${seatCoordinates.x} 45 ${seatCoordinates.x + 25} 51`);
+        
+        // --- КОЛЕСА И ТОРМОЗА ---
         const tireGroup = bikeSvg.querySelector('.bike-tire');
-        if (tireGroup) tireGroup.setAttribute('stroke-width', tires?.rarity === 'legendary' ? '20' : tires?.rarity === 'rare' ? '17' : '14');
+        if (tireGroup) tireGroup.setAttribute('stroke-width', tires?.visuals?.width ? tires.visuals.width * 4 : (tires?.rarity === 'legendary' ? '20' : tires?.rarity === 'rare' ? '17' : '14'));
+        
         const rimGroup = bikeSvg.querySelector('.bike-rims');
-        if (rimGroup) rimGroup.setAttribute('stroke', wheels?.rarity === 'legendary' ? '#fbbf24' : wheels?.rarity === 'rare' ? '#38bdf8' : '#64748b');
+        if (rimGroup) rimGroup.setAttribute('stroke', wheels?.visuals?.rimColor || (wheels?.rarity === 'legendary' ? '#fbbf24' : wheels?.rarity === 'rare' ? '#38bdf8' : '#64748b'));
+        
         const motor = bikeSvg.querySelector('#garage-bike-motor');
         if (motor) motor.setAttribute('display', electronics && electronics.id !== 'e1' ? 'inline' : 'none');
+        
         bikeSvg.querySelectorAll('.bike-brake-discs').forEach(group => {
             group.setAttribute('display', brakes && !['b1', 'b2'].includes(brakes.id) ? 'inline' : 'none');
         });
+        
         const vBrakes = bikeSvg.querySelector('.bike-vbrakes');
         if (vBrakes) vBrakes.setAttribute('display', brakes && !['b1', 'b2'].includes(brakes.id) ? 'none' : 'inline');
+        
         const cockpit = bikeSvg.querySelector('#garage-bike-cockpit');
-        if (cockpit) cockpit.querySelectorAll('path').forEach(path => path.setAttribute('stroke-width', handlebar?.rarity === 'legendary' ? '8' : handlebar?.rarity === 'rare' ? '7' : '6'));
+        if (cockpit) cockpit.querySelectorAll('path').forEach(path => path.setAttribute('stroke-width', handlebar?.visuals?.width ? handlebar.visuals.width * 3 : (handlebar?.rarity === 'legendary' ? '8' : handlebar?.rarity === 'rare' ? '7' : '6')));
+        
         const forkLine = bikeSvg.querySelector('.bike-fork');
-        if (forkLine) forkLine.setAttribute('stroke', getRarityAccent(fork?.rarity));
+        if (forkLine) forkLine.setAttribute('stroke', fork?.visuals?.color || getRarityAccent(fork?.rarity));
+        
         const suspension = bikeSvg.querySelector('#garage-bike-suspension');
         if (suspension) suspension.setAttribute('display', fork && fork.id !== 'fk1' ? 'inline' : 'none');
+        
         const saddleElement = bikeSvg.querySelector('#garage-bike-saddle');
-        if (saddleElement) saddleElement.setAttribute('stroke', getRarityAccent(saddle?.rarity));
+        if (saddleElement) saddleElement.setAttribute('stroke', saddle?.visuals?.color || getRarityAccent(saddle?.rarity));
+        
         const seatpostElement = bikeSvg.querySelector('#garage-bike-seatpost');
-        if (seatpostElement) seatpostElement.setAttribute('stroke', getRarityAccent(seatpost?.rarity));
+        if (seatpostElement) seatpostElement.setAttribute('stroke', seatpost?.visuals?.color || getRarityAccent(seatpost?.rarity));
+        
         const chainDetail = bikeSvg.querySelector('.bike-chain-detail');
-        if (chainDetail) chainDetail.setAttribute('stroke', getRarityAccent(chain?.rarity));
+        if (chainDetail) chainDetail.setAttribute('stroke', chain?.visuals?.color || getRarityAccent(chain?.rarity));
+        const hasTripleChainring = ['d1', 'd2', 'd3'].includes(drivetrain?.id);
+        bikeSvg.querySelectorAll('#garage-bike-chainring-outer, #garage-bike-chainring-inner').forEach(ring => {
+            ring.setAttribute('display', hasTripleChainring ? 'inline' : 'none');
+        });
+
+        const gearset = bikeSvg.querySelector('#garage-bike-gearset');
+        if (gearset) {
+            gearset.setAttribute('stroke', getRarityAccent(derailleur?.rarity || cassette?.rarity));
+            gearset.setAttribute('stroke-width', cassette?.rarity === 'legendary' ? '2.8' : cassette?.rarity === 'rare' ? '2.4' : '2');
+            gearset.dataset.cassetteId = cassette?.id || 'none';
+            gearset.dataset.derailleurId = derailleur?.id || 'none';
+        }
+        
         const crankDetail = bikeSvg.querySelector('.bike-crank-detail');
-        if (crankDetail) crankDetail.setAttribute('stroke', getRarityAccent(crank?.rarity));
+        if (crankDetail) crankDetail.setAttribute('stroke', crank?.visuals?.color || getRarityAccent(crank?.rarity));
     }
 
     const countEl = document.getElementById('garage-equipped-count');
@@ -1183,10 +1278,30 @@ function updateGarageUI() {
 
     equippedDiv.innerHTML = '';
 
+    const isDH = frame?.visuals?.type === 'dh'; // Проверяем, двухподвес ли это
+
     categories.forEach(category => {
         const equippedId = player.equipped?.[category];
         const part = ITEMS_DB[category].find(item => item.id === equippedId);
         const card = document.createElement('div');
+
+        // Блокировка амортизатора для хардтейлов
+        if (category === 'suspension' && !isDH) {
+            card.className = 'garage-equipped-card is-empty';
+            card.style.opacity = '0.5';
+            card.innerHTML = `
+                <div class="garage-part-head">
+                    <div class="garage-part-icon">${getCategoryIcon(category)}</div>
+                    <div class="garage-part-info">
+                        <div class="garage-part-category">${escapeHTML(getCategoryName(category))}</div>
+                        <div class="garage-part-name text-gray-500">Несовместимо с рамой</div>
+                    </div>
+                </div>
+                <div class="garage-empty-text">Требуется двухподвесная рама (DH).</div>
+            `;
+            equippedDiv.appendChild(card);
+            return; // Пропускаем обычную отрисовку
+        }
 
         if (part) {
             const accent = getRarityAccent(part.rarity);
@@ -1268,37 +1383,64 @@ function updateUpgradeUI() {
         return;
     }
 
+    // --- ПРОВЕРКА ТИПА РАМЫ ---
+    const frameId = player.equipped?.frames;
+    const currentFrame = ITEMS_DB.frames?.find(item => item.id === frameId);
+    const isDH = currentFrame?.visuals?.type === 'dh';
+
     categories.forEach(category => {
         const items = ITEMS_DB[category];
         const equippedPart = items.find(item => item.id === player.equipped?.[category]);
         const ownedCount = items.filter(item => hasPart(category, item.id)).length;
 
         const button = document.createElement('button');
-        button.className =
-            'w-full text-left px-3 py-3 rounded-xl font-bold transition ' +
-            (selectedUpgradeCategory === category
-                ? 'garage-selected-category bg-green-600 text-white'
-                : 'bg-gray-700 hover:bg-gray-600 text-gray-300');
+        
+        // --- БЛОКИРОВКА ВКЛАДКИ ПОДВЕСКИ ---
+        if (category === 'suspension' && !isDH) {
+            button.className = 'w-full text-left px-3 py-3 rounded-xl font-bold transition bg-gray-800 text-gray-600 cursor-not-allowed';
+            button.innerHTML = `
+                <div>${getCategoryIcon(category)} ${getCategoryName(category)}</div>
+                <div class="text-xs font-normal opacity-70 truncate mt-1 text-red-400">
+                    Только для двухподвесов
+                </div>
+            `;
+            button.disabled = true;
+        } else {
+            button.className =
+                'w-full text-left px-3 py-3 rounded-xl font-bold transition ' +
+                (selectedUpgradeCategory === category
+                    ? 'garage-selected-category bg-green-600 text-white'
+                    : 'bg-gray-700 hover:bg-gray-600 text-gray-300');
 
-        button.innerHTML = `
-            <div>${getCategoryIcon(category)} ${getCategoryName(category)}</div>
-            <div class="text-xs font-normal opacity-70 truncate mt-1">
-                ${equippedPart ? equippedPart.name : 'Не установлено'}
-            </div>
-            <div class="text-xs opacity-60 mt-1">
-                ${ownedCount}/${items.length} деталей
-            </div>
-        `;
+            button.innerHTML = `
+                <div>${getCategoryIcon(category)} ${getCategoryName(category)}</div>
+                <div class="text-xs font-normal opacity-70 truncate mt-1">
+                    ${equippedPart ? equippedPart.name : 'Не установлено'}
+                </div>
+                <div class="text-xs opacity-60 mt-1">
+                    ${ownedCount}/${items.length} деталей
+                </div>
+            `;
 
-        button.addEventListener('click', () => {
-            selectedUpgradeCategory = category;
-            updateUpgradeUI();
-        });
+            button.addEventListener('click', () => {
+                selectedUpgradeCategory = category;
+                updateUpgradeUI();
+            });
+        }
 
         categoriesDiv.appendChild(button);
     });
 
     const category = selectedUpgradeCategory;
+    
+    // Если игрок каким-то образом оказался на вкладке амортизаторов, 
+    // но поменял раму на хардтейл - перекидываем его обратно на рамы
+    if (category === 'suspension' && !isDH) {
+        selectedUpgradeCategory = 'frames';
+        updateUpgradeUI();
+        return;
+    }
+    
     const categoryItems = ITEMS_DB[category] || [];
     const chooseActionLabel = category === 'riders'
         ? 'Выбрать райдера'

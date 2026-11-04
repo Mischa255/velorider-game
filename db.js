@@ -8,9 +8,11 @@ const part = (
     jump,
     brake,
     price,
-    power = 0
+    power = 0,
+    visuals = {} // <-- Новый параметр
 ) => {
-    const partData = { id, name, rarity, speed, accel, jump, brake, price };
+    const partData = { id, name, rarity, speed, accel, jump, brake, price, visuals }; // <-- Сохраняем visuals
+    if (Number.isFinite(visuals.stability)) partData.stability = visuals.stability;
     if (power) partData.power = power;
     const legendaryAbilities = {
         f3: { id: 'frameGuard', name: 'Карбоновый монокок', description: 'Первое столкновение с твёрдым препятствием за гонку наносит меньше потери скорости.' },
@@ -37,55 +39,64 @@ export const ITEMS_DB = {
     // =====================================
     // РАМЫ
     // =====================================
-
     frames: [
-        part('f1', 'Ardis Steel Frame', 'common', 2, 1, 1, 1, 200),
-        part('f2', 'Trek Marlin Gen 3 Alpha Silver', 'rare', 4, 3, 3, 2, 1000),
-        part('f3', 'Cannondale Jekyll Carbon', 'legendary', 8, 5, 8, 4, 2500),
-        part('f4', 'Giant Talon ALUXX 6061', 'rare', 5, 4, 3, 2, 1200),
-        part('f5', 'Specialized Rockhopper A1 Alloy', 'rare', 5, 3, 4, 3, 1300),
-        part('f6', 'Cannondale Trail SmartForm C3', 'rare', 4, 4, 4, 3, 1400),
-        part('f7', 'Marin Bobcat Trail Series 2', 'rare', 5, 4, 5, 3, 1500),
-        part('f8', 'Trek Procaliber Carbon', 'legendary', 9, 7, 8, 5, 3500),
-        part('f9', 'Giant XTC Advanced Carbon', 'legendary', 10, 8, 9, 5, 4000),
-        part('f10', 'Specialized Epic Carbon', 'legendary', 11, 8, 10, 6, 4500)
+        // Хардтейлы
+        part('f1', 'Ardis Steel Frame', 'common', 2, 1, 1, 1, 200, 0, { color: '#71717a', width: 10, type: 'hardtail', stability: 20 }),
+        part('f2', 'Trek Marlin Gen 3 Alpha Silver', 'rare', 4, 3, 3, 2, 1000, 0, { color: '#0ea5e9', width: 12, type: 'hardtail', stability: 22 }),
+        part('f4', 'Giant Talon ALUXX 6061', 'rare', 5, 4, 3, 2, 1200, 0, { color: '#ef4444', width: 12, type: 'hardtail', stability: 23 }),
+        part('f5', 'Specialized Rockhopper A1 Alloy', 'rare', 5, 3, 4, 3, 1300, 0, { color: '#f59e0b', width: 12, type: 'hardtail', stability: 23 }),
+        part('f6', 'Cannondale Trail SmartForm C3', 'rare', 4, 4, 4, 3, 1400, 0, { color: '#10b981', width: 12, type: 'hardtail', stability: 24 }),
+        part('f7', 'Marin Bobcat Trail Series 2', 'rare', 5, 4, 5, 3, 1500, 0, { color: '#8b5cf6', width: 12, type: 'hardtail', stability: 24 }),
+        // Редкие двухподвесы: стоят дороже хардтейлов и открывают задний амортизатор.
+        part('f11', 'Trek Fuel EX Alloy', 'rare', 6, 5, 6, 3, 2600, 0, { color: '#14b8a6', width: 14, type: 'dh', stability: 31 }),
+        part('f12', 'Giant Trance X Alloy', 'rare', 7, 5, 7, 4, 3200, 0, { color: '#06b6d4', width: 14, type: 'dh', stability: 33 }),
+        part('f8', 'Trek Procaliber Carbon', 'legendary', 9, 7, 8, 5, 3500, 0, { color: '#b91c1c', width: 15, type: 'hardtail', stability: 26 }),
+        part('f9', 'Giant XTC Advanced Carbon', 'legendary', 10, 8, 9, 5, 4000, 0, { color: '#3b82f6', width: 15, type: 'hardtail', stability: 26 }),
+        part('f10', 'Specialized Epic Carbon', 'legendary', 11, 8, 10, 6, 4500, 0, { color: '#14b8a6', width: 15, type: 'hardtail', stability: 27 }),
+        
+        // Легендарные двухподвесы.
+        part('f3', 'Cannondale Jekyll Carbon', 'legendary', 8, 5, 8, 4, 5600, 0, { color: '#22c55e', width: 15, type: 'dh', stability: 36 }),
+        part('f13', 'Specialized Stumpjumper EVO Carbon', 'legendary', 10, 7, 11, 6, 7000, 0, { color: '#f97316', width: 16, type: 'dh', stability: 40 })
     ],
 
+    // =====================================
+    // ЗАДНИЕ АМОРТИЗАТОРЫ (Подвеска)
+    // =====================================
+    suspension: [
+        part('s1', 'Пружинный амортизатор', 'common', 0, 0, 1, 0, 200, 0, { color: '#94a3b8', stability: 24 }),
+        part('s2', 'RockShox Monarch', 'rare', 0, 0, 3, 0, 800, 0, { color: '#38bdf8', stability: 36 }),
+        part('s3', 'Fox Float X2 Factory', 'legendary', 0, 0, 6, 0, 2200, 0, { color: '#fbbf24', stability: 48 })
+    ],
 
     // =====================================
     // ВИЛКИ
     // =====================================
-
     forks: [
-        part('fk1', 'Жёсткая вилка Ardis', 'common', 1, 1, 1, 1, 200),
-        part('fk2', 'SR Suntour XCT', 'common', 1, 1, 2, 1, 300),
-        part('fk3', 'SR Suntour XCM', 'rare', 2, 2, 4, 2, 700),
-        part('fk4', 'RockShox Judy Silver', 'rare', 3, 3, 5, 2, 1100),
-        part('fk5', 'RockShox Recon Gold RL', 'rare', 4, 4, 6, 3, 1500),
-        part('fk6', 'RockShox SID Select', 'legendary', 7, 6, 9, 4, 2800),
-        part('fk7', 'FOX 34 Float Performance', 'legendary', 8, 7, 10, 5, 3500),
-        part('fk8', 'Cannondale Lefty Ocho', 'legendary', 9, 8, 11, 5, 4000)
+        part('fk1', 'Жёсткая вилка Ardis', 'common', 1, 1, 1, 1, 200, 0, { color: '#71717a', stability: 0 }),
+        part('fk2', 'SR Suntour XCT', 'common', 1, 1, 2, 1, 300, 0, { color: '#a1a1aa', stability: 7 }),
+        part('fk3', 'SR Suntour XCM', 'rare', 2, 2, 4, 2, 700, 0, { color: '#000000', stability: 11 }),
+        part('fk4', 'RockShox Judy Silver', 'rare', 3, 3, 5, 2, 1100, 0, { color: '#1e293b', stability: 14 }),
+        part('fk5', 'RockShox Recon Gold RL', 'rare', 4, 4, 6, 3, 1500, 0, { color: '#fcd34d', stability: 17 }),
+        part('fk6', 'RockShox SID Select', 'legendary', 7, 6, 9, 4, 2800, 0, { color: '#3b82f6', stability: 21 }),
+        part('fk7', 'FOX 34 Float Performance', 'legendary', 8, 7, 10, 5, 3500, 0, { color: '#f59e0b', stability: 24 }),
+        part('fk8', 'Cannondale Lefty Ocho', 'legendary', 9, 8, 11, 5, 4000, 0, { color: '#ef4444', stability: 19 })
     ],
-
 
     // =====================================
     // ЦЕПИ
     // =====================================
-
     chains: [
-        part('ch1', 'Ardis 7/8 Speed', 'common', 1, 1, 0, 0, 150),
-        part('ch2', 'KMC Z8', 'common', 1, 2, 0, 0, 220),
-        part('ch3', 'KMC X10', 'rare', 2, 3, 0, 0, 450),
-        part('ch4', 'Shimano HG601', 'rare', 3, 4, 0, 0, 650),
-        part('ch5', 'SRAM GX Eagle Chain', 'legendary', 5, 6, 0, 0, 1200),
-        part('ch6', 'Shimano XTR CN-M9100', 'legendary', 6, 7, 0, 0, 1600)
+        part('ch1', 'Ardis 7/8 Speed', 'common', 1, 1, 0, 0, 150, 0, { color: '#a1a1aa' }),
+        part('ch2', 'KMC Z8', 'common', 1, 2, 0, 0, 220, 0, { color: '#9ca3af' }),
+        part('ch3', 'KMC X10', 'rare', 2, 3, 0, 0, 450, 0, { color: '#e2e8f0' }),
+        part('ch4', 'Shimano HG601', 'rare', 3, 4, 0, 0, 650, 0, { color: '#93c5fd' }),
+        part('ch5', 'SRAM GX Eagle Chain', 'legendary', 5, 6, 0, 0, 1200, 0, { color: '#d1d5db' }),
+        part('ch6', 'Shimano XTR CN-M9100', 'legendary', 6, 7, 0, 0, 1600, 0, { color: '#fcd34d' })
     ],
-
 
     // =====================================
     // ТРАНСМИССИИ
     // =====================================
-
     drivetrain: [
         part('d1', 'Ardis 3x7', 'common', 2, 2, 0, 0, 250),
         part('d2', 'Shimano Tourney TX', 'common', 2, 2, 0, 0, 350),
@@ -99,11 +110,9 @@ export const ITEMS_DB = {
         part('d10', 'SRAM X0 Eagle 1x12', 'legendary', 10, 11, 0, 0, 3800)
     ],
 
-
     // =====================================
     // КАРЕТКИ
     // =====================================
-
     bottomBrackets: [
         part('bb1', 'Каретка под квадрат', 'common', 1, 1, 0, 0, 120),
         part('bb2', 'Shimano BB-UN300', 'common', 1, 2, 0, 0, 200),
@@ -113,41 +122,35 @@ export const ITEMS_DB = {
         part('bb6', 'SRAM DUB', 'legendary', 5, 6, 0, 0, 1300)
     ],
 
-
     // =====================================
     // ШАТУНЫ
     // =====================================
-
     cranks: [
-        part('cr1', 'Стальные шатуны Ardis', 'common', 1, 1, 0, 0, 150),
-        part('cr2', 'Prowheel Alloy', 'common', 2, 2, 0, 0, 250),
-        part('cr3', 'Shimano Acera', 'common', 2, 3, 0, 0, 350),
-        part('cr4', 'Shimano Deore', 'rare', 3, 4, 0, 0, 600),
-        part('cr5', 'Shimano SLX M7100', 'rare', 4, 5, 0, 0, 950),
-        part('cr6', 'Shimano Deore XT', 'legendary', 6, 7, 0, 0, 1600),
-        part('cr7', 'Shimano XTR', 'legendary', 8, 9, 0, 0, 2300),
-        part('cr8', 'SRAM GX Eagle', 'legendary', 7, 8, 0, 0, 1900)
+        part('cr1', 'Стальные шатуны Ardis', 'common', 1, 1, 0, 0, 150, 0, { color: '#71717a' }),
+        part('cr2', 'Prowheel Alloy', 'common', 2, 2, 0, 0, 250, 0, { color: '#1e293b' }),
+        part('cr3', 'Shimano Acera', 'common', 2, 3, 0, 0, 350, 0, { color: '#475569' }),
+        part('cr4', 'Shimano Deore', 'rare', 3, 4, 0, 0, 600, 0, { color: '#000000' }),
+        part('cr5', 'Shimano SLX M7100', 'rare', 4, 5, 0, 0, 950, 0, { color: '#1e293b' }),
+        part('cr6', 'Shimano Deore XT', 'legendary', 6, 7, 0, 0, 1600, 0, { color: '#f8fafc' }),
+        part('cr7', 'Shimano XTR', 'legendary', 8, 9, 0, 0, 2300, 0, { color: '#9ca3af' }),
+        part('cr8', 'SRAM GX Eagle', 'legendary', 7, 8, 0, 0, 1900, 0, { color: '#111827' })
     ],
-
 
     // =====================================
     // КОЛЁСА
     // =====================================
-
     wheels: [
-        part('w1', 'Стертые покрышки и простые колёса', 'common', 1, 1, 1, 2, 200),
-        part('w2', 'Giant GX03V Alloy', 'common', 2, 2, 2, 2, 350),
-        part('w3', 'WTB ST i25', 'rare', 3, 3, 3, 4, 700),
-        part('w4', 'DT Swiss M 1900', 'rare', 4, 4, 4, 5, 1200),
-        part('w5', 'DT Swiss XM 1700', 'legendary', 7, 6, 6, 7, 2300),
-        part('w6', 'DT Swiss XRC 1200 Carbon', 'legendary', 9, 8, 8, 8, 3500)
+        part('w1', 'Стертые покрышки и простые колёса', 'common', 1, 1, 1, 2, 200, 0, { rimColor: '#52525b', radius: 9, hubColor: '#a1a1aa' }),
+        part('w2', 'Giant GX03V Alloy', 'common', 2, 2, 2, 2, 350, 0, { rimColor: '#3f3f46', radius: 9.2, hubColor: '#e2e8f0' }),
+        part('w3', 'WTB ST i25', 'rare', 3, 3, 3, 4, 700, 0, { rimColor: '#1e293b', radius: 9.5, hubColor: '#9ca3af' }),
+        part('w4', 'DT Swiss M 1900', 'rare', 4, 4, 4, 5, 1200, 0, { rimColor: '#e2e8f0', radius: 9.8, hubColor: '#ef4444' }),
+        part('w5', 'DT Swiss XM 1700', 'legendary', 7, 6, 6, 7, 2300, 0, { rimColor: '#f43f5e', radius: 10.2, hubColor: '#f8fafc' }),
+        part('w6', 'DT Swiss XRC 1200 Carbon', 'legendary', 9, 8, 8, 8, 3500, 0, { rimColor: '#fbbf24', radius: 10.5, hubColor: '#fcd34d' })
     ],
-
 
     // =====================================
     // ТОРМОЗА
     // =====================================
-
     brakes: [
         part('b1', 'Старые V-Brakes', 'common', 0, 0, 0, 3, 150),
         part('b2', 'Shimano Tourney V-Brake', 'common', 0, 0, 0, 4, 250),
@@ -159,11 +162,9 @@ export const ITEMS_DB = {
         part('b8', 'SRAM Code RSC', 'legendary', 0, 0, 0, 14, 2600)
     ],
 
-
     // =====================================
     // ЭЛЕКТРОНИКА И МОТОРЫ
     // =====================================
-
     electronics: [
         part('e1', 'Педальная тяга', 'common', 0, 0, 2, 0, 200, 2),
         part('e2', 'Shimano Steps E5000', 'rare', 4, 5, -1, 0, 1800, 10),
@@ -172,11 +173,9 @@ export const ITEMS_DB = {
         part('e5', 'Specialized 2.2 Motor', 'legendary', 11, 13, -3, 0, 4500, 36)
     ],
 
-
     // =====================================
     // КАССЕТЫ
     // =====================================
-
     cassettes: [
         part('cs1', 'Shimano Tourney 7-speed', 'common', 1, 1, 0, 0, 150),
         part('cs2', 'Shimano Acera 9-speed', 'common', 2, 2, 0, 0, 300),
@@ -187,11 +186,9 @@ export const ITEMS_DB = {
         part('cs7', 'Shimano XTR 12-speed', 'legendary', 10, 10, 0, 0, 3000)
     ],
 
-
     // =====================================
     // ЗАДНИЕ ПЕРЕКЛЮЧАТЕЛИ
     // =====================================
-
     derailleurs: [
         part('rd1', 'Shimano Tourney RD-TY300', 'common', 1, 1, 0, 0, 180),
         part('rd2', 'Shimano Acera RD-M3020', 'common', 2, 2, 0, 0, 350),
@@ -202,11 +199,9 @@ export const ITEMS_DB = {
         part('rd7', 'Shimano XTR RD-M9100', 'legendary', 10, 10, 0, 0, 3000)
     ],
 
-
     // =====================================
     // МАНЕТКИ
     // =====================================
-
     shifters: [
         part('sh1', 'Shimano Tourney SL-TX50', 'common', 1, 1, 0, 0, 150),
         part('sh2', 'Shimano Acera SL-M3000', 'common', 2, 2, 0, 0, 300),
@@ -217,24 +212,20 @@ export const ITEMS_DB = {
         part('sh7', 'Shimano XTR SL-M9100', 'legendary', 10, 10, 0, 0, 2500)
     ],
 
-
     // =====================================
     // РУЛИ
     // =====================================
-
     handlebars: [
-        part('hb1', 'Стальной руль 600 мм', 'common', 0, 1, 1, 1, 100),
-        part('hb2', 'Alloy Riser 680 мм', 'common', 1, 2, 2, 1, 250),
-        part('hb3', 'Giant Connect Trail 780 мм', 'rare', 2, 3, 3, 2, 500),
-        part('hb4', 'Race Face Chester', 'rare', 3, 4, 4, 2, 850),
-        part('hb5', 'Renthal Fatbar Carbon', 'legendary', 5, 5, 6, 3, 1800)
+        part('hb1', 'Стальной руль 600 мм', 'common', 0, 1, 1, 1, 100, 0, { color: '#a1a1aa', width: 1.5 }),
+        part('hb2', 'Alloy Riser 680 мм', 'common', 1, 2, 2, 1, 250, 0, { color: '#1e293b', width: 1.8 }),
+        part('hb3', 'Giant Connect Trail 780 мм', 'rare', 2, 3, 3, 2, 500, 0, { color: '#cbd5e1', width: 2.1 }),
+        part('hb4', 'Race Face Chester', 'rare', 3, 4, 4, 2, 850, 0, { color: '#ef4444', width: 2.1 }),
+        part('hb5', 'Renthal Fatbar Carbon', 'legendary', 5, 5, 6, 3, 1800, 0, { color: '#d97706', width: 2.5 })
     ],
-
 
     // =====================================
     // ВЫНОСЫ
     // =====================================
-
     stems: [
         part('st1', 'Стальной вынос', 'common', 0, 1, 0, 0, 100),
         part('st2', 'Alloy Ahead 60 mm', 'common', 1, 2, 1, 0, 200),
@@ -242,36 +233,30 @@ export const ITEMS_DB = {
         part('st4', 'Race Face Turbine', 'legendary', 4, 5, 3, 0, 1000)
     ],
 
-
     // =====================================
     // СЁДЛА
     // =====================================
-
     saddles: [
-        part('sa1', 'Базовое седло', 'common', 0, 0, 1, 0, 100),
-        part('sa2', 'Giant Sport Saddle', 'common', 1, 1, 2, 0, 250),
-        part('sa3', 'Specialized Bridge Sport', 'rare', 2, 2, 3, 0, 500),
-        part('sa4', 'WTB Volt', 'rare', 3, 3, 4, 0, 750),
-        part('sa5', 'Fizik Terra Argo X3', 'legendary', 5, 4, 6, 0, 1400)
+        part('sa1', 'Базовое седло', 'common', 0, 0, 1, 0, 100, 0, { color: '#1e293b' }),
+        part('sa2', 'Giant Sport Saddle', 'common', 1, 1, 2, 0, 250, 0, { color: '#334155' }),
+        part('sa3', 'Specialized Bridge Sport', 'rare', 2, 2, 3, 0, 500, 0, { color: '#ef4444' }),
+        part('sa4', 'WTB Volt', 'rare', 3, 3, 4, 0, 750, 0, { color: '#f8fafc' }),
+        part('sa5', 'Fizik Terra Argo X3', 'legendary', 5, 4, 6, 0, 1400, 0, { color: '#f59e0b' })
     ],
-
 
     // =====================================
     // ПОДСЕДЕЛЬНЫЕ ШТЫРИ
     // =====================================
-
     seatposts: [
-        part('sp1', 'Обычный стальной штырь', 'common', 0, 0, 1, 0, 100),
-        part('sp2', 'Alloy Seatpost', 'common', 1, 1, 2, 0, 220),
-        part('sp3', 'KS Dropper Post', 'rare', 2, 2, 4, 0, 700),
-        part('sp4', 'RockShox Reverb', 'legendary', 4, 3, 7, 0, 1600)
+        part('sp1', 'Обычный стальной штырь', 'common', 0, 0, 1, 0, 100, 0, { color: '#71717a' }),
+        part('sp2', 'Alloy Seatpost', 'common', 1, 1, 2, 0, 220, 0, { color: '#1e293b' }),
+        part('sp3', 'KS Dropper Post', 'rare', 2, 2, 4, 0, 700, 0, { color: '#38bdf8' }),
+        part('sp4', 'RockShox Reverb', 'legendary', 4, 3, 7, 0, 1600, 0, { color: '#facc15' })
     ],
-
 
     // =====================================
     // ПЕДАЛИ
     // =====================================
-
     pedals: [
         part('pd1', 'Пластиковые платформы', 'common', 0, 1, 1, 0, 100),
         part('pd2', 'Aluminium Platform', 'common', 1, 2, 2, 0, 250),
@@ -280,25 +265,21 @@ export const ITEMS_DB = {
         part('pd5', 'Crankbrothers Mallet E', 'legendary', 5, 6, 6, 0, 1300)
     ],
 
-
     // =====================================
     // ПОКРЫШКИ
     // =====================================
-
     tires: [
-        part('ti1', 'Базовые MTB 26"', 'common', 1, 1, 1, 1, 150),
-        part('ti2', 'Schwalbe Smart Sam', 'common', 2, 2, 2, 2, 300),
-        part('ti3', 'Maxxis Ardent', 'rare', 3, 3, 3, 3, 550),
-        part('ti4', 'Maxxis Rekon', 'rare', 4, 4, 4, 4, 800),
-        part('ti5', 'Maxxis Minion DHF', 'legendary', 5, 5, 7, 7, 1500),
-        part('ti6', 'Schwalbe Racing Ralph', 'legendary', 7, 7, 5, 4, 1700)
+        part('ti1', 'Базовые MTB 26"', 'common', 1, 1, 1, 1, 150, 0, { width: 3 }),
+        part('ti2', 'Schwalbe Smart Sam', 'common', 2, 2, 2, 2, 300, 0, { width: 3.5 }),
+        part('ti3', 'Maxxis Ardent', 'rare', 3, 3, 3, 3, 550, 0, { width: 3.8 }),
+        part('ti4', 'Maxxis Rekon', 'rare', 4, 4, 4, 4, 800, 0, { width: 4.0 }),
+        part('ti5', 'Maxxis Minion DHF', 'legendary', 5, 5, 7, 7, 1500, 0, { width: 4.5 }),
+        part('ti6', 'Schwalbe Racing Ralph', 'legendary', 7, 7, 5, 4, 1700, 0, { width: 4.2 })
     ],
-
 
     // =====================================
     // ВТУЛКИ
     // =====================================
-
     hubs: [
         part('hu1', 'Базовые втулки на гайках', 'common', 1, 1, 0, 1, 120),
         part('hu2', 'Shimano TX505', 'common', 2, 2, 0, 1, 250),
@@ -312,7 +293,6 @@ export const ITEMS_DB = {
     // РАЙДЕРЫ (ГОНЩИКИ)
     // Добавляют только мощность подъёма!
     // =====================================
-
     riders: [
         part('r1', 'Школьник', 'common', 0, 0, 0, 0, 1000, 10),
         part('r2', 'Велолюбитель', 'common', 0, 0, 0, 0, 2800, 24),

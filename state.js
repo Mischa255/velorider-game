@@ -118,6 +118,7 @@ function createDefaultPlayer() {
         inventory: [
             'frames:f1',
             'forks:fk1',
+            'suspension:s1', // <-- Добавили базовый амортизатор
             'chains:ch1',
             'drivetrain:d1',
             'bottomBrackets:bb1',
@@ -166,6 +167,7 @@ function createDefaultPlayer() {
         equipped: {
             frames: 'f1',
             forks: 'fk1',
+            suspension: 's1', // <-- Установили базовый амортизатор по умолчанию
             chains: 'ch1',
             drivetrain: 'd1',
             bottomBrackets: 'bb1',
@@ -183,7 +185,8 @@ function createDefaultPlayer() {
         totalAccel: 0,
         totalJump: 0,
         totalBrake: 0,
-        totalPower: 0
+        totalPower: 0,
+        totalStability: 0
     };
 }
 
