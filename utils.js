@@ -4,6 +4,12 @@
 
 export const MIN_SPRINT_RECORD_IMPROVEMENT_MS = 10;
 
+export function getRarityAccent(rarity) {
+    if (rarity === 'legendary') return '#fbbf24';
+    if (rarity === 'rare') return '#38bdf8';
+    return '#94a3b8';
+}
+
 /**
  * Clamps a number between a minimum and maximum value.
  * @param {number} value

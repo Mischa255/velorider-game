@@ -497,7 +497,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 4,
         botAccel: 0.05,
         obstacles: 8,
-        obstacleTypes: ['rock', 'log', 'ramp', 'cone', 'mud'],
+        obstacleTypes: ['rock', 'pit', 'log', 'ramp', 'cone', 'mud'],
         winReward: 500,
         lossReward: 50,
         couponReward: 1
@@ -513,7 +513,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 6.5,
         botAccel: 0.08,
         obstacles: 18,
-        obstacleTypes: ['log', 'rock', 'ramp', 'mud', 'water_splash', 'fallen_branch'],
+        obstacleTypes: ['log', 'rock', 'pit', 'ramp', 'mud', 'water_splash', 'fallen_branch'],
         winReward: 650,
         lossReward: 60,
         couponReward: 1
@@ -545,7 +545,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 14,
         botAccel: 0.18,
         obstacles: 45,
-        obstacleTypes: ['barrier', 'log', 'ramp', 'pulse_gate', 'cone'],
+        obstacleTypes: ['barrier', 'log', 'pit', 'ramp', 'pulse_gate', 'cone'],
         winReward: 1000,
         lossReward: 80,
         couponReward: 1
@@ -561,7 +561,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 16,
         botAccel: 0.20,
         obstacles: 50,
-        obstacleTypes: ['log', 'wind_fan', 'water_splash', 'cone', 'fallen_branch'],
+        obstacleTypes: ['log', 'pit', 'wind_fan', 'water_splash', 'cone', 'fallen_branch'],
         winReward: 1200,
         lossReward: 90,
         couponReward: 2
@@ -577,7 +577,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 18,
         botAccel: 0.23,
         obstacles: 60,
-        obstacleTypes: ['rock', 'rolling_boulder', 'mud', 'bridge_gap', 'wind_fan'],
+        obstacleTypes: ['rock', 'pit', 'rolling_boulder', 'mud', 'bridge_gap', 'wind_fan'],
         winReward: 1450,
         lossReward: 100,
         couponReward: 2
@@ -593,7 +593,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 20,
         botAccel: 0.26,
         obstacles: 70,
-        obstacleTypes: ['ice_patch', 'water_splash', 'bridge_gap', 'fallen_branch', 'pulse_gate', 'wind_fan'],
+        obstacleTypes: ['pit', 'ice_patch', 'water_splash', 'bridge_gap', 'fallen_branch', 'pulse_gate', 'wind_fan'],
         winReward: 1700,
         lossReward: 115,
         couponReward: 2
@@ -609,7 +609,7 @@ export const TRACKS_DB = [
         botMaxSpeed: 22,
         botAccel: 0.29,
         obstacles: 80,
-        obstacleTypes: ['barrier', 'pulse_gate', 'rolling_boulder', 'mud', 'cone', 'bridge_gap'],
+        obstacleTypes: ['pit', 'barrier', 'pulse_gate', 'rolling_boulder', 'mud', 'cone', 'bridge_gap'],
         winReward: 2000,
         lossReward: 130,
         couponReward: 2

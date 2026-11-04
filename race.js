@@ -1,7 +1,7 @@
-import { player } from './state.js?v=59';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=59';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS } from './utils.js?v=59';
-import { playCoinSound, playBoostSound } from './audio.js?v=59';
+import { player } from './state.js?v=63';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=63';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=63';
+import { playCoinSound, playBoostSound } from './audio.js?v=63';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -347,6 +347,24 @@ function createObstacles() {
         1,
         Math.floor(configuredCount * (3 + Math.max(0, currentTrackLevel - 1) * 0.07))
     );
+    // Обычные ямы гарантированы на каждой сюжетной трассе и растут по уровню:
+    // 3 на первой, затем +2 на каждой следующей. Генерация не зависит от удачи.
+    const pitCount = Math.min(obstacleCount, currentTrackLevel * 2 + 1);
+    const pitIndices = new Set();
+    for (let pitIndex = 0; pitIndex < pitCount; pitIndex++) {
+        const targetIndex = Math.round(
+            ((pitIndex + 1) / (pitCount + 1)) * Math.max(0, obstacleCount - 1)
+        );
+        let index = targetIndex;
+        while (pitIndices.has(index) && index < obstacleCount - 1) index++;
+        while (pitIndices.has(index) && index > 0) index--;
+        pitIndices.add(index);
+    }
+
+    const nonPitTypePool = typePool.filter(type => type !== 'pit');
+    const randomTypePool = nonPitTypePool.length
+        ? nonPitTypePool
+        : Object.keys(OBSTACLE_TYPES).filter(type => type !== 'pit');
     const firstObstacleX = 900;
     const lastObstacleX = Math.max(firstObstacleX, finishX - 1200);
     const usableLength = Math.max(1, lastObstacleX - firstObstacleX);
@@ -357,7 +375,7 @@ function createObstacles() {
     let previousRight = firstObstacleX - 120;
 
     for (let index = 0; index < obstacleCount; index++) {
-        const type = randomItem(typePool);
+        const type = pitIndices.has(index) ? 'pit' : randomItem(randomTypePool);
         const definition = OBSTACLE_TYPES[type];
         if (!definition) continue;
 
@@ -445,19 +463,28 @@ function getBikeVisualProfile() {
     const tire = getEquippedPart('tires');
     const brakes = getEquippedPart('brakes');
     const rider = getEquippedPart('riders');
-    const drivetrain = getEquippedPart('drivetrain');
-    const rarityColors = {
-        common: '#22c55e',
-        rare: '#38bdf8',
-        legendary: '#fbbf24'
-    };
+    const chain = getEquippedPart('chains');
+    const crank = getEquippedPart('cranks');
+    const seatpost = getEquippedPart('seatposts');
+    const saddle = getEquippedPart('saddles');
+    const handlebar = getEquippedPart('handlebars');
 
     return {
         riderId: rider?.id || 'r1',
-        frameColor: rarityColors[frame?.rarity] || '#22c55e',
-        forkColor: rarityColors[fork?.rarity] || '#cbd5e1',
-        chainColor: rarityColors[drivetrain?.rarity] || '#cbd5e1',
-        hubColor: rarityColors[wheel?.rarity] || '#94a3b8',
+        frameColor: getRarityAccent(frame?.rarity),
+        forkColor: getRarityAccent(fork?.rarity),
+        chainColor: getRarityAccent(chain?.rarity),
+        crankColor: getRarityAccent(crank?.rarity),
+        seatpostColor: getRarityAccent(seatpost?.rarity),
+        saddleColor: getRarityAccent(saddle?.rarity),
+        handlebarColor: getRarityAccent(handlebar?.rarity),
+        handlebarWidth: handlebar?.rarity === 'legendary' ? 2.4 : handlebar?.rarity === 'rare' ? 2.1 : 1.8,
+        rimColor: wheel?.rarity === 'legendary'
+            ? '#fbbf24'
+            : wheel?.rarity === 'rare'
+                ? '#38bdf8'
+                : '#64748b',
+        hubColor: '#e2e8f0',
         wheelRadius: 9.5 + Math.min(1.2, Math.max(0, Number(wheel?.speed) || 0) * 0.08),
         tireWidth: tire?.rarity === 'legendary' ? 4.2 : tire?.rarity === 'rare' ? 3.7 : 3.2,
         discBrakes: Boolean(brakes && !['b1', 'b2'].includes(brakes.id)),
@@ -468,12 +495,13 @@ function getBikeVisualProfile() {
 function createBike(isBot = false, botIndex = 1) {
     const difficulty = isBot ? getBotDifficultyStats(botIndex) : null;
     const botColor = botIndex === 1 ? '#ef4444' : '#a855f7';
+    const visuals = isBot ? null : getBikeVisualProfile();
     const startX = 0;
 
     return {
         id: isBot ? `bot-${botIndex}` : 'player',
         displayName: isBot ? (botIndex === 1 ? 'Макс' : 'Лера') : 'Игрок',
-        visuals: isBot ? null : getBikeVisualProfile(),
+        visuals,
 
         x: startX,
         previousX: startX,
@@ -494,7 +522,7 @@ function createBike(isBot = false, botIndex = 1) {
 
         isBot,
         botIndex: isBot ? botIndex : 0,
-        color: isBot ? botColor : '#22c55e',
+        color: isBot ? botColor : (visuals?.frameColor || getRarityAccent()),
         abilities: isBot ? getBotAbilities(botIndex) : getPlayerPartAbilities(),
 
         botDifficultyTrackId: difficulty?.trackId || null,
@@ -2286,7 +2314,7 @@ function drawBike(bike, label, color) {
         ctx.arc(0, 0, radius, 0, Math.PI * 2);
         ctx.stroke();
 
-        ctx.strokeStyle = '#cbd5e1';
+        ctx.strokeStyle = visuals.rimColor || '#64748b';
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.arc(0, 0, radius * 0.72, 0, Math.PI * 2);
@@ -2903,7 +2931,7 @@ function render() {
     drawBike(
         playerBike,
         'ТЫ',
-        '#22c55e'
+        playerBike.color
     );
 
     // Рисуем призрака поверх игрока, чтобы он оставался заметен при совпадении позиций.

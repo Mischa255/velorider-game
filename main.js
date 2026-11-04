@@ -1,4 +1,4 @@
-import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=59';
+import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=63';
 import {
     player,
     loadPlayerState,
@@ -6,21 +6,21 @@ import {
     clearSavedProgress,
     forceSavePlayerState,
     getServerTime
-} from './state.js?v=59';
+} from './state.js?v=63';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=59';
+} from './race.js?v=63';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=59';
-import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS } from './utils.js?v=59';
+} from './audio.js?v=63';
+import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=63';
 
 const CATEGORY_NAMES = {
     frames: 'Рамы',
@@ -917,12 +917,6 @@ function calculateBikeStats() {
     };
 }
 
-function getRarityAccent(rarity) {
-    if (rarity === 'legendary') return '#fbbf24';
-    if (rarity === 'rare') return '#38bdf8';
-    return '#94a3b8';
-}
-
 function getPartStatsHTML(part) {
     const stats = getPartNumericStats(part);
     if (!stats.length) {
@@ -1114,6 +1108,7 @@ function updateGarageUI() {
         bikeSvg.style.setProperty('--garage-seat-accent', getRarityAccent(seatpost?.rarity));
         bikeSvg.style.setProperty('--garage-saddle-accent', getRarityAccent(saddle?.rarity));
         bikeSvg.style.setProperty('--garage-handlebar-width', handlebar?.rarity === 'legendary' ? '8px' : handlebar?.rarity === 'rare' ? '7px' : '6px');
+        bikeSvg.style.setProperty('--garage-handlebar-accent', getRarityAccent(handlebar?.rarity));
         bikeSvg.dataset.frameId = frame?.id || 'none';
         bikeSvg.dataset.wheelId = wheels?.id || 'none';
         bikeSvg.classList.toggle('has-motor', Boolean(electronics && electronics.id !== 'e1'));
@@ -1305,6 +1300,9 @@ function updateUpgradeUI() {
 
     const category = selectedUpgradeCategory;
     const categoryItems = ITEMS_DB[category] || [];
+    const chooseActionLabel = category === 'riders'
+        ? 'Выбрать райдера'
+        : 'Выбрать деталь';
 
     titleDiv.innerText = `${getCategoryIcon(category)} ${getCategoryName(category)}`;
 
@@ -1375,7 +1373,7 @@ function updateUpgradeUI() {
             if (owned) {
                 actionHTML = `
                     <button class="replace-part-button bg-blue-700 hover:bg-blue-600 py-3 rounded-lg font-bold w-full">
-                        🔄 Выбрать райдера
+                        🔄 ${chooseActionLabel}
                     </button>
                 `;
             } else if (isCouponItem) {
@@ -1396,7 +1394,7 @@ function updateUpgradeUI() {
         } else if (owned) {
             actionHTML = `
                 <button class="install-part-button bg-blue-700 hover:bg-blue-600 py-3 rounded-lg font-bold w-full">
-                    Выбрать
+                    ${chooseActionLabel}
                 </button>
             `;
         } else if (isCouponItem) {
@@ -1855,6 +1853,8 @@ function getPartPools() {
     };
 
     getCategoryOrder().forEach(category => {
+        if (category === 'riders') return;
+
         ITEMS_DB[category].forEach(part => {
             if (!isRarityUnlocked(part.rarity)) return;
             if (!Object.prototype.hasOwnProperty.call(pools, part.rarity)) return;

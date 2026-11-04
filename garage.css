@@ -186,6 +186,12 @@
 }
 
 .garage-bike-svg .bike-frame { stroke: var(--garage-bike-accent, #38bdf8); }
+.garage-bike-svg .bike-fork { stroke: var(--garage-fork-accent, #94a3b8); }
+.garage-bike-svg #garage-bike-seatpost { stroke: var(--garage-seat-accent, #94a3b8); }
+.garage-bike-svg #garage-bike-saddle { stroke: var(--garage-saddle-accent, #94a3b8); }
+.garage-bike-svg .bike-chain-detail { stroke: var(--garage-drive-accent, #94a3b8); }
+.garage-bike-svg .bike-crank-detail { stroke: var(--garage-crank-accent, #94a3b8); }
+.garage-bike-svg #garage-bike-cockpit { stroke: var(--garage-handlebar-accent, #94a3b8); }
 .garage-bike-svg .bike-metal { stroke: #cbd5e1; }
 .garage-bike-svg .bike-tire { stroke: #020617; }
 .garage-bike-svg .bike-spoke { stroke: #64748b; }
