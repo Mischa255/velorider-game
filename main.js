@@ -1,4 +1,4 @@
-import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=55';
+import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=56';
 import {
     player,
     loadPlayerState,
@@ -6,21 +6,21 @@ import {
     clearSavedProgress,
     forceSavePlayerState,
     getServerTime
-} from './state.js?v=55';
+} from './state.js?v=56';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=55';
+} from './race.js?v=56';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=55';
-import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS } from './utils.js?v=55';
+} from './audio.js?v=56';
+import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS } from './utils.js?v=56';
 
 const CATEGORY_NAMES = {
     frames: 'Рамы',

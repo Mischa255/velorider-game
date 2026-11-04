@@ -1,7 +1,7 @@
-import { player } from './state.js?v=55';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=55';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS } from './utils.js?v=55';
-import { playCoinSound, playBoostSound } from './audio.js?v=55';
+import { player } from './state.js?v=56';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=56';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS } from './utils.js?v=56';
+import { playCoinSound, playBoostSound } from './audio.js?v=56';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -818,6 +818,9 @@ function updatePlayerPhysics() {
 
     // ----------------------------------------------------
     // МЕХАНИКА МОЩНОСТИ (POWER) И ПОДЪЁМОВ В ГОРУ
+    // Мощность непосредственно определяет возможность преодолевать уклоны.
+    // Какая бы ни была максимальная скорость на прямой (speed),
+    // на крутом подъеме предел скорости жестко диктуется именно мощностью.
     // ----------------------------------------------------
     const wheelBase = 25;
     const frontY = getGroundY(playerBike.x + wheelBase, 0);
@@ -831,29 +834,40 @@ function updatePlayerPhysics() {
         const requiredPower = slope * 165;
         const powerRatio = (totalPower + 6) / Math.max(10, requiredPower);
 
-        if (powerRatio < 0.45) {
-            // Мощность критически мала: сильное замедление вплоть до отката со склона!
-            const gravityDrag = slope * 0.16 * (1 - powerRatio);
+        if (powerRatio < 1.0) {
+            // Какая бы ни была максимальная скорость на прямой (speed),
+            // предел скорости в гору непосредственно срезается дефицитом мощности!
+            const hillSpeedCap = Math.max(0.35, maxSpeed * Math.pow(Math.max(0.08, powerRatio), 1.25));
+            allowedSpeed = Math.min(allowedSpeed, hillSpeedCap);
+
+            // Недостаток мощности гасит разгон от педалей (accel не может вытянуть без тяги)
+            const lostAccel = acceleration * (1 - Math.min(1, powerRatio));
+            playerBike.velocityX -= lostAccel;
+
+            // Гравитационное сопротивление крутого склона
+            const gravityDrag = slope * 0.18 * (1 - powerRatio);
             playerBike.velocityX -= gravityDrag;
 
-            // Если игрок жмет газ, но мощности не хватает, скорость падает до отката
-            if (input.accelerating && playerBike.velocityX < 0.4) {
-                playerBike.velocityX = Math.max(-0.7, playerBike.velocityX - 0.04);
-                if (powerWarningCooldown <= 0) {
-                    addFloatingText(playerBike.x, getGroundY(playerBike.x, 0) - 65, '⚠️ Мало мощности! 🔋', '#ef4444');
-                    powerWarningCooldown = 90;
+            if (powerRatio < 0.45) {
+                // Мощность критически мала: велосипед не вытягивает гору и откатывается назад!
+                if (input.accelerating && playerBike.velocityX < 0.5) {
+                    playerBike.velocityX = Math.max(-0.8, playerBike.velocityX - 0.05);
+                    if (powerWarningCooldown <= 0) {
+                        addFloatingText(playerBike.x, getGroundY(playerBike.x, 0) - 65, '⚠️ Мало мощности! 🔋', '#ef4444');
+                        powerWarningCooldown = 90;
+                    }
                 }
             }
-        } else if (powerRatio < 1.0) {
-            // Мощности хватает, но подъем дается с трудом
-            const resistance = slope * 0.075 * (1 - powerRatio);
-            playerBike.velocityX -= resistance;
         } else {
-            // Высокая мощность: уверенный заезд и легкая помощь на подъёме
+            // Высокая мощность: уверенный заезд в гору и небольшая помощь тяги
             if (input.accelerating) {
                 playerBike.velocityX += Math.min(0.04, (powerRatio - 1) * 0.015);
             }
         }
+    } else if (playerBike.grounded && slope < -0.04) {
+        // На спуске сила тяжести помогает разгону вплоть до максимальной скорости
+        const downhillBoost = Math.min(0.06, Math.abs(slope) * 0.05);
+        playerBike.velocityX += downhillBoost;
     }
 
     if (playerBike.impactSlowTimer > 0) {
@@ -1113,6 +1127,18 @@ function updateBotPhysics(bike) {
     }
 
     let allowedSpeed = maxSpeed;
+
+    const botWheelBase = 25;
+    const botFrontY = getGroundY(bike.x + botWheelBase, 0);
+    const botBackY = getGroundY(bike.x - botWheelBase, 0);
+    const botSlope = (botBackY - botFrontY) / (botWheelBase * 2);
+    if (bike.grounded && botSlope > 0.04) {
+        const botHillDrag = botSlope * 0.08;
+        bike.velocityX = Math.max(0.4, bike.velocityX - botHillDrag);
+        allowedSpeed = Math.min(allowedSpeed, Math.max(0.6, maxSpeed * (1 - botSlope * 1.5)));
+    } else if (bike.grounded && botSlope < -0.04) {
+        bike.velocityX += Math.min(0.05, Math.abs(botSlope) * 0.04);
+    }
 
     if (bike.impactSlowTimer > 0) {
         bike.impactSlowTimer--;
