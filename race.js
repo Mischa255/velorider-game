@@ -1,7 +1,7 @@
-import { player } from './state.js?v=66';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=66';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=66';
-import { playCoinSound, playBoostSound } from './audio.js?v=66';
+import { player } from './state.js?v=70';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=70';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=70';
+import { playCoinSound, playBoostSound } from './audio.js?v=70';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -473,11 +473,11 @@ function getBikeVisualProfile() {
     const handlebar = getEquippedPart('handlebars');
     const electronics = getEquippedPart('electronics'); // Добавили электронику
     const fullSuspension = frame?.visuals?.type === 'dh';
-    const stability = Math.min(100,
-        (Number(frame?.stability) || 0) +
-        (Number(fork?.stability) || 0) +
-        (fullSuspension ? Number(shock?.stability) || 0 : 0)
-    );
+    const frameStability = Number(frame?.frameStability) || 0;
+    const suspensionStability =
+        (Number(fork?.suspensionStability) || 0) +
+        (fullSuspension ? Number(shock?.suspensionStability) || 0 : 0);
+    const stability = Math.min(100, frameStability + suspensionStability);
 
     return {
         riderId: rider?.id || 'r1',
@@ -489,7 +489,9 @@ function getBikeVisualProfile() {
         fullSuspension,
         rearSuspension: Boolean(fullSuspension && shock),
         rearShockColor: shock?.visuals?.color || getRarityAccent(shock?.rarity),
-        rearShockStability: fullSuspension ? Number(shock?.stability) || 0 : 0,
+        rearShockStability: fullSuspension ? Number(shock?.suspensionStability) || 0 : 0,
+        frameStability,
+        suspensionStability,
         stability,
         
         // --- ВИЛКА ---
@@ -517,7 +519,7 @@ function getBikeVisualProfile() {
         discBrakes: Boolean(brakes && !['b1', 'b2'].includes(brakes.id)),
         suspension: Boolean(fork && fork.id !== 'fk1'),
         frontSuspension: Boolean(fork && fork.id !== 'fk1'),
-        frontForkStability: Number(fork?.stability) || 0,
+        frontForkStability: Number(fork?.suspensionStability) || 0,
         motor: Boolean(electronics && electronics.id !== 'e1')
     };
 }
@@ -533,6 +535,8 @@ function getBotVisualProfile(botIndex) {
         rearSuspension: fullSuspension,
         rearShockColor: fullSuspension ? '#fbbf24' : '#94a3b8',
         rearShockStability: fullSuspension ? 38 : 0,
+        frameStability: fullSuspension ? 20 : 29,
+        suspensionStability: fullSuspension ? 58 : 14,
         forkColor: botIndex === 1 ? '#cbd5e1' : '#d8b4fe',
         frontForkStability: botIndex === 1 ? 14 : 20,
         stability: fullSuspension ? 78 : 43,
@@ -624,18 +628,46 @@ function createBike(isBot = false, botIndex = 1) {
 
 function startBikeFlip(bike, direction = 1, message = 'ПЕРЕВОРОТ! Низкая стабильность') {
     if (!bike || bike.flippedTimer > 0) return false;
-    bike.flippedTimer = 72;
+    bike.flippedTimer = 74;
     bike.flipDirection = direction < 0 ? -1 : 1;
-    bike.pitchAngle = bike.flipDirection * 1.65;
-    bike.pitchVelocity = 0;
-    bike.velocityX = Math.max(0.45, bike.velocityX * 0.12);
-    bike.impactSlowTimer = Math.max(bike.impactSlowTimer || 0, 72);
-    bike.impactSpeedLimit = 0.55;
-    bike.bumpCooldown = 90;
+    const instability = 1 - clamp(Number(bike.stability) || 0, 0, 100) / 100;
+    bike.pitchVelocity = clamp(
+        (Number(bike.pitchVelocity) || 0) + bike.flipDirection * (0.13 + instability * 0.08),
+        -0.36,
+        0.36
+    );
+    bike.velocityX = Math.max(0.7, bike.velocityX * 0.42);
+    bike.impactSlowTimer = Math.max(bike.impactSlowTimer || 0, 54);
+    bike.impactSpeedLimit = 1.1;
+    bike.bumpCooldown = 105;
     if (!bike.isBot) {
         addFloatingText(bike.x, getGroundY(bike.x, 0) - 58, message, '#fb7185');
     }
     return true;
+}
+
+function maybeFlipFromImpact(bike, impactForce, direction = 1, message = 'КОЧКА! Низкая стабильность') {
+    if (!bike || bike.flippedTimer > 0 || bike.bumpCooldown > 0 || bike.velocityX < 5.5) return false;
+
+    const stabilityRatio = clamp(Number(bike.stability) || 0, 0, 100) / 100;
+    const instability = 1 - stabilityRatio;
+    const speedFactor = clamp((bike.velocityX - 5.5) / 7, 0, 1);
+    const impactFactor = clamp((Number(impactForce) - 2) / 3.4, 0, 1);
+    if (impactFactor <= 0 || speedFactor <= 0) return false;
+
+    let chance = impactFactor * speedFactor * (0.004 + instability * instability * 0.3);
+    if (impactForce > 5.2 && bike.velocityX > 11) {
+        chance += instability * 0.035;
+    }
+
+    return Math.random() < chance && startBikeFlip(bike, direction, message);
+}
+
+function applyImpactPitchImpulse(bike, impactForce, direction = 1) {
+    if (!bike) return;
+    const instability = 1 - clamp(Number(bike.stability) || 0, 0, 100) / 100;
+    const impulse = Number(impactForce) * (0.002 + instability * 0.007) * (direction < 0 ? -1 : 1);
+    bike.pitchVelocity = clamp((Number(bike.pitchVelocity) || 0) + impulse, -0.24, 0.24);
 }
 
 function updateBikeFlipRecovery(bike) {
@@ -643,14 +675,28 @@ function updateBikeFlipRecovery(bike) {
     if (!(bike.flippedTimer > 0)) return false;
 
     bike.flippedTimer--;
-    bike.pitchAngle = bike.flipDirection * (1.65 * (bike.flippedTimer / 72));
-    bike.pitchVelocity = 0;
-    bike.velocityX = Math.max(0.3, bike.velocityX * 0.985);
+    bike.previousX = bike.x;
+    bike.x = Math.max(0, bike.x + Math.max(0, bike.velocityX) * 0.28);
+    bike.velocityX = Math.max(0.2, bike.velocityX * 0.955);
+
+    const stabilityRatio = clamp(Number(bike.stability) || 0, 0, 100) / 100;
+    const stillFalling = bike.flippedTimer > 36;
+    let restingAngle = 0;
+    if (!stillFalling && bike.grounded) {
+        const frontY = getGroundY(bike.x + 25, 0);
+        const rearY = getGroundY(bike.x - 25, 0);
+        restingAngle = Math.atan2(frontY - rearY, 50);
+    }
+    const targetAngle = stillFalling ? bike.flipDirection * 2.2 : restingAngle;
+    const springStrength = stillFalling ? 0.028 : 0.019 + stabilityRatio * 0.012;
+    bike.pitchVelocity = (bike.pitchVelocity + (targetAngle - bike.pitchAngle) * springStrength) *
+        (stillFalling ? 0.84 : 0.83 - stabilityRatio * 0.08);
+    bike.pitchAngle = clamp(bike.pitchAngle + bike.pitchVelocity, -2.55, 2.55);
+
     if (bike.impactSlowTimer > 0) bike.impactSlowTimer--;
     bike.frontCompression *= 0.72;
     bike.rearCompression *= 0.72;
     if (bike.flippedTimer === 0) {
-        bike.pitchAngle = bike.flipDirection * 0.18;
         bike.bumpCooldown = 75;
     }
     return true;
@@ -718,44 +764,51 @@ function updateSuspensionResponse(bike) {
     bike.rearCompression = rear.compression;
     bike.rearCompressionVelocity = rear.velocity;
 
+    const stabilityRatio = clamp(Number(bike.stability) || 0, 0, 100) / 100;
+    const instability = 1 - stabilityRatio;
     const suspensionSupport = (
         (bike.frontSuspension ? forkQuality : 0) +
         (bike.rearSuspension ? shockQuality : 0)
     ) / 2;
-    const chassisKick = surfaceKick * (1 - suspensionSupport * 0.48);
+    const chassisKick = surfaceKick * (1 - suspensionSupport * 0.48) * (0.92 + instability * 0.16);
     const bodyKick = Math.max(front.residual, rear.residual, chassisKick);
     if (bike.velocityX > 5 && bodyKick > 1.8) {
-        bike.velocityX *= 1 - Math.min(0.12, bodyKick * 0.004);
-        bike.pitchVelocity += (front.residual - rear.residual) * (1 - bike.stability / 140) * 0.012;
+        bike.velocityX *= 1 - Math.min(0.15, bodyKick * (0.002 + instability * 0.006));
 
-        const flipThreshold = 2.7 + bike.stability * 0.045;
-        if (bike.stability < 30 && bike.velocityX > 5.5 && bodyKick > flipThreshold && bike.bumpCooldown <= 0) {
-            startBikeFlip(bike, frontDelta - rearDelta, 'КОЧКА! Низкая стабильность');
-        }
+        const impactImbalance = front.residual - rear.residual;
+        const naturalWobble = (Math.random() - 0.5) * Math.max(0, bodyKick - 1.5) * instability * 0.022;
+        bike.pitchVelocity += clamp(
+            impactImbalance * (0.008 + instability * 0.018) + naturalWobble,
+            -0.095,
+            0.095
+        );
+
+        maybeFlipFromImpact(bike, bodyKick, frontDelta - rearDelta, 'КОЧКА! Низкая стабильность');
     }
 }
 
 function updateJumpPhysics(bike) {
     if (!bike.isBot && bike.landingBoostCooldown > 0) bike.landingBoostCooldown--;
 
-// --- НОВЫЙ КОД НАКЛОНА НАЧАЛО (ИСПРАВЛЕНО) ---
-    let targetPitch = 0;
-    if (bike.grounded && !bike.currentRamp) {
-        const wheelBase = 25; 
-        const frontY = getGroundY(bike.x + wheelBase, 0);
-        const backY = getGroundY(bike.x - wheelBase, 0);
-        targetPitch = Math.atan2(frontY - backY, wheelBase * 2);
-    } else if (bike.currentRamp) {
-        targetPitch = -0.35; 
-    } else {
-        targetPitch = -bike.jumpVelocity * 0.04; 
-    }
     const stabilityRatio = clamp(Number(bike.stability) || 0, 0, 100) / 100;
-    bike.pitchAngle = bike.pitchAngle || 0;
-    bike.pitchVelocity = (bike.pitchVelocity || 0) + (targetPitch - bike.pitchAngle) * (0.09 + stabilityRatio * 0.035);
-    bike.pitchVelocity *= 0.78 - stabilityRatio * 0.16;
-    bike.pitchAngle = clamp(bike.pitchAngle + bike.pitchVelocity, -1.5, 1.5);
-    // Более стабильная сборка гасит раскачку корпуса быстрее.
+    bike.pitchAngle = Number(bike.pitchAngle) || 0;
+    bike.pitchVelocity = Number(bike.pitchVelocity) || 0;
+
+    if (bike.grounded) {
+        const frontY = getGroundY(bike.x + 25, 0);
+        const rearY = getGroundY(bike.x - 25, 0);
+        const targetPitch = bike.currentRamp ? -0.16 : Math.atan2(frontY - rearY, 50);
+        bike.pitchVelocity += (targetPitch - bike.pitchAngle) * (0.09 + stabilityRatio * 0.035);
+        bike.pitchVelocity *= 0.76 - stabilityRatio * 0.12;
+    } else {
+        // В воздухе сохраняется инерция корпуса: высота прыжка сама по себе не задаёт вращение.
+        if (!bike.isBot) {
+            const riderShift = input.braking ? 0.0009 : input.accelerating ? -0.00045 : 0;
+            bike.pitchVelocity += riderShift * (1 - stabilityRatio * 0.55);
+        }
+        bike.pitchVelocity *= 0.94 - stabilityRatio * 0.1;
+    }
+    bike.pitchAngle = clamp(bike.pitchAngle + bike.pitchVelocity, -1.15, 1.15);
 
     if (bike.grounded) {
         bike.airY = null;
@@ -807,7 +860,7 @@ function startJump(bike, force, gravity = GRAVITY) {
         4,
         Number(force) || 9
     ) + terrainSlopeVy;
-    bike.pitchVelocity = 0;
+    bike.pitchVelocity = clamp((Number(bike.pitchVelocity) || 0) - 0.018, -0.06, 0.06);
 
     bike.jumpGravity = clamp(
         Number(gravity) || GRAVITY,
@@ -1447,9 +1500,15 @@ function applyPlayerImpact(obstacle, speedLimit = 1.0) {
         impactDuration = Math.round(impactDuration * (1 - stability * 0.002));
 
         const severity = obstacle.type === 'rolling_boulder' ? 1.35 : obstacle.type === 'rock' ? 1.2 : 1;
-        if (stability < 30 && playerBike.velocityX * severity > 12 + stability * 0.14) {
-            startBikeFlip(playerBike, obstacle.type === 'rock' ? -1 : 1, 'УДАР! Низкая стабильность');
-        }
+        const impactForce = playerBike.velocityX * severity / 3;
+        const impactDirection = obstacle.type === 'rock' ? -1 : 1;
+        applyImpactPitchImpulse(playerBike, impactForce, impactDirection);
+        maybeFlipFromImpact(
+            playerBike,
+            impactForce,
+            impactDirection,
+            'УДАР! Низкая стабильность'
+        );
     }
 
     playerBike.impactSlowTimer = impactDuration;
@@ -1587,9 +1646,10 @@ function applyBotImpact(
         duration = Math.round(duration * (1 - stability * 0.002));
         bike.impactSlowTimer = duration;
         const severity = obstacle.type === 'rolling_boulder' ? 1.35 : obstacle.type === 'rock' ? 1.2 : 1;
-        if (stability < 30 && bike.velocityX * severity > 12 + stability * 0.14) {
-            startBikeFlip(bike, obstacle.type === 'rock' ? -1 : 1);
-        }
+        const impactForce = bike.velocityX * severity / 3;
+        const impactDirection = obstacle.type === 'rock' ? -1 : 1;
+        applyImpactPitchImpulse(bike, impactForce, impactDirection);
+        maybeFlipFromImpact(bike, impactForce, impactDirection);
     }
 
     const reducedSpeed = Math.max(
@@ -2582,11 +2642,6 @@ function drawBike(bike, label, color) {
         ctx.restore();
     }
 
-    ctx.save();
-    ctx.translate(0, wheelY);
-    ctx.scale(1, 0.78);
-    ctx.translate(0, -wheelY);
-
     const frameColor = visuals.frameColor || color;
     ctx.strokeStyle = frameColor;
     ctx.lineWidth = visuals.frameWidth || 3;
@@ -2952,8 +3007,6 @@ function drawBike(bike, label, color) {
         ctx.stroke();
     }
 
-    ctx.restore();
-
     if (bike.springBoostTimer > 0) {
         ctx.fillStyle = '#4ade80';
         ctx.beginPath();
@@ -2989,7 +3042,7 @@ function drawBike(bike, label, color) {
         ctx.stroke();
     }
 
-    ctx.restore(); // <--- ВОЗВРАЩАЕМ ХОЛСТ НА МЕСТО
+    ctx.restore(); // Возвращаем исходный наклон холста после отрисовки велосипеда.
 
     ctx.font = 'bold 12px Arial';
     ctx.textAlign = 'center';

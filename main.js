@@ -1,4 +1,4 @@
-import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=66';
+import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=70';
 import {
     player,
     loadPlayerState,
@@ -6,21 +6,21 @@ import {
     clearSavedProgress,
     forceSavePlayerState,
     getServerTime
-} from './state.js?v=66';
+} from './state.js?v=70';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=66';
+} from './race.js?v=70';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=66';
-import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=66';
+} from './audio.js?v=70';
+import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=70';
 
 const CATEGORY_NAMES = {
     frames: 'Рамы',
@@ -44,7 +44,7 @@ const CATEGORY_NAMES = {
     cassettes: 'Кассеты',
     shifters: 'Манетки',
     derailleurs: 'Переключатели',
-    suspension: 'Подвеска',
+    suspension: 'Амортизаторы',
     tires: 'Покрышки',
     tubes: 'Камеры',
     hubs: 'Втулки',
@@ -196,6 +196,8 @@ const STAT_META = {
     traction: { label: 'Тяга', short: 'Тяга', icon: '⚙️', color: 'amber' },
     handling: { label: 'Управляемость', short: 'Управляемость', icon: '🎯', color: 'emerald' },
     stability: { label: 'Стабильность', short: 'Стабильность', icon: '🧭', color: 'sky' },
+    frameStability: { label: 'Стабильность рамы', short: 'Рама', icon: '🧱', color: 'slate' },
+    suspensionStability: { label: 'Стабильность подвески', short: 'Подвеска', icon: '〰️', color: 'indigo' },
     durability: { label: 'Прочность', short: 'Прочность', icon: '🛡️', color: 'slate' },
     weight: { label: 'Вес', short: 'Вес', icon: '⚖️', color: 'slate', noPlus: true },
     comfort: { label: 'Комфорт', short: 'Комфорт', icon: '🪑', color: 'pink' },
@@ -556,6 +558,11 @@ function getRarityName(rarity) {
 let selectedUpgradeCategory = getCategoryOrder()[0] || 'frames';
 let containerOpening = false;
 
+function hasFullSuspensionFrame(frameId = player.equipped?.frames) {
+    const frame = ITEMS_DB.frames?.find(item => item.id === frameId);
+    return frame?.visuals?.type === 'dh';
+}
+
 function normalizePlayerState() {
     if (!Array.isArray(player.inventory)) player.inventory = [];
     if (!Array.isArray(player.unlockedTracks)) player.unlockedTracks = ['t1'];
@@ -610,6 +617,7 @@ function normalizePlayerState() {
     }
 
     ensureOwnedParts();
+    if (!hasFullSuspensionFrame()) player.equipped.suspension = '';
     syncProgression();
 }
 
@@ -900,11 +908,12 @@ function calculateBikeStats() {
         jump: 0,
         brake: 0,
         power: 0,
+        frameStability: 0,
+        suspensionStability: 0,
         stability: 0
     };
 
-    const equippedFrame = ITEMS_DB.frames.find(item => item.id === player.equipped?.frames);
-    const hasRearSuspensionFrame = equippedFrame?.visuals?.type === 'dh';
+    const hasRearSuspensionFrame = hasFullSuspensionFrame();
 
     const equippedParts = [];
 
@@ -926,7 +935,9 @@ function calculateBikeStats() {
     player.totalJump = totals.jump || 0;
     player.totalBrake = totals.brake || 0;
     player.totalPower = totals.power || 0;
-    totals.stability = Math.min(100, totals.stability || 0);
+    totals.stability = Math.min(100, (totals.frameStability || 0) + (totals.suspensionStability || 0));
+    player.totalFrameStability = totals.frameStability;
+    player.totalSuspensionStability = totals.suspensionStability;
     player.totalStability = totals.stability;
     player.totalStats = { ...totals };
 
@@ -1034,12 +1045,14 @@ function renderGarageStats(stats) {
         { key: 'accel', label: 'Ускорение', icon: '⚡', glow: '#fb923c' },
         { key: 'jump', label: 'Сила прыжка', icon: '🪂', glow: '#a78bfa' },
         { key: 'brake', label: 'Торможение', icon: '🛑', glow: '#fb7185' },
-        { key: 'stability', label: 'Стабильность', icon: '🧭', glow: '#38bdf8' },
+        { key: 'frameStability', label: 'Стабильность рамы', icon: '🧱', glow: '#94a3b8', help: 'Базовая устойчивость, которую даёт установленная рама.' },
+        { key: 'suspensionStability', label: 'Стабильность подвески', icon: '〰️', glow: '#818cf8', help: 'Сумма стабильности вилки и заднего амортизатора. Задний амортизатор учитывается только на двухподвесе.' },
+        { key: 'stability', label: 'Общая стабильность', icon: '🧭', glow: '#38bdf8', help: 'Стабильность рамы плюс стабильность подвески. Низкое значение повышает риск переворота на крупных кочках.' },
         { key: 'power', label: 'Мощность подъёма', icon: '🔋', glow: '#eab308' }
     ];
 
     grid.innerHTML = mainStats.map(stat => `
-        <div class="garage-stat-card" style="--stat-glow:${stat.glow}" title="${stat.key === 'stability' ? 'Вилка и задний амортизатор гасят толчки. При низкой стабильности на крупных кочках велосипед может перевернуться.' : ''}">
+        <div class="garage-stat-card" style="--stat-glow:${stat.glow}" title="${escapeHTML(stat.help || '')}">
             <div class="garage-stat-top">
                 <span class="garage-stat-icon">${stat.icon}</span>
                 <span>${stat.label}</span>
@@ -1290,14 +1303,14 @@ function updateGarageUI() {
             card.className = 'garage-equipped-card is-empty';
             card.style.opacity = '0.5';
             card.innerHTML = `
-                <div class="garage-part-head">
+            <div class="garage-part-head">
                     <div class="garage-part-icon">${getCategoryIcon(category)}</div>
                     <div class="garage-part-info">
                         <div class="garage-part-category">${escapeHTML(getCategoryName(category))}</div>
-                        <div class="garage-part-name text-gray-500">Несовместимо с рамой</div>
+                <div class="garage-part-name text-gray-500">Нужна рама DH</div>
                     </div>
                 </div>
-                <div class="garage-empty-text">Требуется двухподвесная рама (DH).</div>
+            <div class="garage-empty-text">Амортизаторы можно хранить и получать из контейнеров без DH. Установить их можно только на двухподвесную раму.</div>
             `;
             equippedDiv.appendChild(card);
             return; // Пропускаем обычную отрисовку
@@ -1395,51 +1408,33 @@ function updateUpgradeUI() {
 
         const button = document.createElement('button');
         
-        // --- БЛОКИРОВКА ВКЛАДКИ ПОДВЕСКИ ---
-        if (category === 'suspension' && !isDH) {
-            button.className = 'w-full text-left px-3 py-3 rounded-xl font-bold transition bg-gray-800 text-gray-600 cursor-not-allowed';
-            button.innerHTML = `
-                <div>${getCategoryIcon(category)} ${getCategoryName(category)}</div>
-                <div class="text-xs font-normal opacity-70 truncate mt-1 text-red-400">
-                    Только для двухподвесов
-                </div>
-            `;
-            button.disabled = true;
-        } else {
-            button.className =
-                'w-full text-left px-3 py-3 rounded-xl font-bold transition ' +
-                (selectedUpgradeCategory === category
-                    ? 'garage-selected-category bg-green-600 text-white'
-                    : 'bg-gray-700 hover:bg-gray-600 text-gray-300');
+        button.className =
+            'w-full text-left px-3 py-3 rounded-xl font-bold transition ' +
+            (selectedUpgradeCategory === category
+                ? 'garage-selected-category bg-green-600 text-white'
+                : 'bg-gray-700 hover:bg-gray-600 text-gray-300');
 
-            button.innerHTML = `
-                <div>${getCategoryIcon(category)} ${getCategoryName(category)}</div>
-                <div class="text-xs font-normal opacity-70 truncate mt-1">
-                    ${equippedPart ? equippedPart.name : 'Не установлено'}
-                </div>
-                <div class="text-xs opacity-60 mt-1">
-                    ${ownedCount}/${items.length} деталей
-                </div>
-            `;
+        button.innerHTML = `
+            <div>${getCategoryIcon(category)} ${getCategoryName(category)}</div>
+            <div class="text-xs font-normal opacity-70 truncate mt-1">
+                ${category === 'suspension' && !isDH
+                    ? 'Выбери двухподвес для установки'
+                    : equippedPart?.name || 'Не установлено'}
+            </div>
+            <div class="text-xs opacity-60 mt-1">
+                ${ownedCount}/${items.length} деталей
+            </div>
+        `;
 
-            button.addEventListener('click', () => {
-                selectedUpgradeCategory = category;
-                updateUpgradeUI();
-            });
-        }
+        button.addEventListener('click', () => {
+            selectedUpgradeCategory = category;
+            updateUpgradeUI();
+        });
 
         categoriesDiv.appendChild(button);
     });
 
     const category = selectedUpgradeCategory;
-    
-    // Если игрок каким-то образом оказался на вкладке амортизаторов, 
-    // но поменял раму на хардтейл - перекидываем его обратно на рамы
-    if (category === 'suspension' && !isDH) {
-        selectedUpgradeCategory = 'frames';
-        updateUpgradeUI();
-        return;
-    }
     
     const categoryItems = ITEMS_DB[category] || [];
     const chooseActionLabel = category === 'riders'
@@ -1448,15 +1443,25 @@ function updateUpgradeUI() {
 
     titleDiv.innerText = `${getCategoryIcon(category)} ${getCategoryName(category)}`;
 
+    if (category === 'suspension' && !isDH) {
+        const compatibilityNote = document.createElement('div');
+        compatibilityNote.className = 'col-span-full rounded-xl border border-cyan-700/50 bg-cyan-950/40 p-3 text-sm text-cyan-200';
+        compatibilityNote.textContent = 'Амортизаторы можно получать заранее. Чтобы установить и использовать задний амортизатор, выбери двухподвесную раму (DH).';
+        partsDiv.appendChild(compatibilityNote);
+    }
+
     categoryItems.forEach(part => {
         const owned = hasPart(category, part.id);
         const equipped = player.equipped?.[category] === part.id;
         const unlocked = category === 'riders' ? true : isRarityUnlocked(part.rarity);
         const price = getUpgradePrice(part);
+        const frameBadgeHTML = category === 'frames' && part.visuals?.type === 'dh'
+            ? '<span class="absolute top-3 right-3 z-10 rounded-md border border-cyan-300/40 bg-cyan-950 px-2 py-1 text-[10px] font-black tracking-wider text-cyan-200 shadow">DH</span>'
+            : '';
 
         const card = document.createElement('div');
         card.className =
-            'bg-gray-900 border border-gray-700 rounded-xl p-4 flex flex-col gap-3';
+            'relative bg-gray-900 border border-gray-700 rounded-xl p-4 flex flex-col gap-3';
 
         const statsHTML = `
             <div class="garage-part-stats">
@@ -1466,6 +1471,7 @@ function updateUpgradeUI() {
 
         if (!unlocked) {
             card.innerHTML = `
+                ${frameBadgeHTML}
                 <div class="text-xs uppercase font-bold text-gray-500">
                     ${getCategoryName(category)}
                 </div>
@@ -1504,7 +1510,9 @@ function updateUpgradeUI() {
         const isCouponItem = part.currency === 'coupon' || part.id === 'r5';
         const priceLabel = isCouponItem ? `${price} 🎟️` : `${price.toLocaleString('ru-RU')} 🪙`;
 
-        if (equipped) {
+        if (category === 'suspension' && !isDH && owned) {
+            actionHTML = '<div class="rounded-lg border border-amber-700/50 bg-amber-950/30 p-3 text-sm text-amber-200">Есть в инвентаре. Выбери двухподвесную раму (DH), чтобы установить амортизатор.</div>';
+        } else if (equipped) {
             actionHTML = `
                 <button disabled
                     class="bg-green-900 text-green-300 py-3 rounded-lg font-bold w-full">
@@ -1556,6 +1564,7 @@ function updateUpgradeUI() {
         }
 
         card.innerHTML = `
+            ${frameBadgeHTML}
             <div class="text-xs uppercase font-bold text-gray-500">
                 ${getCategoryName(category)}
             </div>
@@ -1666,6 +1675,11 @@ function buyAndReplacePart(category, id) {
     const part = ITEMS_DB[category]?.find(item => item.id === id);
     if (!part) return;
 
+    if (category === 'suspension' && !hasFullSuspensionFrame()) {
+        alert('Чтобы установить задний амортизатор, сначала выбери двухподвесную раму (DH).');
+        return;
+    }
+
     if (hasPart(category, id)) {
         installPart(category, id);
         return;
@@ -1714,6 +1728,7 @@ function buyAndReplacePart(category, id) {
     player.coins = balance - price;
     player.inventory.push(partKey(category, id));
     player.equipped[category] = id;
+    if (category === 'frames' && !hasFullSuspensionFrame(id)) player.equipped.suspension = '';
 
     calculateBikeStats();
     updateHUD();
@@ -1724,6 +1739,11 @@ function buyAndReplacePart(category, id) {
 function installPart(category, id) {
     const part = ITEMS_DB[category]?.find(item => item.id === id);
     if (!part) return;
+
+    if (category === 'suspension' && !hasFullSuspensionFrame()) {
+        alert('Чтобы установить задний амортизатор, сначала выбери двухподвесную раму (DH).');
+        return;
+    }
 
     if (!isRarityUnlocked(part.rarity)) {
         alert('Эта редкость ещё не открыта!');
@@ -1736,6 +1756,7 @@ function installPart(category, id) {
     }
 
     player.equipped[category] = id;
+    if (category === 'frames' && !hasFullSuspensionFrame(id)) player.equipped.suspension = '';
 
     calculateBikeStats();
     updateGarageUI();
@@ -1994,6 +2015,7 @@ function getPartPools() {
         legendary: []
     };
 
+    // Рамная совместимость влияет только на установку, но не на выпадение амортизаторов.
     getCategoryOrder().forEach(category => {
         if (category === 'riders') return;
 

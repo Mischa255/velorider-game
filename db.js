@@ -12,7 +12,10 @@ const part = (
     visuals = {} // <-- Новый параметр
 ) => {
     const partData = { id, name, rarity, speed, accel, jump, brake, price, visuals }; // <-- Сохраняем visuals
-    if (Number.isFinite(visuals.stability)) partData.stability = visuals.stability;
+    if (Number.isFinite(visuals.stability)) {
+        if (/^f\d+$/.test(id)) partData.frameStability = visuals.stability;
+        else if (/^(?:fk|s)\d+$/.test(id)) partData.suspensionStability = visuals.stability;
+    }
     if (power) partData.power = power;
     const legendaryAbilities = {
         f3: { id: 'frameGuard', name: 'Карбоновый монокок', description: 'Первое столкновение с твёрдым препятствием за гонку наносит меньше потери скорости.' },
@@ -48,15 +51,15 @@ export const ITEMS_DB = {
         part('f6', 'Cannondale Trail SmartForm C3', 'rare', 4, 4, 4, 3, 1400, 0, { color: '#10b981', width: 12, type: 'hardtail', stability: 24 }),
         part('f7', 'Marin Bobcat Trail Series 2', 'rare', 5, 4, 5, 3, 1500, 0, { color: '#8b5cf6', width: 12, type: 'hardtail', stability: 24 }),
         // Редкие двухподвесы: стоят дороже хардтейлов и открывают задний амортизатор.
-        part('f11', 'Trek Fuel EX Alloy', 'rare', 6, 5, 6, 3, 2600, 0, { color: '#14b8a6', width: 14, type: 'dh', stability: 31 }),
-        part('f12', 'Giant Trance X Alloy', 'rare', 7, 5, 7, 4, 3200, 0, { color: '#06b6d4', width: 14, type: 'dh', stability: 33 }),
+        part('f11', 'Trek Fuel EX Alloy', 'rare', 6, 5, 6, 3, 2600, 0, { color: '#14b8a6', width: 14, type: 'dh', stability: 23 }),
+        part('f12', 'Giant Trance X Alloy', 'rare', 7, 5, 7, 4, 3200, 0, { color: '#06b6d4', width: 14, type: 'dh', stability: 24 }),
         part('f8', 'Trek Procaliber Carbon', 'legendary', 9, 7, 8, 5, 3500, 0, { color: '#b91c1c', width: 15, type: 'hardtail', stability: 26 }),
         part('f9', 'Giant XTC Advanced Carbon', 'legendary', 10, 8, 9, 5, 4000, 0, { color: '#3b82f6', width: 15, type: 'hardtail', stability: 26 }),
         part('f10', 'Specialized Epic Carbon', 'legendary', 11, 8, 10, 6, 4500, 0, { color: '#14b8a6', width: 15, type: 'hardtail', stability: 27 }),
         
         // Легендарные двухподвесы.
-        part('f3', 'Cannondale Jekyll Carbon', 'legendary', 8, 5, 8, 4, 5600, 0, { color: '#22c55e', width: 15, type: 'dh', stability: 36 }),
-        part('f13', 'Specialized Stumpjumper EVO Carbon', 'legendary', 10, 7, 11, 6, 7000, 0, { color: '#f97316', width: 16, type: 'dh', stability: 40 })
+        part('f3', 'Cannondale Jekyll Carbon', 'legendary', 8, 5, 8, 4, 5600, 0, { color: '#22c55e', width: 15, type: 'dh', stability: 26 }),
+        part('f13', 'Specialized Stumpjumper EVO Carbon', 'legendary', 10, 7, 11, 6, 7000, 0, { color: '#f97316', width: 16, type: 'dh', stability: 27 })
     ],
 
     // =====================================
@@ -65,7 +68,11 @@ export const ITEMS_DB = {
     suspension: [
         part('s1', 'Пружинный амортизатор', 'common', 0, 0, 1, 0, 200, 0, { color: '#94a3b8', stability: 24 }),
         part('s2', 'RockShox Monarch', 'rare', 0, 0, 3, 0, 800, 0, { color: '#38bdf8', stability: 36 }),
-        part('s3', 'Fox Float X2 Factory', 'legendary', 0, 0, 6, 0, 2200, 0, { color: '#fbbf24', stability: 48 })
+        part('s3', 'FOX FLOAT X2 Factory', 'legendary', 0, 0, 6, 0, 2200, 0, { color: '#fbbf24', stability: 48 }),
+        part('s4', 'FOX FLOAT DPS Performance', 'rare', 0, 0, 4, 0, 1100, 0, { color: '#f97316', stability: 39 }),
+        part('s5', 'FOX FLOAT X Performance Elite', 'rare', 0, 0, 5, 0, 1450, 0, { color: '#fb923c', stability: 43 }),
+        part('s6', 'DT Swiss R 535 ONE', 'rare', 0, 0, 4, 0, 1300, 0, { color: '#e2e8f0', stability: 41 }),
+        part('s7', 'DT Swiss R 535', 'legendary', 0, 0, 7, 0, 2700, 0, { color: '#facc15', stability: 52 })
     ],
 
     // =====================================

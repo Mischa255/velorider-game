@@ -167,7 +167,7 @@ function createDefaultPlayer() {
         equipped: {
             frames: 'f1',
             forks: 'fk1',
-            suspension: 's1', // <-- Установили базовый амортизатор по умолчанию
+            suspension: '', // Амортизатор хранится в инвентаре, но ставится только на двухподвес.
             chains: 'ch1',
             drivetrain: 'd1',
             bottomBrackets: 'bb1',
