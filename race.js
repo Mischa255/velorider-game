@@ -1,7 +1,7 @@
-import { player } from './state.js?v=73';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=73';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=73';
-import { playCoinSound, playBoostSound } from './audio.js?v=73';
+import { player } from './state.js?v=74';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=74';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=74';
+import { playCoinSound, playBoostSound } from './audio.js?v=74';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -805,17 +805,13 @@ function updateJumpPhysics(bike) {
         bike.pitchVelocity += (targetPitch - bike.pitchAngle) * (0.09 + stabilityRatio * 0.035);
         bike.pitchVelocity *= 0.76 - stabilityRatio * 0.12;
     } else {
-        // В воздухе сохраняется инерция; газ вращает велосипед назад, кнопка «назад» — вперёд.
         if (!bike.isBot) {
-            const airControl =
-                (input.reversing ? 0.003 : 0) +
-                (input.braking ? 0.0015 : 0) -
-                (input.accelerating ? 0.003 : 0);
-            bike.pitchVelocity += airControl * (1 - stabilityRatio * 0.25);
+            const riderShift = input.braking ? 0.0009 : input.accelerating ? -0.00045 : 0;
+            bike.pitchVelocity += riderShift * (1 - stabilityRatio * 0.55);
         }
-        bike.pitchVelocity *= bike.isBot ? 0.88 : 0.97 - stabilityRatio * 0.025;
+        bike.pitchVelocity *= 0.94 - stabilityRatio * 0.1;
     }
-    const pitchLimit = bike.grounded ? 1.15 : Math.PI;
+    const pitchLimit = 1.15;
     bike.pitchAngle = clamp(bike.pitchAngle + bike.pitchVelocity, -pitchLimit, pitchLimit);
 
     if (bike.grounded) {
@@ -838,14 +834,6 @@ function updateJumpPhysics(bike) {
 
     // Приземление, когда траектория пересекла линию рельефа
     if (bike.jumpHeight <= 0) {
-        const landingSpeed = Math.max(0, -bike.jumpVelocity);
-        const frontY = getGroundY(bike.x + 25, 0);
-        const rearY = getGroundY(bike.x - 25, 0);
-        const groundPitch = Math.atan2(frontY - rearY, 50);
-        const landingAngle = bike.pitchAngle - groundPitch;
-        const landingAngleError = Math.abs(landingAngle);
-        const crashAngle = 1.5 + stabilityRatio * 0.25;
-
         bike.jumpHeight = 0;
         bike.jumpVelocity = 0;
         bike.jumpGravity = GRAVITY;
@@ -853,15 +841,6 @@ function updateJumpPhysics(bike) {
         bike.airY = null;
         bike.rampLift = 0;
         bike.currentRamp = null;
-        if (landingSpeed > 3.5 && landingAngleError > crashAngle) {
-            startBikeFlip(
-                bike,
-                landingAngle < 0 ? -1 : 1,
-                'ЖЁСТКОЕ ПРИЗЕМЛЕНИЕ! Балансируй в воздухе'
-            );
-        } else {
-            bike.pitchVelocity *= 0.48;
-        }
         if (!bike.isBot && bike.abilities?.landingFrame && bike.landingBoostCooldown <= 0) {
             bike.velocityX += 0.45;
             bike.springBoostTimer = Math.max(bike.springBoostTimer || 0, 24);
@@ -885,13 +864,7 @@ function startJump(bike, force, gravity = GRAVITY) {
         4,
         Number(force) || 9
     ) + terrainSlopeVy;
-    const takeoffRotation = bike.isBot ? 0.012 : 0.075;
-    const slopeRotation = clamp(terrainSlopeVy * 0.003, -0.006, 0.008);
-    bike.pitchVelocity = clamp(
-        (Number(bike.pitchVelocity) || 0) - takeoffRotation + slopeRotation,
-        -0.12,
-        0.12
-    );
+    bike.pitchVelocity = (Number(bike.pitchVelocity) || 0) - 0.018;
 
     bike.jumpGravity = clamp(
         Number(gravity) || GRAVITY,
