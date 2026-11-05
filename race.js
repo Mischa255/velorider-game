@@ -1,7 +1,7 @@
-import { player } from './state.js?v=70';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=70';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=70';
-import { playCoinSound, playBoostSound } from './audio.js?v=70';
+import { player } from './state.js?v=73';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=73';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=73';
+import { playCoinSound, playBoostSound } from './audio.js?v=73';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -478,13 +478,16 @@ function getBikeVisualProfile() {
         (Number(fork?.suspensionStability) || 0) +
         (fullSuspension ? Number(shock?.suspensionStability) || 0 : 0);
     const stability = Math.min(100, frameStability + suspensionStability);
+    const frameTubeSize = Number(frame?.visuals?.width) || 0;
 
     return {
         riderId: rider?.id || 'r1',
         
         // --- РАМА ---
         frameColor: frame?.visuals?.color || getRarityAccent(frame?.rarity),
-        frameWidth: frame?.visuals?.width || (frame?.rarity === 'legendary' ? 3.5 : frame?.rarity === 'rare' ? 3 : 2.5),
+        // Ширина в базе рассчитана для SVG гаража (10–16 условных единиц),
+        // в Canvas матча переводим её в реальную толщину труб в пикселях.
+        frameWidth: frameTubeSize ? clamp(frameTubeSize / 4, 2.5, 4) : (frame?.rarity === 'legendary' ? 3.5 : frame?.rarity === 'rare' ? 3 : 2.5),
         frameType: frame?.visuals?.type || 'normal',
         fullSuspension,
         rearSuspension: Boolean(fullSuspension && shock),
@@ -563,7 +566,8 @@ function createBike(isBot = false, botIndex = 1) {
     const difficulty = isBot ? getBotDifficultyStats(botIndex) : null;
     const botColor = botIndex === 1 ? '#ef4444' : '#a855f7';
     const visuals = isBot ? getBotVisualProfile(botIndex) : getBikeVisualProfile();
-    const startX = 0;
+    // Оставляем место за задним колесом, чтобы стартовый велосипед не обрезался краем Canvas.
+    const startX = 50;
 
     return {
         id: isBot ? `bot-${botIndex}` : 'player',
@@ -801,14 +805,18 @@ function updateJumpPhysics(bike) {
         bike.pitchVelocity += (targetPitch - bike.pitchAngle) * (0.09 + stabilityRatio * 0.035);
         bike.pitchVelocity *= 0.76 - stabilityRatio * 0.12;
     } else {
-        // В воздухе сохраняется инерция корпуса: высота прыжка сама по себе не задаёт вращение.
+        // В воздухе сохраняется инерция; газ вращает велосипед назад, кнопка «назад» — вперёд.
         if (!bike.isBot) {
-            const riderShift = input.braking ? 0.0009 : input.accelerating ? -0.00045 : 0;
-            bike.pitchVelocity += riderShift * (1 - stabilityRatio * 0.55);
+            const airControl =
+                (input.reversing ? 0.003 : 0) +
+                (input.braking ? 0.0015 : 0) -
+                (input.accelerating ? 0.003 : 0);
+            bike.pitchVelocity += airControl * (1 - stabilityRatio * 0.25);
         }
-        bike.pitchVelocity *= 0.94 - stabilityRatio * 0.1;
+        bike.pitchVelocity *= bike.isBot ? 0.88 : 0.97 - stabilityRatio * 0.025;
     }
-    bike.pitchAngle = clamp(bike.pitchAngle + bike.pitchVelocity, -1.15, 1.15);
+    const pitchLimit = bike.grounded ? 1.15 : Math.PI;
+    bike.pitchAngle = clamp(bike.pitchAngle + bike.pitchVelocity, -pitchLimit, pitchLimit);
 
     if (bike.grounded) {
         bike.airY = null;
@@ -830,6 +838,14 @@ function updateJumpPhysics(bike) {
 
     // Приземление, когда траектория пересекла линию рельефа
     if (bike.jumpHeight <= 0) {
+        const landingSpeed = Math.max(0, -bike.jumpVelocity);
+        const frontY = getGroundY(bike.x + 25, 0);
+        const rearY = getGroundY(bike.x - 25, 0);
+        const groundPitch = Math.atan2(frontY - rearY, 50);
+        const landingAngle = bike.pitchAngle - groundPitch;
+        const landingAngleError = Math.abs(landingAngle);
+        const crashAngle = 1.5 + stabilityRatio * 0.25;
+
         bike.jumpHeight = 0;
         bike.jumpVelocity = 0;
         bike.jumpGravity = GRAVITY;
@@ -837,6 +853,15 @@ function updateJumpPhysics(bike) {
         bike.airY = null;
         bike.rampLift = 0;
         bike.currentRamp = null;
+        if (landingSpeed > 3.5 && landingAngleError > crashAngle) {
+            startBikeFlip(
+                bike,
+                landingAngle < 0 ? -1 : 1,
+                'ЖЁСТКОЕ ПРИЗЕМЛЕНИЕ! Балансируй в воздухе'
+            );
+        } else {
+            bike.pitchVelocity *= 0.48;
+        }
         if (!bike.isBot && bike.abilities?.landingFrame && bike.landingBoostCooldown <= 0) {
             bike.velocityX += 0.45;
             bike.springBoostTimer = Math.max(bike.springBoostTimer || 0, 24);
@@ -860,7 +885,13 @@ function startJump(bike, force, gravity = GRAVITY) {
         4,
         Number(force) || 9
     ) + terrainSlopeVy;
-    bike.pitchVelocity = clamp((Number(bike.pitchVelocity) || 0) - 0.018, -0.06, 0.06);
+    const takeoffRotation = bike.isBot ? 0.012 : 0.075;
+    const slopeRotation = clamp(terrainSlopeVy * 0.003, -0.006, 0.008);
+    bike.pitchVelocity = clamp(
+        (Number(bike.pitchVelocity) || 0) - takeoffRotation + slopeRotation,
+        -0.12,
+        0.12
+    );
 
     bike.jumpGravity = clamp(
         Number(gravity) || GRAVITY,
@@ -2559,11 +2590,14 @@ function drawBike(bike, label, color) {
     const groundY = getGroundY(bike.x, 0);
     const y = groundY - bike.jumpHeight - bike.rampLift;
     const visuals = bike.visuals || {};
-    const radius = visuals.wheelRadius || 9.5;
-    const wheelY = y - 8;
+    // В каталоге радиус задан в игровых единицах; матчевую модель немного
+    // увеличиваем, чтобы колёса и рама читались, а не слипались в тонкие линии.
+    const radius = clamp((Number(visuals.wheelRadius) || 9.5) * 1.24, 11.5, 15.5);
+    const wheelY = y - radius + 1;
     const rearWheelX = x - 25;
     const frontWheelX = x + 25;
     const bottomX = x - 3;
+    const bottomY = wheelY - radius * 0.42;
     const seatX = x - 10;
     const headX = x + 11;
     const travel = Number.isFinite(bike.previousX)
@@ -2575,6 +2609,29 @@ function drawBike(bike, label, color) {
     const wheelAngle = bike.wheelRotation;
     const pedalAngle = bike.pedalPhase;
 
+    // Тень остаётся на земле и не поворачивается вместе с рамой.
+    const airHeight = Math.max(0, Number(bike.jumpHeight) || 0) + Math.max(0, Number(bike.rampLift) || 0);
+    const shadowLift = clamp(airHeight / 180, 0, 1);
+    ctx.fillStyle = `rgba(0,0,0,${(0.28 * (1 - shadowLift * 0.55)).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.ellipse(
+        x,
+        groundY - 1,
+        44 * (1 - shadowLift * 0.2),
+        5 * (1 - shadowLift * 0.6),
+        0,
+        0,
+        Math.PI * 2
+    );
+    ctx.fill();
+
+    // Увеличиваем только рисунок: физика и позиции колёс на трассе не меняются.
+    const bikeRenderScale = 1.16;
+    ctx.save();
+    ctx.translate(x, wheelY);
+    ctx.scale(bikeRenderScale, bikeRenderScale);
+    ctx.translate(-x, -wheelY);
+
     // --- НАКЛОНЯЕМ ХОЛСТ ---
     ctx.save();
     ctx.translate(x, wheelY - 15);
@@ -2582,48 +2639,75 @@ function drawBike(bike, label, color) {
     ctx.translate(-x, -(wheelY - 15));
     // -----------------------
 
-    ctx.fillStyle = 'rgba(0,0,0,0.28)';
-    ctx.beginPath();
-    ctx.ellipse(x, groundY - 1, 35, 5, 0, 0, Math.PI * 2);
-    ctx.fill();
-
     function drawWheel(cx) {
         ctx.save();
         ctx.translate(cx, wheelY);
         ctx.rotate(wheelAngle);
+
+        const tireWidth = clamp((Number(visuals.tireWidth) || 3.2) * 1.18, 3.8, 5.2);
         ctx.strokeStyle = '#0f172a';
-        ctx.lineWidth = visuals.tireWidth || 3.2;
+        ctx.lineWidth = tireWidth + 1.2;
         ctx.beginPath();
         ctx.arc(0, 0, radius, 0, Math.PI * 2);
         ctx.stroke();
 
-        ctx.strokeStyle = visuals.rimColor || '#64748b';
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = tireWidth * 0.42;
         ctx.beginPath();
-        ctx.arc(0, 0, radius * 0.72, 0, Math.PI * 2);
-        for (let i = 0; i < 8; i++) {
-            const angle = i * Math.PI / 4;
+        ctx.arc(0, 0, radius - tireWidth * 0.42, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Чёткая окантовка обода и равномерные спицы вместо хаотичной сетки.
+        ctx.strokeStyle = visuals.rimColor || '#64748b';
+        ctx.lineWidth = 1.55;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.76, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(203,213,225,0.82)';
+        ctx.lineWidth = 0.85;
+        ctx.beginPath();
+        for (let i = 0; i < 10; i++) {
+            const angle = i * Math.PI / 5;
             ctx.moveTo(0, 0);
             ctx.lineTo(Math.cos(angle) * radius * 0.72, Math.sin(angle) * radius * 0.72);
         }
-        for (let i = 0; i < 16; i++) {
-            const angle = i * Math.PI / 8;
-            ctx.moveTo(Math.cos(angle) * (radius - 1), Math.sin(angle) * (radius - 1));
-            ctx.lineTo(Math.cos(angle) * (radius + 1), Math.sin(angle) * (radius + 1));
+        ctx.stroke();
+
+        // Небольшие насечки протектора помогают колесу отделяться от фона.
+        ctx.strokeStyle = 'rgba(226,232,240,0.55)';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        for (let i = 0; i < 18; i++) {
+            const angle = i * Math.PI / 9;
+            const inner = radius - tireWidth * 0.36;
+            const outer = radius + tireWidth * 0.34;
+            ctx.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
+            ctx.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer);
         }
         ctx.stroke();
 
-        ctx.strokeStyle = visuals.hubColor || '#94a3b8';
-        ctx.lineWidth = 1.4;
+        ctx.fillStyle = '#0f172a';
         ctx.beginPath();
-        ctx.arc(0, 0, radius * 0.22, 0, Math.PI * 2);
+        ctx.arc(0, 0, 2.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = visuals.hubColor || '#cbd5e1';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.arc(0, 0, 1.9, 0, Math.PI * 2);
         ctx.stroke();
         if (visuals.discBrakes) {
-            ctx.strokeStyle = '#38bdf8';
-            ctx.lineWidth = 1;
+            ctx.strokeStyle = 'rgba(148,163,184,0.9)';
+            ctx.lineWidth = 1.15;
             ctx.beginPath();
-            ctx.arc(0, 0, radius * 0.48, 0, Math.PI * 2);
+            ctx.arc(0, 0, radius * 0.43, 0, Math.PI * 2);
             ctx.stroke();
+            ctx.fillStyle = '#0f172a';
+            for (let i = 0; i < 6; i++) {
+                const angle = i * Math.PI / 3;
+                ctx.beginPath();
+                ctx.arc(Math.cos(angle) * radius * 0.43, Math.sin(angle) * radius * 0.43, 0.7, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
         ctx.restore();
     }
@@ -2643,89 +2727,93 @@ function drawBike(bike, label, color) {
     }
 
     const frameColor = visuals.frameColor || color;
-    ctx.strokeStyle = frameColor;
-    ctx.lineWidth = visuals.frameWidth || 3;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
+    const frameWidth = clamp(Number(visuals.frameWidth) || 3, 2.5, 4.4);
+    const drawTube = (x1, y1, x2, y2, tubeColor = frameColor, tubeWidth = frameWidth) => {
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = 'rgba(2,6,23,0.95)';
+        ctx.lineWidth = tubeWidth + 2.1;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.strokeStyle = tubeColor;
+        ctx.lineWidth = tubeWidth;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.globalAlpha *= 0.34;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = Math.max(0.65, tubeWidth * 0.18);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1 - 0.55);
+        ctx.lineTo(x2, y2 - 0.55);
+        ctx.stroke();
+        ctx.restore();
+    };
+
     if (visuals.fullSuspension) {
-        ctx.moveTo(bottomX, wheelY);
-        ctx.lineTo(seatX, wheelY - 27);
-        ctx.lineTo(headX, wheelY - 19);
-        ctx.lineTo(bottomX, wheelY);
+        drawTube(bottomX, bottomY, seatX, wheelY - 27);
+        drawTube(seatX, wheelY - 27, headX, wheelY - 19);
+        drawTube(headX, wheelY - 19, bottomX, bottomY);
     } else {
-        ctx.moveTo(rearWheelX, wheelY);
-        ctx.lineTo(bottomX, wheelY);
-        ctx.lineTo(seatX, wheelY - 27);
-        ctx.lineTo(rearWheelX, wheelY);
-        ctx.moveTo(seatX, wheelY - 27);
-        ctx.lineTo(headX, wheelY - 19);
-        ctx.lineTo(bottomX, wheelY);
+        drawTube(rearWheelX, wheelY, bottomX, bottomY);
+        drawTube(bottomX, bottomY, seatX, wheelY - 27);
+        drawTube(seatX, wheelY - 27, rearWheelX, wheelY);
+        drawTube(seatX, wheelY - 27, headX, wheelY - 19);
+        drawTube(headX, wheelY - 19, bottomX, bottomY);
     }
-    ctx.stroke();
 
     if (visuals.fullSuspension) {
         const swingPivot = { x: rearWheelX + 11, y: wheelY - 4 };
         const rocker = { x: seatX - 7, y: wheelY - 15 };
-        ctx.strokeStyle = frameColor;
-        ctx.lineWidth = (visuals.frameWidth || 3) * 0.82;
-        ctx.beginPath();
-        ctx.moveTo(rearWheelX, wheelY);
-        ctx.lineTo(swingPivot.x, swingPivot.y);
-        ctx.lineTo(bottomX, wheelY);
-        ctx.moveTo(rearWheelX, wheelY);
-        ctx.lineTo(rocker.x, rocker.y);
-        ctx.lineTo(seatX, wheelY - 27);
-        ctx.moveTo(rocker.x, rocker.y);
-        ctx.lineTo(swingPivot.x, swingPivot.y);
-        ctx.stroke();
+        drawTube(rearWheelX, wheelY, swingPivot.x, swingPivot.y, frameColor, frameWidth * 0.8);
+        drawTube(swingPivot.x, swingPivot.y, bottomX, bottomY, frameColor, frameWidth * 0.8);
+        drawTube(rearWheelX, wheelY, rocker.x, rocker.y, frameColor, frameWidth * 0.8);
+        drawTube(rocker.x, rocker.y, seatX, wheelY - 27, frameColor, frameWidth * 0.8);
+        drawTube(rocker.x, rocker.y, swingPivot.x, swingPivot.y, frameColor, frameWidth * 0.8);
         ctx.fillStyle = '#e2e8f0';
         for (const joint of [swingPivot, rocker]) {
             ctx.beginPath();
-            ctx.arc(joint.x, joint.y, 1.7, 0, Math.PI * 2);
+            ctx.arc(joint.x, joint.y, 2.4, 0, Math.PI * 2);
             ctx.fill();
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 1;
+            ctx.stroke();
         }
 
         if (visuals.rearSuspension) {
-            const upper = { x: seatX + 1, y: wheelY - 22 };
-            const lower = { x: swingPivot.x + 2, y: swingPivot.y - 2 + (bike.rearCompression || 0) * 0.45 };
-            ctx.strokeStyle = '#0f172a';
-            ctx.lineWidth = 5;
-            ctx.beginPath();
-            ctx.moveTo(upper.x, upper.y);
-            ctx.lineTo(lower.x, lower.y);
-            ctx.stroke();
-            ctx.strokeStyle = visuals.rearShockColor || '#fbbf24';
-            ctx.lineWidth = 2.2;
-            ctx.beginPath();
-            ctx.moveTo(upper.x, upper.y);
-            ctx.lineTo(lower.x, lower.y);
-            ctx.stroke();
+            const upper = { x: rocker.x + 1, y: rocker.y + 1 };
+            const lower = { x: bottomX + 7, y: bottomY - 1 + (bike.rearCompression || 0) * 0.45 };
+            drawTube(upper.x, upper.y, lower.x, lower.y, visuals.rearShockColor || '#fbbf24', 2.4);
+
+            // Видимая витая пружина вдоль заднего амортизатора.
+            const shockDx = lower.x - upper.x;
+            const shockDy = lower.y - upper.y;
+            const shockLength = Math.hypot(shockDx, shockDy) || 1;
+            const normalX = -shockDy / shockLength;
+            const normalY = shockDx / shockLength;
             ctx.strokeStyle = '#f8fafc';
-            ctx.lineWidth = 1;
+            ctx.lineWidth = 1.2;
             ctx.beginPath();
-            ctx.moveTo((upper.x + lower.x) / 2, (upper.y + lower.y) / 2);
-            ctx.lineTo(lower.x + 1, lower.y - 2);
+            for (let i = 0; i <= 8; i++) {
+                const t = 0.18 + i * 0.075;
+                const side = i % 2 === 0 ? -2.3 : 2.3;
+                const px = upper.x + shockDx * t + normalX * side;
+                const py = upper.y + shockDy * t + normalY * side;
+                if (i === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
             ctx.stroke();
         }
     }
 
-    ctx.strokeStyle = visuals.forkColor || '#cbd5e1';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(headX, wheelY - 19);
-    ctx.lineTo(frontWheelX, wheelY);
-    ctx.stroke();
+    drawTube(headX + 7, wheelY - 18, frontWheelX - 1, wheelY, visuals.forkColor || '#cbd5e1', 4);
     if (visuals.suspension) {
-        ctx.strokeStyle = '#fbbf24';
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
         const forkCompression = bike.frontCompression || 0;
-        ctx.moveTo(headX + 3, wheelY - 16);
-        ctx.lineTo(headX + 6, wheelY - 12 + forkCompression * 0.3);
-        ctx.lineTo(headX + 3, wheelY - 8 + forkCompression * 0.45);
-        ctx.lineTo(headX + 7, wheelY - 4 + forkCompression * 0.6);
-        ctx.stroke();
+        drawTube(headX + 8, wheelY - 17, frontWheelX - 2, wheelY - 5 + forkCompression * 0.35, '#fbbf24', 1.5);
     }
 
     ctx.strokeStyle = visuals.gearColor || '#94a3b8';
@@ -2747,34 +2835,34 @@ function drawBike(bike, label, color) {
     ctx.lineWidth = 1.3;
     ctx.beginPath();
     ctx.moveTo(rearWheelX + 3, wheelY - 2.6);
-    ctx.lineTo(bottomX - 4, wheelY - 3.5);
-    ctx.moveTo(bottomX - 4, wheelY + 3.5);
+    ctx.lineTo(bottomX - 4, bottomY - 3.5);
+    ctx.moveTo(bottomX - 4, bottomY + 3.5);
     ctx.lineTo(rearWheelX + 3, wheelY + 2.6);
-    ctx.arc(bottomX, wheelY, 4.5, 0, Math.PI * 2);
+    ctx.arc(bottomX, bottomY, 4.5, 0, Math.PI * 2);
     ctx.stroke();
 
     const pedalRadius = 7;
     const leftPedal = {
         x: bottomX + Math.cos(pedalAngle) * pedalRadius,
-        y: wheelY + Math.sin(pedalAngle) * pedalRadius
+        y: bottomY + Math.sin(pedalAngle) * pedalRadius
     };
     const rightPedal = {
         x: bottomX + Math.cos(pedalAngle + Math.PI) * pedalRadius,
-        y: wheelY + Math.sin(pedalAngle + Math.PI) * pedalRadius
+        y: bottomY + Math.sin(pedalAngle + Math.PI) * pedalRadius
     };
     ctx.strokeStyle = visuals.crankColor || '#e2e8f0';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(bottomX, wheelY, 4.5, 0, Math.PI * 2);
+    ctx.arc(bottomX, bottomY, 4.5, 0, Math.PI * 2);
     if (visuals.chainringCount > 1) {
-        ctx.moveTo(bottomX + 6, wheelY);
-        ctx.arc(bottomX, wheelY, 6, 0, Math.PI * 2);
-        ctx.moveTo(bottomX + 7.5, wheelY);
-        ctx.arc(bottomX, wheelY, 7.5, 0, Math.PI * 2);
+        ctx.moveTo(bottomX + 6, bottomY);
+        ctx.arc(bottomX, bottomY, 6, 0, Math.PI * 2);
+        ctx.moveTo(bottomX + 7.5, bottomY);
+        ctx.arc(bottomX, bottomY, 7.5, 0, Math.PI * 2);
     }
-    ctx.moveTo(bottomX, wheelY);
+    ctx.moveTo(bottomX, bottomY);
     ctx.lineTo(leftPedal.x, leftPedal.y);
-    ctx.moveTo(bottomX, wheelY);
+    ctx.moveTo(bottomX, bottomY);
     ctx.lineTo(rightPedal.x, rightPedal.y);
     ctx.stroke();
     ctx.lineWidth = 1.6;
@@ -3002,7 +3090,7 @@ function drawBike(bike, label, color) {
         ctx.strokeStyle = '#fbbf24';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.rect(x - 1, wheelY - 12, 10, 8);
+        ctx.rect(bottomX - 3, bottomY - 5, 10, 8);
         ctx.fill();
         ctx.stroke();
     }
@@ -3042,12 +3130,13 @@ function drawBike(bike, label, color) {
         ctx.stroke();
     }
 
-    ctx.restore(); // Возвращаем исходный наклон холста после отрисовки велосипеда.
+    ctx.restore(); // Возвращаем наклон холста после отрисовки велосипеда.
+    ctx.restore(); // Убираем только визуальное увеличение велосипеда.
 
     ctx.font = 'bold 12px Arial';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#f8fafc';
-    ctx.fillText(label, x, wheelY - 51);
+    ctx.fillText(label, x, wheelY - 63);
     ctx.restore();
 }
 
