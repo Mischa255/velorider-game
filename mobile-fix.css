@@ -271,8 +271,8 @@
         grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
         grid-template-rows: repeat(2, 62px) !important;
         grid-template-areas:
-            "reverse jump"
-            "brake accelerate" !important;
+            "brake jump"
+            "reverse accelerate" !important;
         gap: 8px !important;
         padding: 8px !important;
         border: 1px solid rgba(148, 163, 184, .3);
@@ -370,22 +370,24 @@
 
 @media screen and (max-width: 900px) and (max-height: 520px) and (orientation: landscape) {
     #screen-race.active {
-        padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important;
+        padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px)) !important;
     }
 
     #race-controls {
-        left: max(8px, env(safe-area-inset-left, 0px)) !important;
-        right: max(8px, env(safe-area-inset-right, 0px)) !important;
+        left: 50% !important;
+        right: auto !important;
         bottom: calc(env(safe-area-inset-bottom, 0px) + 6px) !important;
-        width: auto !important;
+        width: min(440px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 16px)) !important;
         max-width: none;
-        height: 58px !important;
+        height: auto !important;
         margin: 0 !important;
-        transform: none !important;
+        transform: translateX(-50%) !important;
         padding: 5px !important;
-        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-        grid-template-rows: 1fr !important;
-        grid-template-areas: none !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        grid-template-rows: repeat(2, 48px) !important;
+        grid-template-areas:
+            "brake jump"
+            "reverse accelerate" !important;
         gap: 6px !important;
     }
 
@@ -398,10 +400,8 @@
         gap: 0;
     }
 
-    #btn-reverse,
-    #btn-brake,
-    #btn-jump,
-    #btn-accelerate {
-        grid-area: auto;
-    }
+    #btn-reverse { grid-area: reverse; }
+    #btn-jump { grid-area: jump; }
+    #btn-brake { grid-area: brake; }
+    #btn-accelerate { grid-area: accelerate; }
 }
