@@ -1,7 +1,7 @@
-import { player } from './state.js?v=85';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=85';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=85';
-import { playCoinSound, playBoostSound } from './audio.js?v=85';
+import { player } from './state.js?v=87';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=87';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=87';
+import { playCoinSound, playBoostSound } from './audio.js?v=87';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -450,7 +450,7 @@ function getPlayerPartAbilities() {
         superJumpUnlocked: abilityIds.has('superJump'),
         mudGrip: abilityIds.has('mudGrip'),
         impactBrake: abilityIds.has('impactBrake'),
-        shieldCharges: 0
+        shieldCharges: abilityIds.has('jekyllShield') ? 1 : 0
     };
 }
 
@@ -920,6 +920,8 @@ function updateJumpPhysics(bike) {
             landingSpeed > landingSpeedTolerance &&
             absoluteLandingAngle > safeLandingAngle
         );
+        const shieldSavedLanding = failedLanding && !bike.isBot &&
+            bike.abilities?.shieldCharges > 0;
 
         bike.jumpHeight = 0;
         bike.jumpVelocity = 0;
@@ -928,12 +930,29 @@ function updateJumpPhysics(bike) {
         bike.airY = null;
         bike.rampLift = 0;
         bike.currentRamp = null;
-        if (failedLanding) {
+        if (shieldSavedLanding) {
+            bike.abilities.shieldCharges--;
+            bike.shieldActiveTimer = 52;
+            bike.pitchAngle = groundPitch + clamp(
+                landingAngle,
+                -safeLandingAngle * 0.72,
+                safeLandingAngle * 0.72
+            );
+            bike.pitchVelocity *= 0.35;
+            bike.impactSlowTimer = Math.max(bike.impactSlowTimer || 0, 18);
+            bike.impactSpeedLimit = Math.max(1.2, bike.velocityX * 0.78);
+            bike.bumpCooldown = Math.max(bike.bumpCooldown || 0, 75);
+        }
+        if (failedLanding && !shieldSavedLanding) {
             startBikeFlip(
                 bike,
                 landingAngle < 0 ? -1 : 1,
                 'ЖЁСТКОЕ ПРИЗЕМЛЕНИЕ!'
             );
+            if (!bike.isBot) {
+                bike.hardLandingPending = true;
+                bike.hardLandingCrashFrames = 42;
+            }
         } else {
             bike.pitchVelocity *= 0.72;
             if (!bike.isBot && bike.abilities?.landingFrame && bike.landingBoostCooldown <= 0) {
@@ -1141,6 +1160,8 @@ function updatePlayerPhysics() {
         updateReverseButtonLabel();
         return;
     }
+
+    if (playerBike.shieldActiveTimer > 0) playerBike.shieldActiveTimer--;
 
     const speed = Math.max(
         0,
@@ -1644,12 +1665,21 @@ function applyPlayerImpact(obstacle, speedLimit = 1.0) {
         const impactForce = playerBike.velocityX * severity / 3;
         const impactDirection = obstacle.type === 'rock' ? -1 : 1;
         applyImpactPitchImpulse(playerBike, impactForce, impactDirection);
-        maybeFlipFromImpact(
-            playerBike,
-            impactForce,
-            impactDirection,
-            'УДАР! Низкая стабильность'
-        );
+        if (!(playerBike.abilities?.shieldCharges > 0)) {
+            maybeFlipFromImpact(
+                playerBike,
+                impactForce,
+                impactDirection,
+                'УДАР! Низкая стабильность'
+            );
+        }
+    }
+
+    if (playerBike.abilities?.shieldCharges > 0) {
+        playerBike.abilities.shieldCharges--;
+        playerBike.shieldActiveTimer = 52;
+        speedLimit = Math.max(speedLimit, playerBike.velocityX * 0.78);
+        impactDuration = Math.min(impactDuration, 18);
     }
 
     playerBike.impactSlowTimer = impactDuration;
@@ -3004,6 +3034,19 @@ function drawBike(bike, label, color) {
     const kneeA = { x: (hip.x + leftPedal.x) / 2 + 3, y: (hip.y + leftPedal.y) / 2 - 3 };
     const kneeB = { x: (hip.x + rightPedal.x) / 2 - 3, y: (hip.y + rightPedal.y) / 2 - 3 };
 
+    const riderFallProgress = !bike.isBot && bike.hardLandingPending
+        ? clamp(1 - (Number(bike.hardLandingCrashFrames) || 0) / 42, 0, 1)
+        : 0;
+    ctx.save();
+    if (riderFallProgress > 0) {
+        ctx.translate(hip.x, hip.y);
+        ctx.rotate(-riderFallProgress * 0.95);
+        ctx.translate(
+            -hip.x - riderFallProgress * 22,
+            -hip.y - riderFallProgress * 4
+        );
+    }
+
     // Стиль текущего райдера
     const riderId = (!bike.isBot && visuals?.riderId) ? visuals.riderId : 'r1';
     let jersey = '#16a34a';
@@ -3187,6 +3230,8 @@ function drawBike(bike, label, color) {
         ctx.stroke();
     }
 
+    ctx.restore(); // Райдер отделяется от рамы при падении.
+
     ctx.strokeStyle = visuals.handlebarColor || '#f8fafc';
     ctx.lineWidth = visuals.handlebarWidth || 2;
     ctx.beginPath();
@@ -3275,7 +3320,7 @@ function drawRaceHUD() {
     const racers = [
         {
             bike: playerBike,
-            label: '🚴 ТЫ',
+            label: `🚴 ТЫ${playerBike.abilities?.shieldCharges > 0 || playerBike.shieldActiveTimer > 0 ? ' 🛡️' : ''}`,
             color: '#22c55e'
         },
 
@@ -3484,7 +3529,7 @@ function render() {
 
     drawBike(
         playerBike,
-        'ТЫ',
+        `ТЫ${playerBike.abilities?.shieldCharges > 0 || playerBike.shieldActiveTimer > 0 ? ' 🛡️' : ''}`,
         playerBike.color
     );
 
@@ -3501,6 +3546,19 @@ function render() {
 
 function update() {
     if (!raceRunning || raceFinished) return;
+
+    if (playerBike?.hardLandingPending) {
+        frameCounter++;
+        updateBikeFlipRecovery(playerBike);
+        playerBike.hardLandingCrashFrames = Math.max(
+            0,
+            (Number(playerBike.hardLandingCrashFrames) || 0) - 1
+        );
+        if (playerBike.hardLandingCrashFrames === 0) {
+            finishRace(false, 'hard-landing');
+        }
+        return;
+    }
 
     // Боты не разгоняются, пока игрок сам не начнёт заезд.
     if (!raceStarted) {

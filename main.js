@@ -1,4 +1,4 @@
-import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=85';
+import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=87';
 import {
     player,
     loadPlayerState,
@@ -6,21 +6,21 @@ import {
     clearSavedProgress,
     forceSavePlayerState,
     getServerTime
-} from './state.js?v=85';
+} from './state.js?v=87';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=85';
+} from './race.js?v=87';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=85';
-import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=85';
+} from './audio.js?v=87';
+import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=87';
 
 function renderGameVersionBadge() {
     const build = document.body?.dataset.gameBuild || '85';
@@ -1458,8 +1458,17 @@ function updateUpgradeUI() {
         const equipped = player.equipped?.[category] === part.id;
         const unlocked = category === 'riders' ? true : isRarityUnlocked(part.rarity);
         const price = getUpgradePrice(part);
-        const frameBadgeHTML = category === 'frames' && part.visuals?.type === 'dh'
-            ? '<span class="absolute top-3 right-3 z-10 rounded-md border border-cyan-300/40 bg-cyan-950 px-2 py-1 text-[10px] font-black tracking-wider text-cyan-200 shadow">DH</span>'
+        const abilityName = typeof part.ability === 'string'
+            ? part.ability
+            : part.ability?.name || 'Суперспособность';
+        const abilityBadgeHTML = part.ability
+            ? `<span title="${escapeHTML(abilityName)}" aria-label="Суперспособность: ${escapeHTML(abilityName)}" class="rounded-md border border-violet-300/40 bg-violet-950 px-2 py-1 text-[11px] font-black text-violet-200 shadow">${part.ability?.id === 'jekyllShield' ? '🛡️' : '✦'}</span>`
+            : '';
+        const dhBadgeHTML = part.visuals?.type === 'dh'
+            ? '<span class="rounded-md border border-cyan-300/40 bg-cyan-950 px-2 py-1 text-[10px] font-black tracking-wider text-cyan-200 shadow">DH</span>'
+            : '';
+        const frameBadgeHTML = category === 'frames' && (abilityBadgeHTML || dhBadgeHTML)
+            ? `<div class="absolute top-3 right-3 z-10 flex items-center gap-1">${abilityBadgeHTML}${dhBadgeHTML}</div>`
             : '';
 
         const card = document.createElement('div');
@@ -1899,8 +1908,12 @@ function updateTracksUI() {
                                 <strong>+${couponReward} 🎟️</strong>
                             </div>
                             <div class="track-reward">
-                                <span>Поражение</span>
+                                <span>Проигрыш боту</span>
                                 <strong>+${lossReward.toLocaleString('ru-RU')} 🪙</strong>
+                            </div>
+                            <div class="track-reward">
+                                <span>Яма / жёсткая посадка</span>
+                                <strong>+100 🪙</strong>
                             </div>
                             <div class="track-reward">
                                 <span>Соперников</span>
@@ -2324,6 +2337,22 @@ function showRaceResult(win, reason, bonusText) {
 async function handleRaceEnd(win, reason = 'finish', raceTimeMs = 0, collectedCoins = 0) {
     const selectedId = player.selectedTrack;
 
+    if (selectedId === 'sprint' && !win && (reason === 'pit' || reason === 'hard-landing')) {
+        const consolationCoins = 100;
+        player.coins = (Number(player.coins) || 0) + consolationCoins;
+        const causeText = reason === 'hard-landing'
+            ? '💥 Жёсткое приземление — райдер упал.'
+            : '🕳️ Ты попал в яму!';
+        const bonusText = `Поражение: +${consolationCoins} 🪙<br>${causeText}`;
+
+        updateHUD();
+        updateGarageUI();
+        updateTracksUI();
+        showRaceResult(false, reason, bonusText);
+        void forceSavePlayerState();
+        return;
+    }
+
     if (selectedId === 'sprint') {
         const elapsedMs = Math.max(0, Number(raceTimeMs) || 0);
         const previousBest = Number(player.bestSprintTime) || 0;
@@ -2377,7 +2406,8 @@ async function handleRaceEnd(win, reason = 'finish', raceTimeMs = 0, collectedCo
         ? storyTracks[trackIndex]
         : storyTracks[0];
     const result = Boolean(win);
-    const rewardCoins = getRaceReward(track, result);
+    const isCrashLoss = !result && (reason === 'pit' || reason === 'hard-landing');
+    const rewardCoins = isCrashLoss ? 100 : getRaceReward(track, result);
 
     player.coins = (Number(player.coins) || 0) + rewardCoins;
 
@@ -2465,6 +2495,8 @@ async function handleRaceEnd(win, reason = 'finish', raceTimeMs = 0, collectedCo
     } else {
         if (reason === 'pit') {
             bonusText += '<br>🕳️ Ты попал в яму! Следи за препятствиями и прыгай вовремя.';
+        } else if (reason === 'hard-landing') {
+            bonusText += '<br>💥 Жёсткое приземление — райдер упал. Попробуй лучше сбалансировать байк в воздухе.';
         } else if (reason === 'bot-finish') {
             bonusText += '<br>🤖 Бот пересёк финиш первым.';
         } else {
