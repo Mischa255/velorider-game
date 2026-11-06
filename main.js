@@ -1,4 +1,4 @@
-import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=83';
+import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=85';
 import {
     player,
     loadPlayerState,
@@ -6,21 +6,28 @@ import {
     clearSavedProgress,
     forceSavePlayerState,
     getServerTime
-} from './state.js?v=83';
+} from './state.js?v=85';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=83';
+} from './race.js?v=85';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=83';
-import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=83';
+} from './audio.js?v=85';
+import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=85';
+
+function renderGameVersionBadge() {
+    const build = document.body?.dataset.gameBuild || '85';
+    document.querySelectorAll('[data-game-version-label]').forEach(label => {
+        label.textContent = `BUILD ${build}`;
+    });
+}
 
 const CATEGORY_NAMES = {
     frames: 'Рамы',
@@ -2617,6 +2624,7 @@ window.addEventListener('blur', () => {
 });
 
 async function bootstrap() {
+    renderGameVersionBadge();
     initTelegramApp();
     await loadPlayerState();
 

@@ -7,6 +7,10 @@
 /* Основные настройки мобильного экрана */
 @media screen and (max-width: 768px) {
 
+    #game-version-race {
+        display: flex !important;
+    }
+
     .upgrade-part-info-backdrop {
         position: fixed;
         inset: 0;
