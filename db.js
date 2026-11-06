@@ -12,14 +12,11 @@ const part = (
     visuals = {} // <-- Новый параметр
 ) => {
     const partData = { id, name, rarity, speed, accel, jump, brake, price, visuals }; // <-- Сохраняем visuals
-    if (Number.isFinite(visuals.stability)) {
-        if (/^f\d+$/.test(id)) partData.frameStability = visuals.stability;
-        else if (/^(?:fk|s)\d+$/.test(id)) partData.suspensionStability = visuals.stability;
+    if (Number.isFinite(visuals.stability) && /^(?:f\d+|fk\d+|s\d+)$/.test(id)) {
+        partData.stability = visuals.stability;
     }
     if (power) partData.power = power;
     const legendaryAbilities = {
-        f3: { id: 'frameGuard', name: 'Карбоновый монокок', description: 'Первое столкновение с твёрдым препятствием за гонку наносит меньше потери скорости.' },
-        f8: { id: 'shockFrame', name: 'Гибкая рама', description: 'После удара велосипед восстанавливает скорость на 15% быстрее.' },
         f9: { id: 'flowFrame', name: 'Трассовый баланс', description: 'На льду и сильном ветре теряется на 15% меньше скорости.' },
         f10: { id: 'landingFrame', name: 'Мягкая посадка', description: 'После успешного прыжка кратко ускоряет велосипед. Срабатывает не чаще раза в 5 секунд.' },
         e4: { id: 'nitro', name: 'Импульсный разгон', description: 'Дважды нажми газ, чтобы включить нитро: скорость и разгон повышаются на 2 секунды. Перезарядка — 8 секунд.' },

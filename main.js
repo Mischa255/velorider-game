@@ -1,4 +1,4 @@
-import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=74';
+import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=79';
 import {
     player,
     loadPlayerState,
@@ -6,21 +6,21 @@ import {
     clearSavedProgress,
     forceSavePlayerState,
     getServerTime
-} from './state.js?v=74';
+} from './state.js?v=79';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=74';
+} from './race.js?v=79';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=74';
-import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=74';
+} from './audio.js?v=79';
+import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=79';
 
 const CATEGORY_NAMES = {
     frames: 'Рамы',
@@ -196,9 +196,6 @@ const STAT_META = {
     traction: { label: 'Тяга', short: 'Тяга', icon: '⚙️', color: 'amber' },
     handling: { label: 'Управляемость', short: 'Управляемость', icon: '🎯', color: 'emerald' },
     stability: { label: 'Стабильность', short: 'Стабильность', icon: '🧭', color: 'sky' },
-    frameStability: { label: 'Стабильность рамы', short: 'Рама', icon: '🧱', color: 'slate' },
-    suspensionStability: { label: 'Стабильность подвески', short: 'Подвеска', icon: '〰️', color: 'indigo' },
-    durability: { label: 'Прочность', short: 'Прочность', icon: '🛡️', color: 'slate' },
     weight: { label: 'Вес', short: 'Вес', icon: '⚖️', color: 'slate', noPlus: true },
     comfort: { label: 'Комфорт', short: 'Комфорт', icon: '🪑', color: 'pink' },
     suspension: { label: 'Амортизация', short: 'Амортизация', icon: '〰️', color: 'indigo' },
@@ -215,6 +212,10 @@ const NON_STAT_NUMERIC_FIELDS = new Set([
 ]);
 
 const STAT_KEY_ALIASES = {
+    stability: new Set([
+        'stability', 'framestability', 'suspensionstability',
+        'framestrength', 'suspensionreliability', 'durability', 'reliability'
+    ]),
     jump: new Set([
         'jump', 'jumppower', 'jumpforce', 'jumpstrength',
         'jumpheight', 'jumpbonus', 'jumpboost', 'airtime'
@@ -231,6 +232,7 @@ function normalizePartStatKey(key) {
 
     if (STAT_KEY_ALIASES.jump.has(normalized)) return 'jump';
     if (STAT_KEY_ALIASES.brake.has(normalized)) return 'brake';
+    if (STAT_KEY_ALIASES.stability.has(normalized)) return 'stability';
 
     return key;
 }
@@ -908,8 +910,6 @@ function calculateBikeStats() {
         jump: 0,
         brake: 0,
         power: 0,
-        frameStability: 0,
-        suspensionStability: 0,
         stability: 0
     };
 
@@ -935,9 +935,7 @@ function calculateBikeStats() {
     player.totalJump = totals.jump || 0;
     player.totalBrake = totals.brake || 0;
     player.totalPower = totals.power || 0;
-    totals.stability = Math.min(100, (totals.frameStability || 0) + (totals.suspensionStability || 0));
-    player.totalFrameStability = totals.frameStability;
-    player.totalSuspensionStability = totals.suspensionStability;
+    totals.stability = Math.min(100, Number(totals.stability) || 0);
     player.totalStability = totals.stability;
     player.totalStats = { ...totals };
 
@@ -1045,9 +1043,7 @@ function renderGarageStats(stats) {
         { key: 'accel', label: 'Ускорение', icon: '⚡', glow: '#fb923c' },
         { key: 'jump', label: 'Сила прыжка', icon: '🪂', glow: '#a78bfa' },
         { key: 'brake', label: 'Торможение', icon: '🛑', glow: '#fb7185' },
-        { key: 'frameStability', label: 'Стабильность рамы', icon: '🧱', glow: '#94a3b8', help: 'Базовая устойчивость, которую даёт установленная рама.' },
-        { key: 'suspensionStability', label: 'Стабильность подвески', icon: '〰️', glow: '#818cf8', help: 'Сумма стабильности вилки и заднего амортизатора. Задний амортизатор учитывается только на двухподвесе.' },
-        { key: 'stability', label: 'Общая стабильность', icon: '🧭', glow: '#38bdf8', help: 'Стабильность рамы плюс стабильность подвески. Низкое значение повышает риск переворота на крупных кочках.' },
+        { key: 'stability', label: 'Стабильность', icon: '🧭', glow: '#38bdf8', help: 'Общий показатель устойчивости. Рама, вилка и задний амортизатор добавляют очки; амортизатор работает только на двухподвесе.' },
         { key: 'power', label: 'Мощность подъёма', icon: '🔋', glow: '#eab308' }
     ];
 
@@ -2543,35 +2539,36 @@ function setupButton(id, startAction, stopAction) {
     const button = document.getElementById(id);
     if (!button) return;
 
-    button.addEventListener('mousedown', event => {
+    let activePointerId = null;
+    const release = event => {
+        if (activePointerId !== event.pointerId) return;
+        activePointerId = null;
+        button.classList.remove('is-pressed');
+        stopAction();
+    };
+
+    button.addEventListener('pointerdown', event => {
+        if (activePointerId !== null) return;
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+
         event.preventDefault();
+        activePointerId = event.pointerId;
+        button.classList.add('is-pressed');
+        try {
+            button.setPointerCapture(event.pointerId);
+        } catch (error) {
+            // Захват может быть недоступен в старых WebView; отпускание всё равно обработает pointerup.
+        }
         startAction();
     });
 
-    button.addEventListener('mouseup', event => {
+    button.addEventListener('pointerup', event => {
         event.preventDefault();
-        stopAction();
+        release(event);
     });
-
-    button.addEventListener('mouseleave', event => {
-        event.preventDefault();
-        stopAction();
-    });
-
-    button.addEventListener('touchstart', event => {
-        event.preventDefault();
-        startAction();
-    }, { passive: false });
-
-    button.addEventListener('touchend', event => {
-        event.preventDefault();
-        stopAction();
-    }, { passive: false });
-
-    button.addEventListener('touchcancel', event => {
-        event.preventDefault();
-        stopAction();
-    }, { passive: false });
+    button.addEventListener('pointercancel', release);
+    button.addEventListener('lostpointercapture', release);
+    button.addEventListener('contextmenu', event => event.preventDefault());
 }
 
 setupButton('btn-accelerate', () => setAccelerating(true), () => setAccelerating(false));

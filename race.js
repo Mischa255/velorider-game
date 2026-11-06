@@ -1,7 +1,7 @@
-import { player } from './state.js?v=74';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=74';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=74';
-import { playCoinSound, playBoostSound } from './audio.js?v=74';
+import { player } from './state.js?v=79';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=79';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=79';
+import { playCoinSound, playBoostSound } from './audio.js?v=79';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -444,8 +444,6 @@ function getPlayerPartAbilities() {
     );
 
     return {
-        frameGuard: abilityIds.has('frameGuard'),
-        shockFrame: abilityIds.has('shockFrame'),
         flowFrame: abilityIds.has('flowFrame'),
         landingFrame: abilityIds.has('landingFrame'),
         nitroUnlocked: abilityIds.has('nitro'),
@@ -473,11 +471,11 @@ function getBikeVisualProfile() {
     const handlebar = getEquippedPart('handlebars');
     const electronics = getEquippedPart('electronics'); // Добавили электронику
     const fullSuspension = frame?.visuals?.type === 'dh';
-    const frameStability = Number(frame?.frameStability) || 0;
-    const suspensionStability =
-        (Number(fork?.suspensionStability) || 0) +
-        (fullSuspension ? Number(shock?.suspensionStability) || 0 : 0);
-    const stability = Math.min(100, frameStability + suspensionStability);
+    const stability = Math.min(100,
+        (Number(frame?.stability) || 0) +
+        (Number(fork?.stability) || 0) +
+        (fullSuspension ? Number(shock?.stability) || 0 : 0)
+    );
     const frameTubeSize = Number(frame?.visuals?.width) || 0;
 
     return {
@@ -492,10 +490,9 @@ function getBikeVisualProfile() {
         fullSuspension,
         rearSuspension: Boolean(fullSuspension && shock),
         rearShockColor: shock?.visuals?.color || getRarityAccent(shock?.rarity),
-        rearShockStability: fullSuspension ? Number(shock?.suspensionStability) || 0 : 0,
-        frameStability,
-        suspensionStability,
         stability,
+        hasBrakes: Boolean(brakes),
+        brakeStrength: clamp(Number(brakes?.brake) || 0, 0, 15),
         
         // --- ВИЛКА ---
         forkColor: fork?.visuals?.color || getRarityAccent(fork?.rarity),
@@ -522,7 +519,6 @@ function getBikeVisualProfile() {
         discBrakes: Boolean(brakes && !['b1', 'b2'].includes(brakes.id)),
         suspension: Boolean(fork && fork.id !== 'fk1'),
         frontSuspension: Boolean(fork && fork.id !== 'fk1'),
-        frontForkStability: Number(fork?.suspensionStability) || 0,
         motor: Boolean(electronics && electronics.id !== 'e1')
     };
 }
@@ -537,12 +533,10 @@ function getBotVisualProfile(botIndex) {
         fullSuspension,
         rearSuspension: fullSuspension,
         rearShockColor: fullSuspension ? '#fbbf24' : '#94a3b8',
-        rearShockStability: fullSuspension ? 38 : 0,
-        frameStability: fullSuspension ? 20 : 29,
-        suspensionStability: fullSuspension ? 58 : 14,
         forkColor: botIndex === 1 ? '#cbd5e1' : '#d8b4fe',
-        frontForkStability: botIndex === 1 ? 14 : 20,
         stability: fullSuspension ? 78 : 43,
+        hasBrakes: true,
+        brakeStrength: fullSuspension ? 14 : 8,
         chainColor: '#cbd5e1',
         gearColor: '#94a3b8',
         chainringCount: 1,
@@ -574,6 +568,8 @@ function createBike(isBot = false, botIndex = 1) {
         displayName: isBot ? (botIndex === 1 ? 'Макс' : 'Лера') : 'Игрок',
         visuals,
         stability: clamp(Number(visuals?.stability) || 0, 0, 100),
+        hasBrakes: Boolean(visuals?.hasBrakes),
+        brakeStrength: clamp(Number(visuals?.brakeStrength) || 0, 0, 15),
         frontSuspension: Boolean(visuals?.frontSuspension),
         rearSuspension: Boolean(visuals?.rearSuspension),
 
@@ -617,7 +613,6 @@ function createBike(isBot = false, botIndex = 1) {
         springBoostTimer: 0,
         nitroCooldown: 120 + Math.floor(Math.random() * 100),
         lastGasTap: 0,
-        frameGuardUsed: false,
         landingBoostCooldown: 0,
         shieldActiveTimer: 0,
         finishFrame: null,
@@ -636,9 +631,9 @@ function startBikeFlip(bike, direction = 1, message = 'ПЕРЕВОРОТ! Ни�
     bike.flipDirection = direction < 0 ? -1 : 1;
     const instability = 1 - clamp(Number(bike.stability) || 0, 0, 100) / 100;
     bike.pitchVelocity = clamp(
-        (Number(bike.pitchVelocity) || 0) + bike.flipDirection * (0.13 + instability * 0.08),
-        -0.36,
-        0.36
+        (Number(bike.pitchVelocity) || 0) + bike.flipDirection * (0.055 + instability * 0.04),
+        -0.14,
+        0.14
     );
     bike.velocityX = Math.max(0.7, bike.velocityX * 0.42);
     bike.impactSlowTimer = Math.max(bike.impactSlowTimer || 0, 54);
@@ -745,14 +740,13 @@ function updateSuspensionResponse(bike) {
     const rearRelativeTravel = rearDelta - averageDelta;
     bike.previousGroundDelta = averageDelta;
 
-    const forkQuality = clamp((Number(bike.visuals?.frontForkStability) || 0) / 24, 0.15, 1);
-    const shockQuality = clamp((Number(bike.visuals?.rearShockStability) || 0) / 48, 0.15, 1);
+    const suspensionQuality = clamp((Number(bike.stability) || 0) / 100, 0.15, 1);
     const front = advanceSuspension(
         bike.frontCompression,
         bike.frontCompressionVelocity,
         frontRelativeTravel,
         bike.frontSuspension,
-        forkQuality,
+        suspensionQuality,
         5
     );
     const rear = advanceSuspension(
@@ -760,7 +754,7 @@ function updateSuspensionResponse(bike) {
         bike.rearCompressionVelocity,
         rearRelativeTravel,
         bike.rearSuspension,
-        shockQuality,
+        suspensionQuality,
         5.5
     );
     bike.frontCompression = front.compression;
@@ -771,8 +765,8 @@ function updateSuspensionResponse(bike) {
     const stabilityRatio = clamp(Number(bike.stability) || 0, 0, 100) / 100;
     const instability = 1 - stabilityRatio;
     const suspensionSupport = (
-        (bike.frontSuspension ? forkQuality : 0) +
-        (bike.rearSuspension ? shockQuality : 0)
+        (bike.frontSuspension ? 1 : 0) +
+        (bike.rearSuspension ? 1 : 0)
     ) / 2;
     const chassisKick = surfaceKick * (1 - suspensionSupport * 0.48) * (0.92 + instability * 0.16);
     const bodyKick = Math.max(front.residual, rear.residual, chassisKick);
@@ -791,6 +785,26 @@ function updateSuspensionResponse(bike) {
     }
 }
 
+function getBotAirLeanInput(bike) {
+    const gravity = Math.max(0.01, Number(bike.jumpGravity) || GRAVITY);
+    const height = Math.max(0, Number(bike.jumpHeight) || 0);
+    const verticalSpeed = Number(bike.jumpVelocity) || 0;
+    const landingTime = Math.max(0, Math.min(90,
+        (verticalSpeed + Math.sqrt(Math.max(0, verticalSpeed * verticalSpeed + 2 * gravity * height))) / gravity
+    ));
+    const landingX = bike.x + Math.max(0, Number(bike.velocityX) || 0) * landingTime;
+    const targetPitch = Math.atan2(
+        getGroundY(landingX + 25, 0) - getGroundY(landingX - 25, 0),
+        50
+    );
+    const pitchError = clamp(targetPitch - bike.pitchAngle, -2.2, 2.2);
+    const targetPitchVelocity = clamp(pitchError * 0.045, -0.012, 0.012);
+
+    // Бот немного подруливает велосипедом к углу поверхности в точке посадки,
+    // но использует ту же ограниченную силу воздушного контроля, что и игрок.
+    return clamp((targetPitchVelocity - bike.pitchVelocity) * 70, -1, 1);
+}
+
 function updateJumpPhysics(bike) {
     if (!bike.isBot && bike.landingBoostCooldown > 0) bike.landingBoostCooldown--;
 
@@ -805,13 +819,26 @@ function updateJumpPhysics(bike) {
         bike.pitchVelocity += (targetPitch - bike.pitchAngle) * (0.09 + stabilityRatio * 0.035);
         bike.pitchVelocity *= 0.76 - stabilityRatio * 0.12;
     } else {
-        if (!bike.isBot) {
-            const riderShift = input.braking ? 0.0009 : input.accelerating ? -0.00045 : 0;
-            bike.pitchVelocity += riderShift * (1 - stabilityRatio * 0.55);
+        // Газ и «назад» наклоняют байк игрока. Бот рассчитывает такой же
+        // ограниченный импульс по углу предполагаемой посадки.
+        const leanInput = bike.isBot
+            ? getBotAirLeanInput(bike)
+            : (input.reversing ? 1 : 0) - (input.accelerating ? 1 : 0);
+        bike.pitchVelocity += leanInput * 0.00065 * (0.85 + stabilityRatio * 0.15);
+
+        // Тормоз не вращает байк в воздухе: он только гасит лишнее вращение.
+        // Сила эффекта зависит от установленной тормозной системы.
+        const braking = bike.isBot
+            ? Math.abs(bike.pitchVelocity) > 0.022
+            : input.braking;
+        if (braking && bike.hasBrakes) {
+            const brakeRatio = clamp(Number(bike.brakeStrength) || 0, 0, 15) / 15;
+            bike.pitchVelocity *= 1 - (0.01 + brakeRatio * 0.05);
         }
-        bike.pitchVelocity *= 0.94 - stabilityRatio * 0.1;
+        bike.pitchVelocity *= 0.965 - stabilityRatio * 0.055;
+        bike.pitchVelocity = clamp(bike.pitchVelocity, -0.045, 0.045);
     }
-    const pitchLimit = 1.15;
+    const pitchLimit = 2.35;
     bike.pitchAngle = clamp(bike.pitchAngle + bike.pitchVelocity, -pitchLimit, pitchLimit);
 
     if (bike.grounded) {
@@ -834,6 +861,13 @@ function updateJumpPhysics(bike) {
 
     // Приземление, когда траектория пересекла линию рельефа
     if (bike.jumpHeight <= 0) {
+        const landingSpeed = Math.max(0, -bike.jumpVelocity);
+        const frontY = getGroundY(bike.x + 25, 0);
+        const rearY = getGroundY(bike.x - 25, 0);
+        const groundPitch = Math.atan2(frontY - rearY, 50);
+        const landingAngle = bike.pitchAngle - groundPitch;
+        const crashAngle = 1.85 + stabilityRatio * 0.25;
+
         bike.jumpHeight = 0;
         bike.jumpVelocity = 0;
         bike.jumpGravity = GRAVITY;
@@ -841,6 +875,15 @@ function updateJumpPhysics(bike) {
         bike.airY = null;
         bike.rampLift = 0;
         bike.currentRamp = null;
+        if (landingSpeed > 4.5 && Math.abs(landingAngle) > crashAngle) {
+            startBikeFlip(
+                bike,
+                landingAngle < 0 ? -1 : 1,
+                'ЖЁСТКОЕ ПРИЗЕМЛЕНИЕ!'
+            );
+        } else {
+            bike.pitchVelocity *= 0.72;
+        }
         if (!bike.isBot && bike.abilities?.landingFrame && bike.landingBoostCooldown <= 0) {
             bike.velocityX += 0.45;
             bike.springBoostTimer = Math.max(bike.springBoostTimer || 0, 24);
@@ -864,7 +907,8 @@ function startJump(bike, force, gravity = GRAVITY) {
         4,
         Number(force) || 9
     ) + terrainSlopeVy;
-    bike.pitchVelocity = (Number(bike.pitchVelocity) || 0) - 0.018;
+    // Прыжок сохраняет текущий наклон; сам отрыв не добавляет резкого переворота.
+    bike.pitchVelocity = clamp(Number(bike.pitchVelocity) || 0, -0.045, 0.045);
 
     bike.jumpGravity = clamp(
         Number(gravity) || GRAVITY,
@@ -973,6 +1017,12 @@ function updateRamp(bike, isBot) {
             ramp.height * 0.85
         );
         bike.airY = getGroundY(bike.x, 0) - bike.jumpHeight;
+        const launchAngle = Math.atan2(ramp.height * 0.4, Math.max(1, ramp.width));
+        bike.pitchVelocity = clamp(
+            (Number(bike.pitchVelocity) || 0) + launchAngle * 0.035,
+            -0.045,
+            0.045
+        );
 
         bike.rampLift = 0;
         bike.grounded = false;
@@ -1005,12 +1055,39 @@ function updateRamp(bike, isBot) {
     }
 }
 
+const REVERSE_STOP_THRESHOLD = 0.06;
+
+function getBrakeDeceleration(bike, totalBrake, speed) {
+    if (!bike?.hasBrakes) return 0;
+
+    const brakeQuality = clamp(Number(bike.brakeStrength) || 0, 0, 15) / 15;
+    const ratedPower = 0.08 + clamp(Number(totalBrake) || 0, 0, 80) * 0.0045;
+    const brakeTierFactor = 0.4 + brakeQuality * 0.6;
+    const speedPenalty = 1 + Math.min(20, Math.abs(Number(speed) || 0)) * 0.03;
+
+    return ratedPower * brakeTierFactor / speedPenalty;
+}
+
+function updateReverseButtonLabel() {
+    const label = document.querySelector('#btn-reverse [data-reverse-label]');
+    if (!label) return;
+
+    const isBrakingBeforeReverse = Boolean(
+        input.reversing && playerBike?.grounded && playerBike.velocityX > REVERSE_STOP_THRESHOLD
+    );
+    const nextLabel = isBrakingBeforeReverse ? '🛑 ТОРМОЗ' : '⏪ НАЗАД';
+    if (label.textContent.trim() !== nextLabel) label.textContent = nextLabel;
+}
+
 // =========================================
 // ФИЗИКА ИГРОКА
 // =========================================
 
 function updatePlayerPhysics() {
-    if (updateBikeFlipRecovery(playerBike)) return;
+    if (updateBikeFlipRecovery(playerBike)) {
+        updateReverseButtonLabel();
+        return;
+    }
 
     const speed = Math.max(
         0,
@@ -1044,7 +1121,8 @@ function updatePlayerPhysics() {
     const acceleration =
         0.05 + Math.min(accel, 70) * 0.002;
 
-    const brakePower = 0.08 + Math.min(brake, 80) * 0.0045;
+    const brakeApplied = input.braking && playerBike.hasBrakes;
+    const driveInput = Number(input.accelerating) - Number(input.reversing);
 
     const jumpForce =
         8.5 + jump * 0.12;
@@ -1055,15 +1133,26 @@ function updatePlayerPhysics() {
         GRAVITY
     );
 
-    if (input.accelerating && playerBike.grounded) {
+    if (driveInput > 0 && playerBike.grounded) {
         playerBike.velocityX += acceleration;
     }
 
-    if (input.reversing && playerBike.grounded) {
-        playerBike.velocityX -= acceleration * 0.9;
+    if (driveInput < 0 && playerBike.grounded && !brakeApplied) {
+        if (playerBike.velocityX > REVERSE_STOP_THRESHOLD) {
+            const speed = Math.abs(playerBike.velocityX);
+            const brakeForce = playerBike.hasBrakes
+                ? getBrakeDeceleration(playerBike, brake, speed)
+                : Math.max(0.02, acceleration * 0.25) / (1 + speed * 0.03);
+            playerBike.velocityX = Math.max(0, playerBike.velocityX - brakeForce);
+        } else {
+            // После полной остановки та же кнопка действительно включает задний ход.
+            if (playerBike.velocityX > 0) playerBike.velocityX = 0;
+            playerBike.velocityX -= acceleration * 0.9;
+        }
     }
 
-    if (input.braking && playerBike.grounded) {
+    if (brakeApplied && playerBike.grounded) {
+        const brakePower = getBrakeDeceleration(playerBike, brake, playerBike.velocityX);
         if (playerBike.velocityX > 0) {
             playerBike.velocityX = Math.max(
                 0,
@@ -1077,20 +1166,19 @@ function updatePlayerPhysics() {
         }
     }
 
-    if (
-        !input.accelerating &&
-        !input.reversing &&
-        !input.braking
-    ) {
-        const coastBrake = 0.005 + Math.min(brake, 80) * 0.00013;
-        playerBike.velocityX *= 1 - coastBrake;
-    } else if (!playerBike.grounded) {
+    if (!playerBike.grounded) {
         // В воздухе педали не цепляют землю: сохраняется инерция с легким сопротивлением воздуха
         playerBike.velocityX *= 0.998;
+    } else if (
+        driveInput === 0 &&
+        !brakeApplied
+    ) {
+        // Пассивное сопротивление качению остаётся даже без установленных тормозов.
+        playerBike.velocityX *= 1 - 0.005;
     }
 
     let allowedSpeed = maxSpeed * nitroMultiplier;
-    if (playerBike.nitroTimer > 0 && input.accelerating) {
+    if (playerBike.nitroTimer > 0 && driveInput > 0) {
         playerBike.velocityX += acceleration * 0.55;
     }
 
@@ -1146,7 +1234,7 @@ function updatePlayerPhysics() {
             }
         } else {
             // Высокая мощность: уверенный заезд в гору и небольшая помощь тяги
-            if (input.accelerating && playerBike.grounded) {
+            if (driveInput > 0 && playerBike.grounded) {
                 playerBike.velocityX += Math.min(0.04, (powerRatio - 1) * 0.015);
             }
         }
@@ -1192,6 +1280,7 @@ function updatePlayerPhysics() {
     updateJumpPhysics(playerBike);
     updateRamp(playerBike, false);
     updateSuspensionResponse(playerBike);
+    updateReverseButtonLabel();
 }
 
 // =========================================
@@ -1485,13 +1574,8 @@ function applyPlayerImpact(obstacle, speedLimit = 1.0) {
 
     playerBike.collidedObstacles.add(obstacle.id);
 
-    let impactDuration = playerBike.abilities?.shockFrame ? 36 : 42;
+    let impactDuration = 42;
     if (playerBike.abilities?.impactBrake) impactDuration = Math.round(impactDuration * 0.85);
-    if (playerBike.abilities?.frameGuard && !playerBike.frameGuardUsed &&
-        ['rock', 'rolling_boulder', 'log', 'barrier', 'fallen_branch', 'cone'].includes(obstacle.type)) {
-        playerBike.frameGuardUsed = true;
-        speedLimit = Math.max(speedLimit, playerBike.velocityX * 0.78);
-    }
     if (playerBike.abilities?.flowFrame && ['ice_patch', 'wind_fan'].includes(obstacle.type)) {
         speedLimit = Math.max(speedLimit, Math.min(playerBike.velocityX, speedLimit * 1.15));
     }
@@ -2688,7 +2772,7 @@ function drawBike(bike, label, color) {
     drawWheel(rearWheelX);
     drawWheel(frontWheelX);
 
-    if (!bike.isBot && input.braking && bike.velocityX > 0.15) {
+    if (!bike.isBot && input.braking && bike.hasBrakes && bike.velocityX > 0.15) {
         ctx.save();
         ctx.shadowColor = '#fb384f';
         ctx.shadowBlur = 10;
@@ -2783,10 +2867,12 @@ function drawBike(bike, label, color) {
         }
     }
 
-    drawTube(headX + 7, wheelY - 18, frontWheelX - 1, wheelY, visuals.forkColor || '#cbd5e1', 4);
+    // Вилка начинается у рулевого стакана и доходит до оси переднего колеса.
+    // Раньше верхняя точка была сдвинута вправо, из-за чего вилка выглядела отдельной деталью.
+    drawTube(headX + 1, wheelY - 19, frontWheelX - 1, wheelY, visuals.forkColor || '#cbd5e1', 4);
     if (visuals.suspension) {
         const forkCompression = bike.frontCompression || 0;
-        drawTube(headX + 8, wheelY - 17, frontWheelX - 2, wheelY - 5 + forkCompression * 0.35, '#fbbf24', 1.5);
+        drawTube(headX + 3, wheelY - 17, frontWheelX - 3, wheelY - 5 + forkCompression * 0.35, '#fbbf24', 1.5);
     }
 
     ctx.strokeStyle = visuals.gearColor || '#94a3b8';
@@ -3374,7 +3460,7 @@ function update() {
     // Запускаем секундомер на том же шаге, что и первое ускорение.
     // Время считается симуляционными кадрами, чтобы лаги браузера не
     // ускоряли призрака относительно физики игрока.
-    if (!timerStarted && (input.accelerating || playerBike.velocityX > 0.05)) {
+    if (!timerStarted && (input.accelerating || input.reversing || Math.abs(playerBike.velocityX) > 0.05)) {
         timerStarted = true;
         raceTimeMs = 0;
     }
@@ -3576,6 +3662,14 @@ export function initRace(onRaceEnd) {
         );
 
     playerBike = createBike(false);
+    const brakeButton = document.getElementById('btn-brake');
+    if (brakeButton) {
+        brakeButton.disabled = !playerBike.hasBrakes;
+        brakeButton.setAttribute('aria-disabled', String(!playerBike.hasBrakes));
+        brakeButton.title = playerBike.hasBrakes ? 'Тормоз установлен' : 'Установи тормоз, чтобы тормозить';
+        brakeButton.classList.toggle('opacity-50', !playerBike.hasBrakes);
+        brakeButton.classList.toggle('cursor-not-allowed', !playerBike.hasBrakes);
+    }
     botBike = null;
     additionalBots = [];
     activeBots = [];
@@ -3615,6 +3709,7 @@ export function initRace(onRaceEnd) {
         reversing: false,
         jumpRequested: false
     };
+    updateReverseButtonLabel();
 
     obstacles = createObstacles();
     collectedRaceCoins = 0;
@@ -3655,11 +3750,12 @@ export function setAccelerating(value) {
 }
 
 export function setBraking(value) {
-    input.braking = Boolean(value);
+    input.braking = Boolean(value && playerBike?.hasBrakes);
 }
 
 export function setReversing(value) {
     input.reversing = Boolean(value);
+    updateReverseButtonLabel();
 }
 
 export function triggerJump() {
