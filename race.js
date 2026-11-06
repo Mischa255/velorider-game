@@ -1,7 +1,7 @@
-import { player } from './state.js?v=82';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=82';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=82';
-import { playCoinSound, playBoostSound } from './audio.js?v=82';
+import { player } from './state.js?v=83';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=83';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=83';
+import { playCoinSound, playBoostSound } from './audio.js?v=83';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -668,11 +668,37 @@ function maybeFlipFromImpact(bike, impactForce, direction = 1, message = 'КОЧ
     return Math.random() < chance && startBikeFlip(bike, direction, message);
 }
 
+function getBikePitchInertia(bike) {
+    const wheelbase = 50;
+    const bodyHeight = 32;
+    const mass = bike?.visuals?.fullSuspension ? 1.12 : 1;
+    return mass * (wheelbase * wheelbase + bodyHeight * bodyHeight) / 12;
+}
+
+function applyPitchImpulseAtContact(bike, impactForce, contactX, verticalDirection = -1, scale = 1) {
+    if (!bike) return;
+
+    const stabilityRatio = clamp(Number(bike.stability) || 0, 0, 100) / 100;
+    const instability = 1 - stabilityRatio;
+    const leverArm = Number(contactX) - bike.x;
+    const verticalImpulse = Math.abs(Number(impactForce) || 0) * 0.064 * Math.sign(verticalDirection) * scale;
+    const angularImpulse = leverArm * verticalImpulse;
+    const deltaPitchVelocity = angularImpulse / getBikePitchInertia(bike) * (0.35 + instability * 1.25);
+
+    bike.pitchVelocity = clamp(
+        (Number(bike.pitchVelocity) || 0) + deltaPitchVelocity,
+        -0.24,
+        0.24
+    );
+}
+
 function applyImpactPitchImpulse(bike, impactForce, direction = 1) {
     if (!bike) return;
-    const instability = 1 - clamp(Number(bike.stability) || 0, 0, 100) / 100;
-    const impulse = Number(impactForce) * (0.002 + instability * 0.007) * (direction < 0 ? -1 : 1);
-    bike.pitchVelocity = clamp((Number(bike.pitchVelocity) || 0) + impulse, -0.24, 0.24);
+
+    // Удар спереди поднимает переднее колесо, задний удар вращает раму в обратную сторону.
+    const frontContact = direction < 0;
+    const contactX = bike.x + (frontContact ? 25 : -25);
+    applyPitchImpulseAtContact(bike, impactForce, contactX, -1);
 }
 
 function updateBikeFlipRecovery(bike) {
@@ -781,13 +807,22 @@ function updateSuspensionResponse(bike) {
     if (bike.velocityX > wobbleSpeedThreshold && bodyKick > roughTerrainThreshold) {
         bike.velocityX *= 1 - Math.min(0.15, bodyKick * (0.002 + instability * 0.006));
 
-        const impactImbalance = front.residual - rear.residual;
         const naturalWobble = (Math.random() - 0.5) * Math.max(0, bodyKick - 1.5) * instability * 0.022;
-        bike.pitchVelocity += clamp(
-            impactImbalance * (0.008 + instability * 0.018) + naturalWobble,
-            -0.095,
-            0.095
+        const frontImpulseDirection = frontRelativeTravel <= 0 ? -1 : 1;
+        const rearImpulseDirection = rearRelativeTravel <= 0 ? -1 : 1;
+        applyPitchImpulseAtContact(
+            bike,
+            front.residual * 3,
+            bike.x + 25,
+            frontImpulseDirection
         );
+        applyPitchImpulseAtContact(
+            bike,
+            rear.residual * 3,
+            bike.x - 25,
+            rearImpulseDirection
+        );
+        bike.pitchVelocity = clamp(bike.pitchVelocity + naturalWobble, -0.095, 0.095);
 
         maybeFlipFromImpact(bike, bodyKick, frontDelta - rearDelta, 'КОЧКА! Низкая стабильность');
     }
