@@ -1,7 +1,7 @@
-import { player } from './state.js?v=80';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=80';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=80';
-import { playCoinSound, playBoostSound } from './audio.js?v=80';
+import { player } from './state.js?v=82';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=82';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=82';
+import { playCoinSound, playBoostSound } from './audio.js?v=82';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -646,17 +646,23 @@ function startBikeFlip(bike, direction = 1, message = 'ПЕРЕВОРОТ! Ни�
 }
 
 function maybeFlipFromImpact(bike, impactForce, direction = 1, message = 'КОЧКА! Низкая стабильность') {
-    if (!bike || bike.flippedTimer > 0 || bike.bumpCooldown > 0 || bike.velocityX < 5.5) return false;
+    if (!bike || bike.flippedTimer > 0 || bike.bumpCooldown > 0) return false;
 
     const stabilityRatio = clamp(Number(bike.stability) || 0, 0, 100) / 100;
     const instability = 1 - stabilityRatio;
-    const speedFactor = clamp((bike.velocityX - 5.5) / 7, 0, 1);
-    const impactFactor = clamp((Number(impactForce) - 2) / 3.4, 0, 1);
+    const minimumSpeed = 4.4 + stabilityRatio * 1.6;
+    if (bike.velocityX < minimumSpeed) return false;
+
+    // На низкой стабильности даже средняя кочка может выбить байк из равновесия;
+    // большая скорость и резкий перепад рельефа усиливают риск.
+    const speedFactor = clamp((bike.velocityX - minimumSpeed) / 7, 0, 1);
+    const impactThreshold = 1.55 + stabilityRatio * 0.75;
+    const impactFactor = clamp((Number(impactForce) - impactThreshold) / 3.5, 0, 1);
     if (impactFactor <= 0 || speedFactor <= 0) return false;
 
-    let chance = impactFactor * speedFactor * (0.004 + instability * instability * 0.3);
+    let chance = impactFactor * speedFactor * (0.004 + instability * instability * 0.35);
     if (impactForce > 5.2 && bike.velocityX > 11) {
-        chance += instability * 0.035;
+        chance += instability * 0.04;
     }
 
     return Math.random() < chance && startBikeFlip(bike, direction, message);
@@ -770,7 +776,9 @@ function updateSuspensionResponse(bike) {
     ) / 2;
     const chassisKick = surfaceKick * (1 - suspensionSupport * 0.48) * (0.92 + instability * 0.16);
     const bodyKick = Math.max(front.residual, rear.residual, chassisKick);
-    if (bike.velocityX > 5 && bodyKick > 1.8) {
+    const roughTerrainThreshold = 2.2 - instability * 0.6;
+    const wobbleSpeedThreshold = 6 - instability * 1.6;
+    if (bike.velocityX > wobbleSpeedThreshold && bodyKick > roughTerrainThreshold) {
         bike.velocityX *= 1 - Math.min(0.15, bodyKick * (0.002 + instability * 0.006));
 
         const impactImbalance = front.residual - rear.residual;
@@ -865,8 +873,18 @@ function updateJumpPhysics(bike) {
         const frontY = getGroundY(bike.x + 25, 0);
         const rearY = getGroundY(bike.x - 25, 0);
         const groundPitch = Math.atan2(frontY - rearY, 50);
-        const landingAngle = bike.pitchAngle - groundPitch;
-        const crashAngle = 1.85 + stabilityRatio * 0.25;
+        const landingAngle = Math.atan2(
+            Math.sin(bike.pitchAngle - groundPitch),
+            Math.cos(bike.pitchAngle - groundPitch)
+        );
+        const absoluteLandingAngle = Math.abs(landingAngle);
+        const upsideDown = absoluteLandingAngle >= Math.PI / 2;
+        const safeLandingAngle = 0.72 + stabilityRatio * 0.48;
+        const landingSpeedTolerance = 2.5 + stabilityRatio * 3;
+        const failedLanding = upsideDown || (
+            landingSpeed > landingSpeedTolerance &&
+            absoluteLandingAngle > safeLandingAngle
+        );
 
         bike.jumpHeight = 0;
         bike.jumpVelocity = 0;
@@ -875,7 +893,7 @@ function updateJumpPhysics(bike) {
         bike.airY = null;
         bike.rampLift = 0;
         bike.currentRamp = null;
-        if (landingSpeed > 4.5 && Math.abs(landingAngle) > crashAngle) {
+        if (failedLanding) {
             startBikeFlip(
                 bike,
                 landingAngle < 0 ? -1 : 1,
@@ -883,11 +901,11 @@ function updateJumpPhysics(bike) {
             );
         } else {
             bike.pitchVelocity *= 0.72;
-        }
-        if (!bike.isBot && bike.abilities?.landingFrame && bike.landingBoostCooldown <= 0) {
-            bike.velocityX += 0.45;
-            bike.springBoostTimer = Math.max(bike.springBoostTimer || 0, 24);
-            bike.landingBoostCooldown = 300;
+            if (!bike.isBot && bike.abilities?.landingFrame && bike.landingBoostCooldown <= 0) {
+                bike.velocityX += 0.45;
+                bike.springBoostTimer = Math.max(bike.springBoostTimer || 0, 24);
+                bike.landingBoostCooldown = 300;
+            }
         }
     }
 }

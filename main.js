@@ -1,4 +1,4 @@
-import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=80';
+import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=82';
 import {
     player,
     loadPlayerState,
@@ -6,21 +6,21 @@ import {
     clearSavedProgress,
     forceSavePlayerState,
     getServerTime
-} from './state.js?v=80';
+} from './state.js?v=82';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=80';
+} from './race.js?v=82';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=80';
-import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=80';
+} from './audio.js?v=82';
+import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=82';
 
 const CATEGORY_NAMES = {
     frames: 'Рамы',
@@ -1043,7 +1043,7 @@ function renderGarageStats(stats) {
         { key: 'accel', label: 'Ускорение', icon: '⚡', glow: '#fb923c' },
         { key: 'jump', label: 'Сила прыжка', icon: '🪂', glow: '#a78bfa' },
         { key: 'brake', label: 'Торможение', icon: '🛑', glow: '#fb7185' },
-        { key: 'stability', label: 'Стабильность', icon: '🧭', glow: '#38bdf8', help: 'Общий показатель устойчивости. Рама, вилка и задний амортизатор добавляют очки; амортизатор работает только на двухподвесе.' },
+        { key: 'stability', label: 'Стабильность', icon: '🧭', glow: '#38bdf8', help: 'Снижает раскачивание на неровностях и риск переворота при ударе или посадке. Рама и вилка добавляют очки, задний амортизатор — только двухподвесу.' },
         { key: 'power', label: 'Мощность подъёма', icon: '🔋', glow: '#eab308' }
     ];
 
