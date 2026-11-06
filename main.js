@@ -1,4 +1,4 @@
-import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=88';
+import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=89';
 import {
     player,
     loadPlayerState,
@@ -6,21 +6,21 @@ import {
     clearSavedProgress,
     forceSavePlayerState,
     getServerTime
-} from './state.js?v=88';
+} from './state.js?v=89';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=88';
+} from './race.js?v=89';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=88';
-import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=88';
+} from './audio.js?v=89';
+import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=89';
 
 function renderGameVersionBadge() {
     const build = document.body?.dataset.gameBuild || '85';
@@ -592,6 +592,26 @@ function hasFullSuspensionFrame(frameId = player.equipped?.frames) {
     return frame?.visuals?.type === 'dh';
 }
 
+function ensureStarterRearShock() {
+    const starterShock = ITEMS_DB.suspension?.find(item => item.id === 's1');
+    if (!starterShock || !Array.isArray(player.inventory)) return;
+
+    const key = partKey('suspension', starterShock.id);
+    if (!player.inventory.includes(key)) player.inventory.push(key);
+}
+
+function syncSuspensionForFrame(frameId = player.equipped?.frames) {
+    if (!hasFullSuspensionFrame(frameId)) {
+        player.equipped.suspension = '';
+        return;
+    }
+
+    const equippedShockExists = ITEMS_DB.suspension?.some(
+        item => item.id === player.equipped.suspension
+    );
+    if (!equippedShockExists) player.equipped.suspension = 's1';
+}
+
 function normalizePlayerState() {
     if (!Array.isArray(player.inventory)) player.inventory = [];
     if (!Array.isArray(player.unlockedTracks)) player.unlockedTracks = ['t1'];
@@ -645,8 +665,9 @@ function normalizePlayerState() {
         player.unlockedComponentRarities.push('common');
     }
 
+    ensureStarterRearShock();
+    syncSuspensionForFrame();
     ensureOwnedParts();
-    if (!hasFullSuspensionFrame()) player.equipped.suspension = '';
     syncProgression();
 }
 
@@ -1774,7 +1795,7 @@ function buyAndReplacePart(category, id) {
     player.coins = balance - price;
     player.inventory.push(partKey(category, id));
     player.equipped[category] = id;
-    if (category === 'frames' && !hasFullSuspensionFrame(id)) player.equipped.suspension = '';
+    if (category === 'frames') syncSuspensionForFrame(id);
 
     calculateBikeStats();
     updateHUD();
@@ -1802,7 +1823,7 @@ function installPart(category, id) {
     }
 
     player.equipped[category] = id;
-    if (category === 'frames' && !hasFullSuspensionFrame(id)) player.equipped.suspension = '';
+    if (category === 'frames') syncSuspensionForFrame(id);
 
     calculateBikeStats();
     updateGarageUI();

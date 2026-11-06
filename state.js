@@ -118,7 +118,7 @@ function createDefaultPlayer() {
         inventory: [
             'frames:f1',
             'forks:fk1',
-            'suspension:s1', // <-- Добавили базовый амортизатор
+            'suspension:s1', // Бесплатный стартовый пружинный амортизатор для DH.
             'chains:ch1',
             'drivetrain:d1',
             'bottomBrackets:bb1',
@@ -167,7 +167,7 @@ function createDefaultPlayer() {
         equipped: {
             frames: 'f1',
             forks: 'fk1',
-            suspension: '', // Амортизатор хранится в инвентаре, но ставится только на двухподвес.
+            suspension: '', // На хардтейле задний амортизатор не устанавливается.
             chains: 'ch1',
             drivetrain: 'd1',
             bottomBrackets: 'bb1',
@@ -295,6 +295,7 @@ function sanitizeLoadedState(raw) {
             : '';
 
     if (!Array.isArray(merged.inventory)) merged.inventory = deepClone(base.inventory);
+    if (!merged.inventory.includes('suspension:s1')) merged.inventory.push('suspension:s1');
     if (!Array.isArray(merged.unlockedTracks)) merged.unlockedTracks = deepClone(base.unlockedTracks);
     if (!Array.isArray(merged.completedTracks)) merged.completedTracks = [];
     if (!Array.isArray(merged.trackRewardsClaimed)) merged.trackRewardsClaimed = [];

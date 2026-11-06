@@ -1,7 +1,7 @@
-import { player } from './state.js?v=88';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=88';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=88';
-import { playCoinSound, playBoostSound } from './audio.js?v=88';
+import { player } from './state.js?v=89';
+import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=89';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=89';
+import { playCoinSound, playBoostSound } from './audio.js?v=89';
 
 // =========================================
 // VELOCITY RACE ENGINE
