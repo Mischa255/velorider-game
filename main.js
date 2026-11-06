@@ -1,4 +1,4 @@
-import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=87';
+import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=88';
 import {
     player,
     loadPlayerState,
@@ -6,21 +6,21 @@ import {
     clearSavedProgress,
     forceSavePlayerState,
     getServerTime
-} from './state.js?v=87';
+} from './state.js?v=88';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=87';
+} from './race.js?v=88';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=87';
-import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=87';
+} from './audio.js?v=88';
+import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=88';
 
 function renderGameVersionBadge() {
     const build = document.body?.dataset.gameBuild || '85';
@@ -531,9 +531,29 @@ const DUPLICATE_COMPENSATION = {
     legendary: 1000
 };
 
+function isCouponPurchaseItem(part) {
+    if (!part) return false;
+    if (part.currency === 'coupon' || part.id === 'r5') return true;
+
+    const couponPrice = Number(part.couponPrice);
+    return part.rarity === 'legendary' &&
+        !part.ability &&
+        Number.isFinite(couponPrice) &&
+        couponPrice >= 30;
+}
+
+function getCouponPurchasePrice(part) {
+    if (part?.currency === 'coupon' || part?.id === 'r5') {
+        return Number(part.price) || 100;
+    }
+
+    const couponPrice = Number(part?.couponPrice);
+    return Number.isFinite(couponPrice) ? Math.round(couponPrice) : 0;
+}
+
 function getUpgradePrice(part) {
     if (!part) return 0;
-    if (part.currency === 'coupon' || part.id === 'r5') return Number(part.price) || 100;
+    if (isCouponPurchaseItem(part)) return getCouponPurchasePrice(part);
     const basePrice = Math.max(0, Number(part?.price) || 0);
     if (part.category === 'riders' || (part.id && part.id.startsWith('r'))) {
         return basePrice;
@@ -1519,8 +1539,11 @@ function updateUpgradeUI() {
         const equippedId = player.equipped?.[category];
         const slotOccupied = equippedId !== undefined && equippedId !== null && equippedId !== '';
 
-        const isCouponItem = part.currency === 'coupon' || part.id === 'r5';
+        const isCouponItem = isCouponPurchaseItem(part);
         const priceLabel = isCouponItem ? `${price} 🎟️` : `${price.toLocaleString('ru-RU')} 🪙`;
+        const couponDropNote = part.rarity === 'legendary' && isCouponItem
+            ? '<div class="mb-2 text-xs text-gray-400">Можно также получить из легендарного контейнера</div>'
+            : '';
 
         if (category === 'suspension' && !isDH && owned) {
             actionHTML = '<div class="rounded-lg border border-amber-700/50 bg-amber-950/30 p-3 text-sm text-amber-200">Есть в инвентаре. Выбери двухподвесную раму (DH), чтобы установить амортизатор.</div>';
@@ -1541,7 +1564,7 @@ function updateUpgradeUI() {
             } else if (isCouponItem) {
                 actionHTML = `
                     <button class="replace-part-button bg-amber-600 hover:bg-amber-500 py-3 rounded-lg font-bold w-full text-white shadow-lg">
-                        🎟️ Нанять за ${priceLabel}
+                        🎟️ ${category === 'riders' ? 'Нанять' : 'Купить и выбрать'} за ${priceLabel}
                     </button>
                 `;
             } else if (part.rarity === 'legendary' && category !== 'riders') {
@@ -1562,7 +1585,7 @@ function updateUpgradeUI() {
         } else if (isCouponItem) {
             actionHTML = `
                 <button class="buy-part-button bg-amber-600 hover:bg-amber-500 py-3 rounded-lg font-bold w-full text-white shadow-lg">
-                    🎟️ Нанять за ${priceLabel}
+                    🎟️ ${category === 'riders' ? 'Нанять' : 'Купить'} за ${priceLabel}
                 </button>
             `;
         } else if (part.rarity === 'legendary' && category !== 'riders') {
@@ -1599,6 +1622,7 @@ function updateUpgradeUI() {
                         : ''
                 }
 
+                ${couponDropNote}
                 ${actionHTML}
             </div>
         `;
@@ -1636,8 +1660,13 @@ function buyPart(category, id) {
         return;
     }
 
-    if (part.currency === 'coupon' || part.id === 'r5') {
-        const couponPrice = Number(part.price) || 100;
+    if (isCouponPurchaseItem(part)) {
+        if (part.rarity === 'legendary' && category !== 'riders' && !isRarityUnlocked('legendary')) {
+            alert('Сначала открой легендарную редкость победой на трассе!');
+            return;
+        }
+
+        const couponPrice = getCouponPurchasePrice(part);
         const coupons = Math.max(0, Number(player.coupons) || 0);
         if (coupons < couponPrice) {
             alert(`Недостаточно Велокупонов! Нужно ${couponPrice} 🎟️ (у вас: ${coupons} 🎟️)`);
@@ -1697,8 +1726,13 @@ function buyAndReplacePart(category, id) {
         return;
     }
 
-    if (part.currency === 'coupon' || part.id === 'r5') {
-        const couponPrice = Number(part.price) || 100;
+    if (isCouponPurchaseItem(part)) {
+        if (part.rarity === 'legendary' && category !== 'riders' && !isRarityUnlocked('legendary')) {
+            alert('Сначала открой легендарную редкость победой на трассе!');
+            return;
+        }
+
+        const couponPrice = getCouponPurchasePrice(part);
         const coupons = Math.max(0, Number(player.coupons) || 0);
         if (coupons < couponPrice) {
             alert(`Недостаточно Велокупонов! Нужно ${couponPrice} 🎟️ (у вас: ${coupons} 🎟️)`);

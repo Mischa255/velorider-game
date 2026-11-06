@@ -1,4 +1,28 @@
 
+const WEAKER_LEGENDARY_COUPON_PRICES = Object.freeze({
+    ch5: 30,
+    bb5: 30,
+    st4: 30,
+    cr6: 35,
+    sa5: 35,
+    fk6: 40,
+    d7: 40,
+    d9: 40,
+    cr8: 40,
+    sh6: 40,
+    hb5: 40,
+    sp4: 40,
+    pd5: 40,
+    hu5: 40,
+    cs6: 45,
+    rd6: 45,
+    ti6: 45,
+    b6: 50,
+    s3: 55,
+    w5: 55,
+    f8: 70
+});
+
 const part = (
     id,
     name,
@@ -27,6 +51,10 @@ const part = (
         b7: { id: 'impactBrake', name: 'Контроль торможения', description: 'После столкновения замедление длится на 15% меньше.' }
     };
     if (legendaryAbilities[id]) partData.ability = legendaryAbilities[id];
+    const couponPrice = WEAKER_LEGENDARY_COUPON_PRICES[id];
+    if (rarity === 'legendary' && !partData.ability && Number.isFinite(couponPrice) && couponPrice >= 30) {
+        partData.couponPrice = couponPrice;
+    }
     return partData;
 };
 
