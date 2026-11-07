@@ -187,7 +187,6 @@
     -webkit-tap-highlight-color: transparent;
 }
 
-
     /* Основная надпись */
     #race-controls button span:first-child {
         font-size: clamp(10px, 2.9vw, 13px);
@@ -1369,4 +1368,16 @@
         display: flex !important;
         font-size: 10px !important;
     }
+}
+
+html.history-cinematic #race-controls,
+html.history-cinematic #race-exit-button,
+html.history-cinematic #game-version-race {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transition: opacity 420ms ease !important;
+}
+
+html.touch-device.history-cinematic #race-controls {
+    display: none !important;
 }

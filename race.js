@@ -1,7 +1,7 @@
-import { player } from './state.js?v=106';
-import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=106';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=106';
-import { playCoinSound, playBoostSound } from './audio.js?v=106';
+import { player } from './state.js?v=107';
+import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=107';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=107';
+import { playCoinSound, playBoostSound } from './audio.js?v=107';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -33,6 +33,18 @@ function getCameraZoom() {
     if (w <= 920 && h <= 540) return RACE_ZOOM_MOBILE_LANDSCAPE;
     if (w <= 768) return 0.68;
     return RACE_ZOOM_DESKTOP;
+}
+
+function easeOutCubic(progress) {
+    const t = clamp(Number(progress) || 0, 0, 1);
+    return 1 - Math.pow(1 - t, 3);
+}
+
+function easeInOutCubic(progress) {
+    const t = clamp(Number(progress) || 0, 0, 1);
+    return t < 0.5
+        ? 4 * t * t * t
+        : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
 const TRACK_BALANCE = {
@@ -100,6 +112,10 @@ let canvas = null;
 let ctx = null;
 let viewWidth = 0;
 let viewHeight = 0;
+let baseRaceZoom = RACE_ZOOM_DESKTOP;
+let canvasDpr = 1;
+let canvasCssWidth = 800;
+let canvasCssHeight = 420;
 let animationId = null;
 let lastFrameTime = 0;
 let frameAccumulator = 0;
@@ -2048,9 +2064,14 @@ function updateBotCollisions(bike) {
 // ПРОВЕРКА ФИНИША
 // =========================================
 
+function setHistoryCinematicMode(active) {
+    document.documentElement?.classList.toggle('history-cinematic', Boolean(active));
+}
+
 function finishRace(playerWon, reason = 'finish') {
     if (raceFinished) return;
 
+    setHistoryCinematicMode(false);
     raceFinished = true;
     raceRunning = false;
     animationId = null;
@@ -2132,7 +2153,17 @@ function startHistoryVictoryOutro() {
     playerBike.historyVictoryPhaseFrame = 0;
     playerBike.historyVictoryRunnerX = playerBike.x - 10;
     input = { accelerating: false, braking: false, reversing: false, jumpRequested: false };
-    historyVictoryOutro = { phase: 'approach', phaseFrame: 0, targetX, runnerX: null };
+    const approachDistance = Math.max(0, targetX - botBike.x);
+    historyVictoryOutro = {
+        phase: 'approach',
+        phaseFrame: 0,
+        targetX,
+        approachStartX: botBike.x,
+        approachFrames: clamp(Math.round(approachDistance / 7.5), 22, 92),
+        runnerX: null,
+        elapsed: 0
+    };
+    setHistoryCinematicMode(true);
     cameraX = Math.max(0, (playerBike.x + botBike.x) * 0.5 - viewWidth * 0.5);
     return true;
 }
@@ -2142,11 +2173,12 @@ function updateHistoryVictoryOutro() {
     if (!outro || !botBike || !playerBike) return;
 
     frameCounter++;
-    const sceneCenter = outro.phase === 'rideAway'
+    outro.elapsed++;
+    const sceneCenter = ['rideAway', 'endFade'].includes(outro.phase)
         ? playerBike.x
         : (playerBike.x + botBike.x) * 0.5;
     const cameraTarget = Math.max(0, sceneCenter - viewWidth * 0.5);
-    cameraX += (cameraTarget - cameraX) * 0.16;
+    cameraX += (cameraTarget - cameraX) * (outro.phase === 'approach' ? 0.095 : 0.065);
 
     const oldX = botBike.x;
     botBike.previousX = oldX;
@@ -2162,20 +2194,28 @@ function updateHistoryVictoryOutro() {
     };
 
     if (outro.phase === 'approach') {
-        const delta = outro.targetX - botBike.x;
-        const step = Math.sign(delta) * Math.min(6, Math.abs(delta));
-        botBike.x += step;
-        botBike.velocityX = step;
-        if (Math.abs(delta) <= 6) {
+        const previousX = botBike.x;
+        const progress = (outro.phaseFrame + 1) / outro.approachFrames;
+        botBike.x = outro.approachStartX +
+            (outro.targetX - outro.approachStartX) * easeOutCubic(progress);
+        botBike.velocityX = botBike.x - previousX;
+        if (progress >= 1) {
             botBike.x = outro.targetX;
             botBike.velocityX = 0;
-            enterPhase('stop');
+            enterPhase('brake');
         } else {
             outro.phaseFrame++;
         }
-    } else if (outro.phase === 'stop') {
+    } else if (outro.phase === 'brake') {
         botBike.velocityX = 0;
-        if (outro.phaseFrame >= 22) {
+        if (outro.phaseFrame >= 13) {
+            enterPhase('settle');
+        } else {
+            outro.phaseFrame++;
+        }
+    } else if (outro.phase === 'settle') {
+        botBike.velocityX = 0;
+        if (outro.phaseFrame >= 17) {
             outro.runnerX = botBike.x - 7;
             enterPhase('dismount');
         } else {
@@ -2183,29 +2223,44 @@ function updateHistoryVictoryOutro() {
         }
     } else if (outro.phase === 'dismount') {
         botBike.velocityX = 0;
-        outro.runnerX = botBike.x - 7 - Math.min(20, outro.phaseFrame * 0.9);
-        if (outro.phaseFrame >= 21) enterPhase('wave');
+        const dismountProgress = easeOutCubic((outro.phaseFrame + 1) / 28);
+        outro.runnerX = botBike.x - 7 - 20 * dismountProgress;
+        if (outro.phaseFrame >= 27) enterPhase('look');
+        else outro.phaseFrame++;
+    } else if (outro.phase === 'look') {
+        botBike.velocityX = 0;
+        outro.runnerX = botBike.x - 27;
+        if (outro.phaseFrame >= 31) enterPhase('wave');
         else outro.phaseFrame++;
     } else if (outro.phase === 'wave') {
         botBike.velocityX = 0;
         outro.runnerX = botBike.x - 27;
-        if (outro.phaseFrame >= 78) enterPhase('mount');
+        if (outro.phaseFrame >= 57) enterPhase('mount');
         else outro.phaseFrame++;
     } else if (outro.phase === 'mount') {
         botBike.velocityX = 0;
-        const mountProgress = clamp(outro.phaseFrame / 24, 0, 1);
+        const mountProgress = easeInOutCubic((outro.phaseFrame + 1) / 28);
         outro.runnerX = botBike.x - 27 + mountProgress * 20;
-        if (outro.phaseFrame >= 24) enterPhase('turn');
+        if (outro.phaseFrame >= 27) enterPhase('turn');
         else outro.phaseFrame++;
     } else if (outro.phase === 'turn') {
         botBike.velocityX = 0;
-        if (outro.phaseFrame >= 20) enterPhase('rideAway');
+        if (outro.phaseFrame >= 31) enterPhase('rideAway');
         else outro.phaseFrame++;
     } else if (outro.phase === 'rideAway') {
-        botBike.x -= 5.5;
+        const rideProgress = clamp((outro.phaseFrame + 1) / 24, 0, 1);
+        const rideSpeed = 0.35 + 5.15 * easeInOutCubic(rideProgress);
+        botBike.x -= rideSpeed;
         botBike.velocityX = botBike.x - oldX;
         if (botBike.x < cameraX - 65) {
-            historyVictoryOutro = null;
+            enterPhase('endFade');
+            botBike.velocityX = 0;
+        } else {
+            outro.phaseFrame++;
+        }
+    } else if (outro.phase === 'endFade') {
+        botBike.velocityX = 0;
+        if (outro.phaseFrame >= 19) {
             finishRace(true, 'finish');
             return;
         }
@@ -2213,9 +2268,9 @@ function updateHistoryVictoryOutro() {
     }
 
     if (outro.phase === 'dismount') {
-        playerBike.historyVictoryPhase = outro.phaseFrame < 17 ? 'dismount' : 'watch';
+        playerBike.historyVictoryPhase = outro.phaseFrame < 22 ? 'dismount' : 'watch';
         playerBike.historyVictoryPhaseFrame = outro.phaseFrame;
-    } else if (['wave', 'mount', 'turn', 'rideAway'].includes(outro.phase)) {
+    } else if (['look', 'wave', 'mount', 'turn', 'rideAway', 'endFade'].includes(outro.phase)) {
         playerBike.historyVictoryPhase = 'watch';
         playerBike.historyVictoryPhaseFrame = outro.phaseFrame;
     }
@@ -3081,71 +3136,186 @@ function drawObstacles() {
 // =========================================
 
 function drawHistoryVictoryRider(x, groundY, phase, phaseFrame, riseProgress = 1) {
-    if (riseProgress <= 0.02) return;
+    const transition = clamp(riseProgress, 0, 1);
+    if (['dismount', 'mount'].includes(phase) && transition <= 0.02) return;
 
-    const running = phase === 'run';
-    const stride = running ? Math.sin(phaseFrame * 0.42) * 8 : 0;
-    const bob = running ? Math.abs(Math.sin(phaseFrame * 0.42)) * 2 : 0;
-    const wave = phase === 'wave' ? Math.sin(phaseFrame * 0.32) * 4 : 0;
+    const alpha = phase === 'dismount' || phase === 'mount' ? transition : 1;
+    const mountProgress = phase === 'mount' ? 1 - transition : 0;
+    const dismountProgress = phase === 'dismount'
+        ? easeOutCubic((phaseFrame + 1) / 28)
+        : 0;
+    const wave = phase === 'wave' && phaseFrame > 12
+        ? Math.sin((phaseFrame - 12) * 0.28) * 8
+        : 0;
+    const waveLift = phase === 'wave' && phaseFrame > 12
+        ? Math.cos((phaseFrame - 12) * 0.28) * 1.2
+        : 0;
+    const greetingProgress = phase === 'wave'
+        ? easeInOutCubic((phaseFrame + 1) / 12)
+        : 0;
+    const hatTipProgress = phase === 'look'
+        ? easeInOutCubic((phaseFrame + 1) / 9)
+        : 0;
+    const mountReach = phase === 'mount'
+        ? easeInOutCubic(clamp(mountProgress * 3, 0, 1))
+        : 0;
+    const breath = Math.sin(phaseFrame * 0.075) * 0.55;
+    const walk = phase === 'dismount'
+        ? Math.sin(phaseFrame * 0.23) * (1 - easeOutCubic(phaseFrame / 28))
+        : 0;
+    const stepNear = walk * 4;
+    const stepFar = -walk * 3;
 
     ctx.save();
-    ctx.translate(x, groundY - bob);
-    ctx.scale(1, clamp(riseProgress, 0, 1));
+    ctx.globalAlpha *= alpha;
+    ctx.fillStyle = `rgba(16, 13, 10, ${0.2 * alpha})`;
+    ctx.beginPath();
+    ctx.ellipse(x + 1, groundY - 1, 9 + mountProgress * 2, 2.1, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.translate(x + mountProgress * 4, groundY - breath - mountProgress * 2);
+    const dismountLean = phase === 'dismount' ? Math.sin(phaseFrame * 0.11) * 0.035 : 0;
+    ctx.rotate((phase === 'mount' ? 0.1 * mountProgress : 0) + dismountLean);
+    ctx.scale(1, 1 - mountProgress * 0.12);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
+    // Вес переносится с ноги на ногу, пока Карл сходит с машины.
+    const kneeNear = phase === 'mount'
+        ? { x: -6, y: -12 - mountProgress * 2 }
+        : { x: -8 + stepNear, y: -11 - Math.max(0, walk) * 1.4 };
+    const kneeFar = phase === 'mount'
+        ? { x: 7, y: -13 }
+        : { x: 8 + stepFar, y: -12 - Math.max(0, -walk) * 1.4 };
     ctx.strokeStyle = '#39342d';
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.moveTo(-3, -22);
-    ctx.lineTo(-8 - stride * 0.35, -11);
-    ctx.lineTo(-8 - stride, 0);
+    ctx.lineTo(kneeNear.x, kneeNear.y);
+    ctx.lineTo(-8 + stepNear * 1.6, 0);
     ctx.moveTo(3, -22);
-    ctx.lineTo(8 + stride * 0.35, -11);
-    ctx.lineTo(8 + stride, 0);
+    ctx.lineTo(kneeFar.x, kneeFar.y);
+    ctx.lineTo(8 + stepFar * 1.6, 0);
     ctx.stroke();
+    ctx.fillStyle = '#211a14';
+    ctx.fillRect(-12 + stepNear * 1.6, -1.5, 8, 2.5);
+    ctx.fillRect(4 + stepFar * 1.6, -1.5, 8, 2.5);
 
+    // Сюртук с полами, жилет и тонкие пуговицы дают костюму объём в масштабе гонки.
     ctx.fillStyle = '#4b3b2a';
     ctx.beginPath();
     ctx.moveTo(-6, -40);
     ctx.lineTo(5, -40);
-    ctx.lineTo(7, -23);
-    ctx.lineTo(-5, -22);
+    ctx.lineTo(7, -24);
+    ctx.lineTo(4, -21);
+    ctx.lineTo(1, -25);
+    ctx.lineTo(-3, -21);
+    ctx.lineTo(-6, -24);
     ctx.closePath();
     ctx.fill();
-
-    ctx.strokeStyle = '#554c40';
-    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#c6a06b';
+    ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.moveTo(3, -37);
-    if (running) {
-        ctx.lineTo(10 - stride * 0.35, -29);
-        ctx.lineTo(5 - stride * 0.6, -24);
+    ctx.moveTo(0, -38);
+    ctx.lineTo(1, -25);
+    ctx.stroke();
+    ctx.fillStyle = '#d1b180';
+    for (let buttonY = -35; buttonY <= -28; buttonY += 4) {
+        ctx.beginPath();
+        ctx.arc(0.5, buttonY, 0.7, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Дальняя рука помогает удержать Laufmaschine при сходе; после этого рука
+    // спокойно опускается, а во время прощания поднимается в короткое приветствие.
+    ctx.strokeStyle = '#554c40';
+    ctx.lineWidth = 3.8;
+    ctx.beginPath();
+    if (phase === 'wave') {
+        ctx.moveTo(3, -37);
+        ctx.lineTo(-8 + greetingProgress * 19, -41 - greetingProgress * 5);
+        ctx.lineTo(-5 + greetingProgress * (23 + wave), -45 - greetingProgress * 12 + waveLift * greetingProgress);
         ctx.moveTo(-3, -37);
-        ctx.lineTo(-10 + stride * 0.35, -31);
-        ctx.lineTo(-5 + stride * 0.6, -27);
-    } else if (phase === 'wave') {
-        ctx.lineTo(10, -34);
-        ctx.lineTo(13 + wave, -48);
+        ctx.lineTo(-10, -31);
+        ctx.lineTo(-12, -26);
+    } else if (phase === 'dismount') {
+        ctx.moveTo(3, -37);
+        ctx.lineTo(8, -48);
+        ctx.lineTo(-1 + dismountProgress * 20, -66);
         ctx.moveTo(-3, -37);
-        ctx.lineTo(-10, -29);
-        ctx.lineTo(-13, -27);
+        ctx.lineTo(-11, -31);
+        ctx.lineTo(-13, -25);
+    } else if (phase === 'mount') {
+        ctx.moveTo(3, -37);
+        ctx.lineTo(8 + mountProgress * 3, -46 - mountReach * 2);
+        ctx.lineTo(19 - mountProgress * 20, -57 - mountReach * 9);
+        ctx.moveTo(-3, -37);
+        ctx.lineTo(-9, -31);
+        ctx.lineTo(-11, -26);
+    } else if (phase === 'look') {
+        ctx.moveTo(3, -37);
+        ctx.lineTo(8 - hatTipProgress * 16, -48 + hatTipProgress * 7);
+        ctx.lineTo(19 - hatTipProgress * 24, -66 + hatTipProgress * 21);
+        ctx.moveTo(-3, -37);
+        ctx.lineTo(-8, -41);
+        ctx.lineTo(-5, -45);
     } else {
+        ctx.moveTo(3, -37);
         ctx.lineTo(10, -30);
-        ctx.lineTo(12, -25);
+        ctx.lineTo(12, -26);
         ctx.moveTo(-3, -37);
         ctx.lineTo(-10, -30);
-        ctx.lineTo(-12, -25);
+        ctx.lineTo(-12, -26);
     }
     ctx.stroke();
 
+    if (phase === 'wave') {
+        const handX = -5 + greetingProgress * (23 + wave);
+        const handY = -45 - greetingProgress * 12 + waveLift * greetingProgress;
+        ctx.fillStyle = '#d8b58b';
+        ctx.beginPath();
+        ctx.ellipse(handX, handY, 2.5, 3.2, -0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#d8b58b';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(handX + 1, handY - 2);
+        ctx.lineTo(handX + 2, handY - 5);
+        ctx.moveTo(handX - 1, handY - 2);
+        ctx.lineTo(handX - 1, handY - 5);
+        ctx.stroke();
+    } else if (phase === 'dismount' || phase === 'mount') {
+        const handX = phase === 'dismount'
+            ? -1 + dismountProgress * 20
+            : 19 - mountProgress * 20;
+        const handY = phase === 'dismount' ? -66 : -57 - mountReach * 9;
+        ctx.fillStyle = '#d8b58b';
+        ctx.beginPath();
+        ctx.arc(handX, handY, 2, 0, Math.PI * 2);
+        ctx.fill();
+    } else if (phase === 'look') {
+        const handX = 19 - hatTipProgress * 24;
+        const handY = -66 + hatTipProgress * 21;
+        ctx.fillStyle = '#d8b58b';
+        ctx.beginPath();
+        ctx.arc(handX, handY, 2, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Лицо повернуто к игроку; небольшой нос задает направление взгляда.
     ctx.fillStyle = '#d8b58b';
     ctx.beginPath();
     ctx.arc(2, -49, 4.2, 0, Math.PI * 2);
     ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(5, -49);
+    ctx.lineTo(8, -47.5);
+    ctx.lineTo(5, -46.5);
+    ctx.fill();
     ctx.fillStyle = '#35271d';
     ctx.fillRect(-3, -56, 10, 2.5);
     ctx.fillRect(-1.5, -63, 7, 8);
+    ctx.fillStyle = '#201a14';
+    ctx.fillRect(5.2, -50, 1.2, 1.2);
     ctx.restore();
 }
 
@@ -3162,16 +3332,18 @@ function drawPlayerHistoryObserver(x, groundY, phaseFrame, riseProgress, visuals
         r6: { shirt: '#6b4d31', pants: '#332c24', helmet: '#30251e' }
     }[riderId] || { shirt: '#2563eb', pants: '#1e293b', helmet: '#ef4444' };
     const shirt = visuals.riderVisuals?.jerseyColor || palette.shirt;
+    const pants = visuals.riderVisuals?.pantsColor || palette.pants;
     const helmet = visuals.riderVisuals?.hatColor || palette.helmet;
     const idle = Math.sin(phaseFrame * 0.08) * 0.8;
 
     ctx.save();
-    ctx.translate(x, groundY);
-    ctx.scale(1, clamp(riseProgress, 0, 1));
+    const visibility = clamp(riseProgress, 0, 1);
+    ctx.globalAlpha *= visibility;
+    ctx.translate(x, groundY - (1 - visibility) * 2 - idle * 0.25);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    ctx.strokeStyle = palette.pants;
+    ctx.strokeStyle = pants;
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.moveTo(-3, -22);
@@ -3245,11 +3417,22 @@ function drawDraisineBike(bike, label) {
     const outroPhase = bike.historyVictoryPhase;
     const outroPhaseFrame = Number(bike.historyVictoryPhaseFrame) || 0;
     const turnProgress = outroPhase === 'turn'
-        ? clamp(outroPhaseFrame / 20, 0, 1)
+        ? easeInOutCubic(outroPhaseFrame / 32)
         : 0;
+    const projectedTurn = Math.cos(Math.PI * turnProgress);
     const facingScale = outroPhase === 'turn'
-        ? Math.cos(Math.PI * turnProgress)
-        : outroPhase === 'rideAway' ? -1 : 1;
+        ? Math.sign(projectedTurn || 1) * Math.max(0.34, Math.abs(projectedTurn))
+        : ['rideAway', 'endFade'].includes(outroPhase) ? -1 : 1;
+    const turnOffset = outroPhase === 'turn' ? Math.sin(Math.PI * turnProgress) * 5 : 0;
+    const brakeProgress = outroPhase === 'brake' ? clamp(outroPhaseFrame / 13, 0, 1) : 0;
+    const settleJolt = outroPhase === 'settle'
+        ? Math.sin(outroPhaseFrame * 0.62) * Math.exp(-outroPhaseFrame * 0.17) * 0.035
+        : 0;
+    const actionPitch = outroPhase === 'brake'
+        ? Math.sin(Math.PI * brakeProgress) * 0.12
+        : outroPhase === 'turn'
+            ? Math.sin(Math.PI * turnProgress) * -0.07
+            : settleJolt;
     const rearRadius = 17;
     const frontRadius = 12.5;
     const rear = { x: x - 31, y: bodyY - rearRadius + 1 };
@@ -3263,11 +3446,42 @@ function drawDraisineBike(bike, label) {
     ctx.ellipse(x, groundY - 1, 47, 4, 0, 0, Math.PI * 2);
     ctx.fill();
 
+    const stopDust = outroPhase === 'brake' ? Math.sin(Math.PI * brakeProgress) * 0.55 : 0;
+    const pivotDust = outroPhase === 'turn' ? Math.sin(Math.PI * turnProgress) * 0.25 : 0;
+    const rideDust = ['rideAway', 'endFade'].includes(outroPhase)
+        ? 0.14 + (Math.sin(outroPhaseFrame * 0.31) + 1) * 0.08
+        : 0;
+    const dustAlpha = Math.max(stopDust, pivotDust, rideDust);
+    if (dustAlpha > 0.02) {
+        ctx.save();
+        const inheritedAlpha = ctx.globalAlpha;
+        ctx.fillStyle = '#b8a184';
+        for (let i = 0; i < 4; i++) {
+            const drift = (outroPhaseFrame * (outroPhase === 'brake' ? 0.9 : 0.45) + i * 9) % 28;
+            const behindX = ['rideAway', 'endFade'].includes(outroPhase)
+                ? x + 39 + drift
+                : x - 37 - drift;
+            ctx.globalAlpha = inheritedAlpha * dustAlpha * (0.75 - i * 0.12);
+            ctx.beginPath();
+            ctx.ellipse(
+                behindX,
+                groundY - 2 - drift * 0.08,
+                3 + i * 0.45,
+                1.4 + i * 0.18,
+                -0.08,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+        }
+        ctx.restore();
+    }
+
     ctx.save();
-    ctx.translate(x, bodyY - 19);
+    ctx.translate(x + turnOffset, bodyY - 19);
     ctx.scale(facingScale, 1);
-    ctx.rotate(Number(bike.pitchAngle) || 0);
-    ctx.translate(-x, -(bodyY - 19));
+    ctx.rotate((Number(bike.pitchAngle) || 0) + actionPitch);
+    ctx.translate(-(x + turnOffset), -(bodyY - 19));
 
     const drawWoodWheel = (wheel, radius) => {
         ctx.save();
@@ -3351,9 +3565,9 @@ function drawDraisineBike(bike, label) {
     ctx.stroke();
 
     const seatedOpacity = outroPhase === 'dismount'
-        ? 1 - clamp((outroPhaseFrame - 2) / 12, 0, 1)
-        : outroPhase === 'wave' ? 0
-            : outroPhase === 'mount' ? clamp(outroPhaseFrame / 24, 0, 1)
+        ? 1 - easeInOutCubic((outroPhaseFrame - 3) / 21)
+        : ['look', 'wave'].includes(outroPhase) ? 0
+            : outroPhase === 'mount' ? easeInOutCubic((outroPhaseFrame - 4) / 22)
                 : 1;
     if (seatedOpacity > 0.01) {
         ctx.save();
@@ -3415,7 +3629,7 @@ function drawDraisineBike(bike, label) {
     }
 
     ctx.restore();
-    if (['dismount', 'wave', 'mount'].includes(outroPhase)) {
+    if (['dismount', 'look', 'wave', 'mount'].includes(outroPhase)) {
         const riderX = Number.isFinite(Number(bike.historyVictoryRunnerX))
             ? Number(bike.historyVictoryRunnerX) - cameraX
             : x - 10;
@@ -3424,14 +3638,14 @@ function drawDraisineBike(bike, label) {
             : bike.x - 10;
         const riderGroundY = getGroundY(riderWorldX, 0);
         const riseProgress = outroPhase === 'dismount'
-            ? clamp((outroPhaseFrame - 3) / 15, 0, 1)
+            ? easeOutCubic((outroPhaseFrame - 3) / 22)
             : outroPhase === 'mount'
-                ? 1 - clamp(outroPhaseFrame / 24, 0, 1)
+                ? 1 - easeInOutCubic(outroPhaseFrame / 28)
                 : 1;
         drawHistoryVictoryRider(riderX, riderGroundY, outroPhase, outroPhaseFrame, riseProgress);
     }
 
-    if (!['wave', 'mount', 'turn', 'rideAway'].includes(outroPhase)) {
+    if (!outroPhase) {
         ctx.font = 'bold 12px Arial';
         ctx.textAlign = 'center';
         ctx.fillStyle = '#fff7e8';
@@ -4152,7 +4366,7 @@ function drawBike(bike, label, color) {
             ? Number(bike.historyVictoryRunnerX)
             : bike.x - 10;
         const riseProgress = historyPhase === 'dismount'
-            ? clamp((historyPhaseFrame + 1) / 17, 0, 1)
+            ? easeOutCubic((historyPhaseFrame + 1) / 22)
             : 1;
         drawPlayerHistoryObserver(
             runnerWorldX - cameraX,
@@ -4398,6 +4612,8 @@ function render() {
         return;
     }
 
+    updateRaceViewportTransform();
+
     drawBackground();
     drawTrack();
     drawObstacles();
@@ -4434,8 +4650,73 @@ function render() {
     // Рисуем призрака поверх игрока, чтобы он оставался заметен при совпадении позиций.
     activeBots.filter(bike => bike.isGhost).forEach(drawBot);
 
-    drawFloatingTexts();
-    drawRaceHUD();
+    if (!historyVictoryOutro) {
+        drawFloatingTexts();
+        drawRaceHUD();
+    } else {
+        drawHistoryCinematicOverlay();
+    }
+}
+
+function updateRaceViewportTransform() {
+    if (!ctx || !canvas) return;
+
+    // In the goodbye scene the riders need to remain readable on a phone.
+    // A slow optical push gives the scene intimacy without changing gameplay zoom.
+    const zoomIn = historyVictoryOutro
+        ? 1 + 0.22 * easeOutCubic(historyVictoryOutro.elapsed / 84)
+        : 1;
+    const zoom = baseRaceZoom * zoomIn;
+    viewWidth = canvasCssWidth / zoom;
+    viewHeight = canvasCssHeight / zoom;
+    ctx.setTransform(canvasDpr * zoom, 0, 0, canvasDpr * zoom, 0, 0);
+}
+
+function drawHistoryCinematicOverlay() {
+    const outro = historyVictoryOutro;
+    if (!outro) return;
+
+    const openingFade = 1 - easeOutCubic(outro.elapsed / 28);
+    const closingFade = outro.phase === 'endFade'
+        ? easeInOutCubic(outro.phaseFrame / 20) * 0.94
+        : 0;
+    const transitionFade = Math.max(openingFade, closingFade);
+    const barHeight = 22 * easeOutCubic(outro.elapsed / 18);
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(80, 53, 28, 0.055)';
+    ctx.fillRect(0, 0, viewWidth, viewHeight);
+
+    const vignetteRadius = Math.max(viewWidth, viewHeight) * 0.78;
+    const vignette = ctx.createRadialGradient(
+        viewWidth * 0.5,
+        viewHeight * 0.46,
+        Math.min(viewWidth, viewHeight) * 0.18,
+        viewWidth * 0.5,
+        viewHeight * 0.46,
+        vignetteRadius
+    );
+    vignette.addColorStop(0, 'rgba(3, 7, 12, 0)');
+    vignette.addColorStop(1, `rgba(3, 7, 12, ${0.34 + transitionFade * 0.5})`);
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, viewWidth, viewHeight);
+
+    if (transitionFade > 0.005) {
+        ctx.fillStyle = `rgba(2, 4, 8, ${transitionFade})`;
+        ctx.fillRect(0, 0, viewWidth, viewHeight);
+    }
+
+    ctx.fillStyle = 'rgba(4, 7, 12, 0.92)';
+    ctx.fillRect(0, 0, viewWidth, barHeight);
+    ctx.fillRect(0, viewHeight - barHeight, viewWidth, barHeight);
+    if (barHeight > 15) {
+        ctx.font = '600 12px Georgia, serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(239, 224, 192, 0.82)';
+        ctx.fillText('МАНГЕЙМ · 1817', 28, barHeight * 0.5);
+    }
+    ctx.restore();
 }
 
 // =========================================
@@ -4603,6 +4884,10 @@ function resizeCanvas() {
     const canvasWidth = Math.max(320, rect.width || canvas.clientWidth || 800);
     const canvasHeight = Math.max(220, rect.height || canvas.clientHeight || 420);
     const zoom = getCameraZoom();
+    canvasCssWidth = canvasWidth;
+    canvasCssHeight = canvasHeight;
+    canvasDpr = dpr;
+    baseRaceZoom = zoom;
     viewWidth = canvasWidth / zoom;
     viewHeight = canvasHeight / zoom;
 
@@ -4628,6 +4913,7 @@ function resizeCanvas() {
 // =========================================
 
 export function initRace(onRaceEnd) {
+    setHistoryCinematicMode(false);
     if (animationId !== null) {
         cancelAnimationFrame(animationId);
         animationId = null;
