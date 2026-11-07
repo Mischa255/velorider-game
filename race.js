@@ -1,7 +1,7 @@
-import { player } from './state.js?v=100';
-import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=100';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=100';
-import { playCoinSound, playBoostSound } from './audio.js?v=100';
+import { player } from './state.js?v=101';
+import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=101';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=101';
+import { playCoinSound, playBoostSound } from './audio.js?v=101';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -3960,7 +3960,11 @@ function drawRaceHUD() {
     window.matchMedia('(pointer: coarse)').matches;
     const landscapePhone = mobileLayout &&
         window.matchMedia('(orientation: landscape) and (max-height: 600px)').matches;
-    const uiScale = mobileLayout ? 1 / getCameraZoom() : 1;
+    // The progress comparison HUD was taking too much of the playfield on
+    // landscape phones. Scale its complete layout while still cancelling the
+    // camera zoom so the HUD remains fixed-size relative to the screen.
+    const hudScale = landscapePhone ? 0.72 : 1;
+    const uiScale = mobileLayout ? hudScale / getCameraZoom() : 1;
     const panelWidth = mobileLayout
         ? Math.min((landscapePhone ? 360 : 390) * uiScale, viewWidth - 20 * uiScale)
         : Math.min(390, viewWidth - 28);
