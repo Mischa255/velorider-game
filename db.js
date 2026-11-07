@@ -77,16 +77,17 @@ export const ITEMS_DB = {
         part('f5', 'Specialized Rockhopper A1 Alloy', 'rare', 5, 3, 4, 3, 1300, 0, { color: '#f59e0b', width: 12, type: 'hardtail', stability: 23 }),
         part('f6', 'Cannondale Trail SmartForm C3', 'rare', 4, 4, 4, 3, 1400, 0, { color: '#10b981', width: 12, type: 'hardtail', stability: 24 }),
         part('f7', 'Marin Bobcat Trail Series 2', 'rare', 5, 4, 5, 3, 1500, 0, { color: '#8b5cf6', width: 12, type: 'hardtail', stability: 24 }),
-        // Редкие двухподвесы: стоят дороже хардтейлов и открывают задний амортизатор.
-        part('f11', 'Trek Fuel EX Alloy', 'rare', 6, 5, 6, 3, 2600, 0, { color: '#14b8a6', width: 14, type: 'dh', stability: 23 }),
-        part('f12', 'Giant Trance X Alloy', 'rare', 7, 5, 7, 4, 3200, 0, { color: '#06b6d4', width: 14, type: 'dh', stability: 24 }),
+        // У двухподвесов скорость и ускорение снижены на 40%, результат округлён вниз.
+        // Редкие двухподвесы стоят дороже хардтейлов и открывают задний амортизатор.
+        part('f11', 'Trek Fuel EX Alloy', 'rare', 3, 3, 6, 3, 2600, 0, { color: '#14b8a6', width: 14, type: 'dh', stability: 23 }),
+        part('f12', 'Giant Trance X Alloy', 'rare', 4, 3, 7, 4, 3200, 0, { color: '#06b6d4', width: 14, type: 'dh', stability: 24 }),
         part('f8', 'Trek Procaliber Carbon', 'legendary', 9, 7, 8, 5, 3500, 0, { color: '#b91c1c', width: 15, type: 'hardtail', stability: 26 }),
         part('f9', 'Giant XTC Advanced Carbon', 'legendary', 10, 8, 9, 5, 4000, 0, { color: '#3b82f6', width: 15, type: 'hardtail', stability: 26 }),
         part('f10', 'Specialized Epic Carbon', 'legendary', 11, 8, 10, 6, 4500, 0, { color: '#14b8a6', width: 15, type: 'hardtail', stability: 27 }),
         
-        // Легендарные двухподвесы.
-        part('f3', 'Cannondale Jekyll Carbon', 'legendary', 8, 5, 8, 4, 5600, 0, { color: '#22c55e', width: 15, type: 'dh', stability: 26 }),
-        part('f13', 'Specialized Stumpjumper EVO Carbon', 'legendary', 10, 7, 11, 6, 7000, 0, { color: '#f97316', width: 16, type: 'dh', stability: 27 }),
+        // Легендарные двухподвесы используют тот же штраф с округлением вниз.
+        part('f3', 'Cannondale Jekyll Carbon', 'legendary', 4, 3, 8, 4, 5600, 0, { color: '#22c55e', width: 15, type: 'dh', stability: 26 }),
+        part('f13', 'Specialized Stumpjumper EVO Carbon', 'legendary', 6, 4, 11, 6, 7000, 0, { color: '#f97316', width: 16, type: 'dh', stability: 27 }),
         part('f14', 'Laufmaschine Карла Дреза', 'special', 0, 0, 0, 0, 0, 0, { color: '#9a6538', width: 12, type: 'hardtail', stability: 1, specialHistoryFrame: true })
     ],
 
