@@ -1,4 +1,4 @@
-import { clamp } from './utils.js?v=111';
+import { clamp } from './utils.js?v=112';
 
 const AUDIO_STORAGE_KEY = 'velorider_audio_settings_v9';
 

@@ -1,7 +1,7 @@
-import { player } from './state.js?v=111';
-import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=111';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=111';
-import { playCoinSound, playBoostSound } from './audio.js?v=111';
+import { player } from './state.js?v=112';
+import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=112';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=112';
+import { playCoinSound, playBoostSound } from './audio.js?v=112';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -2386,9 +2386,15 @@ function drawBackground() {
     const isNight = ['#1d233f', '#090f2b', '#1a263c', '#281b2c'].includes(palette.skyTop);
     ctx.save();
     ctx.beginPath();
-    const celestialX = (viewWidth * 0.8) - (cameraX * 0.015) % viewWidth; 
+    const celestialRadius = viewWidth * 0.08;
+    const celestialCycle = viewWidth + celestialRadius * 2;
+    const celestialTravel = cameraX * 0.015;
+    // Полный цикл идёт от позиции за правым краем до позиции за левым.
+    // Поэтому при повторе солнце снова входит справа, а не возникает в кадре.
+    const celestialOffset = ((celestialTravel % celestialCycle) + celestialCycle) % celestialCycle;
+    const celestialX = viewWidth + celestialRadius - celestialOffset;
     const celestialY = viewHeight * 0.35;
-    ctx.arc(celestialX, celestialY, viewWidth * 0.08, 0, Math.PI * 2);
+    ctx.arc(celestialX, celestialY, celestialRadius, 0, Math.PI * 2);
     ctx.fillStyle = isNight ? 'rgba(226, 232, 240, 0.9)' : 'rgba(253, 224, 71, 0.95)';
     ctx.shadowColor = isNight ? 'rgba(148, 163, 184, 0.6)' : 'rgba(250, 204, 21, 0.6)';
     ctx.shadowBlur = 60;

@@ -1,4 +1,4 @@
-import { ITEMS_DB, TRACKS_DB, HISTORY_TRACKS_DB, CONTAINERS_DB } from './db.js?v=111';
+import { ITEMS_DB, TRACKS_DB, HISTORY_TRACKS_DB, CONTAINERS_DB } from './db.js?v=112';
 import {
     player,
     loadPlayerState,
@@ -6,21 +6,21 @@ import {
     clearSavedProgress,
     forceSavePlayerState,
     getServerTime
-} from './state.js?v=111';
+} from './state.js?v=112';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=111';
+} from './race.js?v=112';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=111';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=111';
+} from './audio.js?v=112';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=112';
 
 function renderGameVersionBadge() {
     const build = document.body?.dataset.gameBuild || '100';
