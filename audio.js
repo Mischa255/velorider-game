@@ -1,4 +1,4 @@
-import { clamp } from './utils.js?v=108';
+import { clamp } from './utils.js?v=109';
 
 const AUDIO_STORAGE_KEY = 'velorider_audio_settings_v9';
 
@@ -162,7 +162,7 @@ function ensureAudioContext() {
             if (audioContext.state === 'running') {
                 audioUnlocked = true;
                 if (enabled) playBgm(currentScene);
-                setStatus('Звук работает');
+                setStatus(enabled ? 'Звук работает' : 'Звук выключен');
             } else {
                 audioUnlocked = false;
                 stopBgm();
@@ -278,7 +278,7 @@ async function unlockAudio() {
             audioUnlocked = true;
             if (enabled) playBgm(currentScene);
 
-            setStatus('Звук работает');
+            setStatus(enabled ? 'Звук работает' : 'Звук выключен');
             return true;
         } catch (error) {
             console.error('Ошибка запуска аудио:', error);
@@ -430,7 +430,7 @@ function setupAudioUnlock() {
     document.addEventListener('keydown', unlock, { once: true });
     document.addEventListener('visibilitychange', () => {
         // Автоматически возобновляем музыку, если пользователь вернулся в приложение
-        if (!document.documentHidden && enabled && audioUnlocked) {
+        if (!document.hidden && enabled && audioUnlocked) {
             bgm.play().catch(e => console.warn('Resume play error:', e));
         }
     });

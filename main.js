@@ -1,4 +1,4 @@
-import { ITEMS_DB, TRACKS_DB, HISTORY_TRACKS_DB, CONTAINERS_DB } from './db.js?v=108';
+import { ITEMS_DB, TRACKS_DB, HISTORY_TRACKS_DB, CONTAINERS_DB } from './db.js?v=109';
 import {
     player,
     loadPlayerState,
@@ -6,21 +6,21 @@ import {
     clearSavedProgress,
     forceSavePlayerState,
     getServerTime
-} from './state.js?v=108';
+} from './state.js?v=109';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=108';
+} from './race.js?v=109';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=108';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=108';
+} from './audio.js?v=109';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=109';
 
 function renderGameVersionBadge() {
     const build = document.body?.dataset.gameBuild || '100';
@@ -1299,7 +1299,7 @@ function updateGarageUI() {
         if (frameGroup) {
             let geometry;
             if (isDraisineFrame) {
-                geometry = { seat: [282, 80], head: [406, 88], lower: [447, 145] };
+                geometry = { seat: [282, 86], head: [406, 88], lower: [447, 145] };
             } else if (frame?.visuals?.type === 'dh') {
                 geometry = { seat: [250, 80], head: [435, 88], lower: [447, 135] };
             } else if (frame?.visuals?.type === 'hardtail') {
@@ -1357,7 +1357,7 @@ function updateGarageUI() {
         // --- КООРДИНАТЫ ПОДСЕДЕЛА ---
         let seatCoordinates;
         if (isDraisineFrame) {
-            seatCoordinates = { x: 282, y: 80 };
+            seatCoordinates = { x: 282, y: 86 };
         } else if (frame?.visuals?.type === 'dh') {
             seatCoordinates = { x: 250, y: 80 };
         } else if (frame?.visuals?.type === 'hardtail') {
@@ -1367,9 +1367,12 @@ function updateGarageUI() {
         }
 
         const seatpostLine = bikeSvg.querySelector('#garage-bike-seatpost');
-        if (seatpostLine) seatpostLine.setAttribute('d', `M${seatCoordinates.x} ${seatCoordinates.y} L${seatCoordinates.x - 7} 53`);
+        const saddleTopY = isDraisineFrame ? 59 : 53;
+        if (seatpostLine) seatpostLine.setAttribute('d', `M${seatCoordinates.x} ${seatCoordinates.y} L${seatCoordinates.x - 7} ${saddleTopY}`);
         const saddleLine = bikeSvg.querySelector('#garage-bike-saddle');
-        if (saddleLine) saddleLine.setAttribute('d', `M${seatCoordinates.x - 20} 51 Q${seatCoordinates.x} 45 ${seatCoordinates.x + 25} 51`);
+        const saddleY = isDraisineFrame ? 57 : 51;
+        const saddleControlY = isDraisineFrame ? 51 : 45;
+        if (saddleLine) saddleLine.setAttribute('d', `M${seatCoordinates.x - 20} ${saddleY} Q${seatCoordinates.x} ${saddleControlY} ${seatCoordinates.x + 25} ${saddleY}`);
         
         // --- КОЛЕСА И ТОРМОЗА ---
         const tireGroup = bikeSvg.querySelector('.bike-tire');

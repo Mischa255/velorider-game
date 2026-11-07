@@ -1,7 +1,7 @@
-import { player } from './state.js?v=108';
-import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=108';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=108';
-import { playCoinSound, playBoostSound } from './audio.js?v=108';
+import { player } from './state.js?v=109';
+import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=109';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=109';
+import { playCoinSound, playBoostSound } from './audio.js?v=109';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -3414,7 +3414,7 @@ function getDraisineFramePoints(x, bodyY, rear, front) {
         upperHead: { x: x + 14, y: bodyY - 46 },
         middleHead: { x: x + 6, y: bodyY - 35 },
         lowerJoint: { x: x + 7, y: bodyY - 17 },
-        seat: { x: x - 8, y: bodyY - 70 },
+        seat: { x: x - 8, y: bodyY - 64 },
         seatBrace: { x: x - 11, y: bodyY - 56 },
         rear,
         front
@@ -3460,13 +3460,13 @@ function drawDraisineFrame(points, frameColor = '#9a6538') {
         ctx.lineTo(points.lowerJoint.x, points.lowerJoint.y);
         ctx.lineTo(points.front.x, points.front.y - 1);
         ctx.moveTo(points.seatBrace.x, points.seatBrace.y);
-        ctx.lineTo(points.seat.x, points.seat.y + 13);
+        ctx.lineTo(points.seat.x, points.seat.y + 7);
     }, 10, 5.5);
 }
 
 function drawDraisineSeatAndCockpit(points, visuals = {}) {
     const x = points.seat.x + 8;
-    const bodyY = points.seat.y + 70;
+    const bodyY = points.upperHead.y + 46;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
@@ -3479,8 +3479,8 @@ function drawDraisineSeatAndCockpit(points, visuals = {}) {
     ctx.strokeStyle = visuals.saddleColor || '#342319';
     ctx.lineWidth = 7;
     ctx.beginPath();
-    ctx.moveTo(x - 26, bodyY - 71);
-    ctx.quadraticCurveTo(x - 8, bodyY - 77, x + 7, bodyY - 70);
+    ctx.moveTo(x - 26, bodyY - 65);
+    ctx.quadraticCurveTo(x - 8, bodyY - 71, x + 7, bodyY - 64);
     ctx.stroke();
 
     ctx.strokeStyle = visuals.stemColor || visuals.handlebarColor || '#704522';
@@ -3745,7 +3745,7 @@ function drawBike(bike, label, color) {
     const bottomY = wheelY - radius * 0.42;
     const seatX = draisineFrame ? x - 8 : x - 10;
     const seatBaseY = draisineFrame ? y - 56 : wheelY - 27;
-    const saddleY = draisineFrame ? y - 70 : wheelY - 33;
+    const saddleY = draisineFrame ? y - 64 : wheelY - 33;
     const headX = x + 11;
     const travel = Number.isFinite(bike.previousX)
         ? bike.x - bike.previousX
