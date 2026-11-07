@@ -47,7 +47,7 @@ const part = (
         e4: { id: 'nitro', name: 'Импульсный разгон', description: 'Дважды нажми газ, чтобы включить нитро: скорость и разгон повышаются на 2 секунды. Перезарядка — 8 секунд.' },
         e5: { id: 'nitro', name: 'Импульсный разгон', description: 'Дважды нажми газ, чтобы включить нитро: скорость и разгон повышаются на 2 секунды. Перезарядка — 8 секунд.' },
         fk8: { id: 'superJump', name: 'Пружинный прыжок', description: 'Прыжок становится на 35% выше и дольше держит велосипед в воздухе.' },
-        f14: { id: 'noAirFlip', name: 'Устойчивый полёт', description: 'Рама не позволяет велосипеду перевернуться в воздухе.' },
+        f14: { id: 'fallResistance', name: 'Устойчивость к падениям', description: 'Не позволяет раме перевернуться и проиграть из-за удара, низкой стабильности или жёсткой посадки.' },
         ti5: { id: 'mudGrip', name: 'Грязевой протектор', description: 'В грязи и воде теряется на 20% меньше скорости.' },
         b7: { id: 'impactBrake', name: 'Контроль торможения', description: 'После столкновения замедление длится на 15% меньше.' }
     };
@@ -87,7 +87,7 @@ export const ITEMS_DB = {
         // Легендарные двухподвесы.
         part('f3', 'Cannondale Jekyll Carbon', 'legendary', 8, 5, 8, 4, 5600, 0, { color: '#22c55e', width: 15, type: 'dh', stability: 26 }),
         part('f13', 'Specialized Stumpjumper EVO Carbon', 'legendary', 10, 7, 11, 6, 7000, 0, { color: '#f97316', width: 16, type: 'dh', stability: 27 }),
-        part('f14', 'Laufmaschine Карла Дреза', 'special', 0, 0, 0, 0, 0, 0, { color: '#9a6538', width: 12, type: 'hardtail', stability: 1, specialHistoryFrame: true, rearRadius: 14, frontRadius: 11, rimColor: '#704522', hubColor: '#c4965d' })
+        part('f14', 'Laufmaschine Карла Дреза', 'special', 0, 0, 0, 0, 0, 0, { color: '#9a6538', width: 12, type: 'hardtail', stability: 1, specialHistoryFrame: true })
     ],
 
     // =====================================
