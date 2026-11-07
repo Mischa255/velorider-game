@@ -136,6 +136,8 @@ function createDefaultPlayer() {
         selectedTrack: 't1',
         completedTracks: [],
         trackRewardsClaimed: [],
+        historyUnlockedStages: ['h1'],
+        historyCompletedStages: [],
         track4BonusClaimed: false,
         track1RewardClaimed: false,
 
@@ -299,6 +301,8 @@ function sanitizeLoadedState(raw) {
     if (!Array.isArray(merged.unlockedTracks)) merged.unlockedTracks = deepClone(base.unlockedTracks);
     if (!Array.isArray(merged.completedTracks)) merged.completedTracks = [];
     if (!Array.isArray(merged.trackRewardsClaimed)) merged.trackRewardsClaimed = [];
+    if (!Array.isArray(merged.historyUnlockedStages)) merged.historyUnlockedStages = ['h1'];
+    if (!Array.isArray(merged.historyCompletedStages)) merged.historyCompletedStages = [];
     merged.track4BonusClaimed = Boolean(merged.track4BonusClaimed);
     if (!Array.isArray(merged.unlockedComponentRarities)) merged.unlockedComponentRarities = ['common'];
 
@@ -487,6 +491,8 @@ function toPlayerSaveData(source) {
         selectedTrack: source.selectedTrack,
         completedTracks: source.completedTracks,
         trackRewardsClaimed: source.trackRewardsClaimed,
+        historyUnlockedStages: source.historyUnlockedStages,
+        historyCompletedStages: source.historyCompletedStages,
         track4BonusClaimed: source.track4BonusClaimed,
         track1RewardClaimed: source.track1RewardClaimed,
         unlockedComponentRarities: source.unlockedComponentRarities,

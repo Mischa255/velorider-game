@@ -48,7 +48,8 @@
         height: 36px;
         margin: -8px -8px 6px 8px;
         border-radius: 50% !important;
-        background: #78350f !important;
+        background: #581c87 !important;
+        color: #f3e8ff !important;
         font-size: 26px !important;
     }
 
@@ -372,35 +373,75 @@
     }
 }
 
-@media screen and (max-width: 900px) and (max-height: 520px) and (orientation: landscape) {
+@media screen and (max-width: 1000px) and (max-height: 600px) and (orientation: landscape) and (pointer: coarse) {
+    html,
+    body {
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+    }
+
+    body.h-screen {
+        height: 100dvh !important;
+        min-height: 100dvh !important;
+    }
+
+    body > .flex.flex-1.overflow-hidden {
+        min-height: 0;
+    }
+
+    body:has(#screen-race.active) > header,
+    body:has(#screen-race.active) > .flex.flex-1.overflow-hidden > aside {
+        display: none !important;
+    }
+
+    body:has(#screen-race.active) > .flex.flex-1.overflow-hidden > main {
+        min-width: 0 !important;
+        min-height: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+    }
+
     #screen-race.active {
-        padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px)) !important;
+        gap: 0 !important;
+        padding: 0 0 calc(102px + env(safe-area-inset-bottom, 0px)) !important;
+    }
+
+    #screen-race.active > div:first-child {
+        min-height: 0 !important;
+        border-radius: 10px !important;
     }
 
     #race-controls {
         left: 50% !important;
         right: auto !important;
-        bottom: calc(env(safe-area-inset-bottom, 0px) + 6px) !important;
-        width: min(440px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 16px)) !important;
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 4px) !important;
+        width: min(360px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 12px)) !important;
         max-width: none;
         height: auto !important;
         margin: 0 !important;
         transform: translateX(-50%) !important;
         padding: 5px !important;
+        border: 1px solid rgba(148, 163, 184, .3);
+        border-radius: 15px;
+        background: rgba(15, 23, 42, .9);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, .36);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
         grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-        grid-template-rows: repeat(2, 48px) !important;
+        grid-template-rows: repeat(2, 40px) !important;
         grid-template-areas:
             "brake jump"
             "reverse accelerate" !important;
-        gap: 6px !important;
+        gap: 4px !important;
     }
 
     #race-controls button {
-        height: 48px !important;
-        min-height: 48px !important;
-        padding: 5px 3px !important;
-        font-size: clamp(11px, 2.4vw, 14px) !important;
-        border-radius: 13px !important;
+        height: 40px !important;
+        min-height: 40px !important;
+        padding: 4px 3px !important;
+        font-size: clamp(11px, 2.2vw, 14px) !important;
+        border-radius: 11px !important;
         gap: 0;
     }
 
@@ -408,4 +449,769 @@
     #btn-jump { grid-area: jump; }
     #btn-brake { grid-area: brake; }
     #btn-accelerate { grid-area: accelerate; }
+}
+
+@media screen and (max-width: 900px) and (orientation: portrait) and (pointer: coarse) {
+    #mobile-orientation-prompt {
+        position: fixed;
+        inset: 0;
+        z-index: 12000;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        padding: max(22px, env(safe-area-inset-top, 0px)) 22px max(22px, env(safe-area-inset-bottom, 0px));
+        color: #f8fafc;
+        text-align: center;
+        background: radial-gradient(circle at 50% 36%, rgba(30, 64, 82, .98), rgba(2, 6, 23, .99) 72%);
+    }
+
+    .race-orientation-prompt__card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+        width: min(100%, 360px);
+        padding: 28px 22px;
+        border: 1px solid rgba(125, 211, 252, .26);
+        border-radius: 24px;
+        background: rgba(15, 23, 42, .72);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, .45);
+    }
+
+    .race-orientation-prompt__icon {
+        display: grid;
+        place-items: center;
+        width: 76px;
+        height: 76px;
+        border: 2px solid rgba(125, 211, 252, .65);
+        border-radius: 18px;
+        color: #7dd3fc;
+        font-size: 54px;
+        line-height: 1;
+        transform: rotate(-90deg);
+    }
+
+    .race-orientation-prompt__card strong {
+        font-size: clamp(20px, 6vw, 26px);
+        font-weight: 900;
+    }
+
+    .race-orientation-prompt__card > span:last-child {
+        max-width: 280px;
+        color: #cbd5e1;
+        font-size: 14px;
+        line-height: 1.5;
+    }
+
+    .race-orientation-prompt__card button {
+        min-height: 44px;
+        margin-top: 2px;
+        padding: 10px 24px;
+        border: 1px solid rgba(148, 163, 184, .38);
+        border-radius: 12px;
+        background: rgba(51, 65, 85, .82);
+        color: #e2e8f0;
+        font-weight: 800;
+    }
+
+    #race-controls {
+        visibility: hidden !important;
+        pointer-events: none !important;
+    }
+}
+
+/* Все разделы игры используют горизонтальную компоновку на телефоне. */
+@media screen and (max-width: 1000px) and (max-height: 600px) and (orientation: landscape) and (pointer: coarse) {
+    html,
+    body {
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    body.h-screen {
+        height: 100dvh !important;
+        min-height: 100dvh !important;
+    }
+
+    body > header {
+        flex: 0 0 44px;
+        min-height: 44px;
+        gap: 6px;
+        flex-wrap: nowrap;
+        padding: 4px 8px !important;
+    }
+
+    body > header > div:first-child {
+        gap: 5px !important;
+        font-size: 17px !important;
+    }
+
+    body > header > div:last-child {
+        flex-wrap: nowrap !important;
+        gap: 8px !important;
+        padding: 3px 7px !important;
+        font-size: 11px !important;
+    }
+
+    body > header > div:last-child > div {
+        gap: 4px !important;
+        white-space: nowrap;
+    }
+
+    body > header .text-gray-400.text-sm {
+        display: none !important;
+    }
+
+    body > .flex.flex-1.overflow-hidden {
+        flex: 1 1 auto;
+        flex-direction: row !important;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    body > .flex.flex-1.overflow-hidden > aside {
+        order: 0 !important;
+        flex: 0 0 56px !important;
+        width: 56px !important;
+        height: auto !important;
+        min-height: 0 !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 5px !important;
+        padding: 6px 4px !important;
+        border-top: 0 !important;
+        border-right: 1px solid #374151 !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        box-shadow: 4px 0 16px rgba(0, 0, 0, .2) !important;
+    }
+
+    body > .flex.flex-1.overflow-hidden > aside > div:first-child {
+        display: none !important;
+    }
+
+    body > .flex.flex-1.overflow-hidden > aside > button.nav-btn,
+    body > .flex.flex-1.overflow-hidden > aside > div.mt-auto > button {
+        flex: 0 0 44px !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        min-height: 44px !important;
+        padding: 5px 2px !important;
+        justify-content: center !important;
+        gap: 0 !important;
+        overflow: hidden;
+        font-size: 0 !important;
+        line-height: 1;
+        text-align: center;
+        border-radius: 11px !important;
+    }
+
+    body > .flex.flex-1.overflow-hidden > aside > button.nav-btn span:first-child,
+    body > .flex.flex-1.overflow-hidden > aside > div.mt-auto > button span:first-child {
+        display: inline !important;
+        font-size: 19px !important;
+        line-height: 1;
+    }
+
+    body > .flex.flex-1.overflow-hidden > aside > div.mt-auto {
+        display: flex !important;
+        flex-direction: column;
+        gap: 5px;
+        margin-top: auto;
+        padding-top: 5px;
+    }
+
+    body > .flex.flex-1.overflow-hidden > aside > div.mt-auto > button {
+        margin-top: 0 !important;
+    }
+
+    body:not(:has(#screen-race.active)) > .flex.flex-1.overflow-hidden > main {
+        order: 1;
+        flex: 1 1 auto;
+        width: 0;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        padding: 6px !important;
+        overflow: hidden !important;
+    }
+
+    /* Garage: bike and stats side by side; components remain scrollable below. */
+    #screen-garage.garage-v2 {
+        height: 100%;
+        min-height: 0;
+    }
+
+    .garage-page {
+        height: 100%;
+        padding: 8px !important;
+        overflow: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .garage-heading {
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+
+    .garage-eyebrow,
+    .garage-subtitle {
+        display: none;
+    }
+
+    .garage-title {
+        margin: 0;
+        font-size: 20px !important;
+    }
+
+    .garage-actions {
+        flex-wrap: nowrap;
+        gap: 6px;
+    }
+
+    .garage-action {
+        min-height: 40px;
+        padding: 7px 9px !important;
+        white-space: nowrap;
+        font-size: 10px !important;
+    }
+
+    .garage-overview {
+        grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+        gap: 8px;
+    }
+
+    .garage-bike-panel,
+    .garage-stats-panel {
+        min-width: 0;
+        padding: 10px !important;
+        border-radius: 13px;
+    }
+
+    .garage-section-label,
+    .garage-status {
+        font-size: 8px;
+    }
+
+    .garage-status {
+        padding: 4px 6px;
+    }
+
+    .garage-bike-stage {
+        height: 150px;
+        min-height: 0 !important;
+        margin: 3px 0;
+    }
+
+    .garage-bike-svg {
+        width: 100%;
+        max-height: 155px;
+    }
+
+    .garage-bike-name {
+        gap: 6px;
+        margin-top: 5px;
+    }
+
+    .garage-bike-model {
+        font-size: 15px !important;
+    }
+
+    .garage-bike-caption,
+    .garage-completeness {
+        font-size: 9px;
+    }
+
+    .garage-stats-title {
+        font-size: 14px;
+    }
+
+    .garage-stats-desc {
+        margin-bottom: 8px;
+        font-size: 9px;
+    }
+
+    .garage-stat-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    .garage-stat-card {
+        min-height: 62px;
+        padding: 8px;
+    }
+
+    .garage-stat-top {
+        font-size: 8px;
+    }
+
+    .garage-stat-value {
+        margin-top: 6px;
+        font-size: 20px;
+    }
+
+    .garage-extra-stats {
+        gap: 4px;
+        margin-top: 6px;
+    }
+
+    .garage-extra-stat {
+        padding: 5px 6px;
+        font-size: 8px;
+    }
+
+    .garage-lower {
+        margin-top: 8px;
+    }
+
+    .garage-equipment-panel {
+        padding: 10px !important;
+    }
+
+    .garage-section-head {
+        align-items: center;
+        margin-bottom: 8px;
+    }
+
+    .garage-section-title {
+        font-size: 14px;
+    }
+
+    .garage-equipped-grid {
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr));
+        gap: 6px;
+    }
+
+    .garage-equipped-card {
+        gap: 6px;
+        padding: 8px;
+    }
+
+    /* Upgrade: category rail at the left, component cards at the right. */
+    #screen-upgrade {
+        min-height: 0;
+        gap: 7px !important;
+        overflow: hidden;
+    }
+
+    #screen-upgrade > div:first-child {
+        flex: 0 0 auto;
+        min-height: 0;
+    }
+
+    #screen-upgrade h2 {
+        font-size: 18px !important;
+    }
+
+    #screen-upgrade > div:first-child p {
+        display: none;
+    }
+
+    #screen-upgrade > div:first-child > div:last-child {
+        padding: 5px 9px !important;
+    }
+
+    #screen-upgrade > div:first-child > div:last-child .text-xl {
+        font-size: 14px !important;
+    }
+
+    #screen-upgrade > div.flex.flex-1.min-h-0 {
+        flex-direction: row !important;
+        gap: 7px !important;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    #screen-upgrade > div.flex.flex-1.min-h-0 > div:first-child {
+        flex: 0 0 126px;
+        width: 126px !important;
+        max-height: none !important;
+        padding: 7px !important;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    #screen-upgrade > div.flex.flex-1.min-h-0 > div:first-child h3 {
+        margin-bottom: 6px;
+        padding: 0 4px;
+        font-size: 9px;
+    }
+
+    #upgrade-categories {
+        flex-direction: column !important;
+        gap: 5px !important;
+        overflow: visible;
+    }
+
+    #upgrade-categories button {
+        flex: 0 0 auto;
+        width: 100% !important;
+        min-width: 0 !important;
+        min-height: 38px;
+        padding: 6px !important;
+        font-size: 10px !important;
+    }
+
+    #screen-upgrade > div.flex.flex-1.min-h-0 > div:nth-child(2) {
+        flex: 1 1 auto;
+        min-width: 0;
+        min-height: 0;
+        padding: 8px !important;
+    }
+
+    #screen-upgrade > div.flex.flex-1.min-h-0 > div:nth-child(2) > div:first-child {
+        margin-bottom: 8px !important;
+    }
+
+    #upgrade-category-title {
+        font-size: 16px !important;
+    }
+
+    #upgrade-parts {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 7px !important;
+    }
+
+    #upgrade-parts > div {
+        gap: 6px !important;
+        padding: 8px !important;
+    }
+
+    #upgrade-parts button {
+        min-height: 40px;
+    }
+
+    /* Shop and track cards use the landscape width while keeping their own scroll. */
+    #screen-shop {
+        align-items: stretch !important;
+        min-height: 0;
+        padding: 7px !important;
+        overflow: auto !important;
+    }
+
+    #screen-shop h2 {
+        margin-bottom: 5px !important;
+        font-size: 20px !important;
+    }
+
+    #screen-shop > p {
+        margin-bottom: 2px !important;
+        font-size: 10px !important;
+    }
+
+    #container-shop-list {
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 215px), 1fr)) !important;
+        gap: 8px !important;
+        margin-top: 6px !important;
+        padding: 0 !important;
+    }
+
+    #container-shop-list > div {
+        gap: 6px !important;
+        padding: 9px !important;
+    }
+
+    #container-shop-list h3 {
+        font-size: 13px !important;
+    }
+
+    #container-shop-list p {
+        min-height: 0 !important;
+        font-size: 9px !important;
+    }
+
+    #container-shop-list button {
+        min-height: 40px;
+    }
+
+    #loot-result {
+        min-height: 0;
+        margin-top: 8px !important;
+        font-size: 15px !important;
+    }
+
+    #screen-tracks.tracks-screen:not(.hidden) {
+        gap: 8px;
+    }
+
+    .tracks-heading {
+        gap: 8px;
+        padding: 0 1px 7px;
+    }
+
+    .tracks-kicker,
+    .tracks-heading p {
+        display: none;
+    }
+
+    .tracks-heading h2 {
+        font-size: 20px;
+    }
+
+    .tracks-total-box {
+        min-width: 54px;
+        padding: 5px 8px;
+    }
+
+    .tracks-total-box strong {
+        font-size: 18px;
+    }
+
+    .tracks-total-box span {
+        margin-top: 2px;
+        font-size: 8px;
+    }
+
+    #tracks-list.tracks-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        padding: 1px 2px 10px 1px;
+    }
+
+    .track-card {
+        min-height: 205px;
+        gap: 8px;
+        padding: 10px;
+        border-radius: 13px;
+    }
+
+    .track-card__title {
+        font-size: 14px;
+    }
+
+    .track-card__stats {
+        gap: 5px;
+    }
+
+    .track-stat {
+        min-height: 44px;
+        padding: 6px;
+    }
+
+    .track-stat span {
+        font-size: 8px;
+    }
+
+    .track-stat strong {
+        font-size: 11px;
+    }
+
+    .track-card__reward-grid {
+        gap: 5px;
+    }
+
+    .track-reward {
+        padding: 6px;
+        font-size: 9px;
+    }
+
+    .track-card__action {
+        min-height: 40px;
+    }
+}
+
+@media screen and (max-width: 620px) and (max-height: 600px) and (orientation: landscape) and (pointer: coarse) {
+    #upgrade-parts,
+    #tracks-list.tracks-grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    #container-shop-list {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+}
+
+/* Historical chapter */
+.history-screen {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.history-scroll {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    padding: clamp(10px, 1.5vw, 20px);
+    overflow: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+.history-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, .9fr);
+    align-items: center;
+    gap: 18px;
+    min-height: 230px;
+    padding: clamp(14px, 2vw, 24px);
+    border: 1px solid rgba(217, 164, 99, .27);
+    border-radius: 20px;
+    background: radial-gradient(circle at 85% 20%, rgba(180, 116, 58, .2), transparent 42%), linear-gradient(135deg, #2b2119, #111827 78%);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, .24);
+}
+
+.history-kicker {
+    color: #e6b46c;
+    font-size: 10px;
+    font-weight: 950;
+    letter-spacing: .18em;
+}
+
+.history-hero h2 {
+    margin: 8px 0 9px;
+    color: #fff7e8;
+    font-size: clamp(26px, 3.4vw, 42px);
+    line-height: 1;
+    font-weight: 950;
+    letter-spacing: -.04em;
+}
+
+.history-hero__copy p {
+    max-width: 520px;
+    margin: 0;
+    color: #d6c5ad;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.history-year {
+    margin-top: 14px;
+    color: #f0c98c;
+    font-size: 24px;
+    font-weight: 950;
+    letter-spacing: .06em;
+}
+
+.history-year span { color: #8e6c4b; }
+
+.history-hero__machine {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 0;
+    padding: 6px 10px 9px;
+    border: 1px solid rgba(213, 164, 102, .16);
+    border-radius: 15px;
+    background: rgba(15, 12, 10, .32);
+}
+
+.history-hero__machine svg {
+    display: block;
+    width: 100%;
+    max-height: 174px;
+}
+
+.history-hero__machine > span {
+    color: #d5aa75;
+    font-size: 8px;
+    font-weight: 900;
+    letter-spacing: .15em;
+    text-align: center;
+}
+
+.history-story-card {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 15px;
+    margin-top: 12px;
+    padding: clamp(13px, 1.6vw, 20px);
+    border: 1px solid rgba(148, 163, 184, .18);
+    border-radius: 17px;
+    background: linear-gradient(135deg, rgba(30, 41, 59, .94), rgba(19, 26, 38, .95));
+}
+
+.history-story-card__date {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    align-self: start;
+    min-height: 74px;
+    border: 1px solid rgba(230, 180, 108, .3);
+    border-radius: 13px;
+    background: rgba(120, 74, 34, .22);
+    color: #f5d7a6;
+}
+
+.history-story-card__date > span { font-size: 30px; line-height: 1; font-weight: 950; }
+.history-story-card__date > strong { margin-top: 4px; font-size: 8px; line-height: 1.15; text-align: center; letter-spacing: .09em; }
+.history-story-card h3 { margin: 0 0 7px; color: #f8fafc; font-size: 17px; font-weight: 900; }
+.history-story-card p { margin: 0 0 7px; color: #cbd5e1; font-size: 12px; line-height: 1.5; }
+.history-story-card small { display: block; color: #9aa9bd; font-size: 10px; line-height: 1.4; }
+
+.history-stage-heading {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 18px 2px 9px;
+}
+
+.history-stage-heading h3 { margin: 4px 0 0; color: #f8fafc; font-size: 22px; font-weight: 950; }
+.history-stage-heading > span { color: #cbd5e1; font-size: 11px; font-weight: 800; }
+
+.history-stage-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 245px), 1fr));
+    gap: 10px;
+}
+
+.history-stage-card {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    min-width: 0;
+    padding: 13px;
+    border: 1px solid rgba(148, 163, 184, .2);
+    border-radius: 15px;
+    background: linear-gradient(150deg, #1b293b, #111a27);
+}
+
+.history-stage-card.is-completed { border-color: rgba(74, 222, 128, .38); }
+.history-stage-card.is-locked { opacity: .66; }
+.history-stage-card__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.history-stage-number { color: #c9a678; font-size: 9px; font-weight: 950; letter-spacing: .13em; }
+.history-stage-status { color: #a8b5c7; font-size: 9px; font-weight: 800; white-space: nowrap; }
+.history-stage-card h4 { margin: 0; color: #f8fafc; font-size: 15px; line-height: 1.25; font-weight: 900; }
+.history-stage-meta { color: #a8b5c7; font-size: 10px; }
+.history-stage-card p { min-height: 36px; margin: 0; color: #bac6d5; font-size: 10px; line-height: 1.4; }
+.history-stage-rewards { display: flex; flex-wrap: wrap; gap: 5px; }
+.history-stage-reward { padding: 5px 7px; border: 1px solid rgba(217, 164, 99, .2); border-radius: 8px; background: rgba(120, 74, 34, .18); color: #f0c98c; font-size: 9px; font-weight: 800; }
+.history-stage-reward--special { border-color: rgba(192, 132, 252, .45); background: rgba(88, 28, 135, .28); color: #e9d5ff; }
+.history-stage-play { min-height: 42px; margin-top: auto; border: 1px solid #9a6538; border-radius: 10px; background: linear-gradient(135deg, #8b5a2b, #68411f); color: #fff5e6; font-size: 11px; font-weight: 900; }
+.history-stage-play:disabled { border-color: #344256; background: #202b39; color: #7c899b; }
+.history-final-mark { color: #e6b46c; font-size: 8px; font-weight: 950; letter-spacing: .13em; text-align: center; }
+.history-reward-note { margin: 11px 2px 2px; color: #9aa9bd; font-size: 10px; line-height: 1.45; }
+.rarity-special { color: #c084fc !important; }
+.upgrade-part-card--special { border-color: rgba(192, 132, 252, .55) !important; background: linear-gradient(145deg, rgba(59, 25, 86, .7), #111827 75%) !important; box-shadow: 0 0 20px rgba(168, 85, 247, .1); }
+
+@media screen and (max-width: 1000px) and (max-height: 600px) and (orientation: landscape) and (pointer: coarse) {
+    .history-scroll { padding: 7px; }
+    .history-hero { grid-template-columns: minmax(0, 1fr) minmax(210px, .8fr); gap: 10px; min-height: 165px; padding: 10px; border-radius: 14px; }
+    .history-hero h2 { margin: 5px 0; font-size: 22px; }
+    .history-hero__copy p { font-size: 10px; }
+    .history-year { margin-top: 6px; font-size: 18px; }
+    .history-hero__machine svg { max-height: 115px; }
+    .history-story-card { grid-template-columns: 54px minmax(0, 1fr); gap: 8px; margin-top: 7px; padding: 9px; }
+    .history-story-card__date { min-height: 55px; }
+    .history-story-card__date > span { font-size: 22px; }
+    .history-story-card h3 { margin-bottom: 4px; font-size: 13px; }
+    .history-story-card p { margin-bottom: 4px; font-size: 9px; line-height: 1.35; }
+    .history-story-card small { font-size: 8px; }
+    .history-stage-heading { margin: 11px 2px 6px; }
+    .history-stage-heading h3 { font-size: 17px; }
+    .history-stage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+    .history-stage-card { gap: 5px; padding: 9px; border-radius: 12px; }
+    .history-stage-card h4 { font-size: 12px; }
+    .history-stage-card p { min-height: 28px; font-size: 9px; }
+    .history-stage-play { min-height: 40px; }
+}
+
+@media screen and (max-width: 620px) and (max-height: 600px) and (orientation: landscape) and (pointer: coarse) {
+    .history-stage-grid { grid-template-columns: minmax(0, 1fr); }
 }

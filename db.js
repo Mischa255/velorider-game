@@ -47,6 +47,7 @@ const part = (
         e4: { id: 'nitro', name: 'Импульсный разгон', description: 'Дважды нажми газ, чтобы включить нитро: скорость и разгон повышаются на 2 секунды. Перезарядка — 8 секунд.' },
         e5: { id: 'nitro', name: 'Импульсный разгон', description: 'Дважды нажми газ, чтобы включить нитро: скорость и разгон повышаются на 2 секунды. Перезарядка — 8 секунд.' },
         fk8: { id: 'superJump', name: 'Пружинный прыжок', description: 'Прыжок становится на 35% выше и дольше держит велосипед в воздухе.' },
+        f14: { id: 'noAirFlip', name: 'Устойчивый полёт', description: 'Рама не позволяет велосипеду перевернуться в воздухе.' },
         ti5: { id: 'mudGrip', name: 'Грязевой протектор', description: 'В грязи и воде теряется на 20% меньше скорости.' },
         b7: { id: 'impactBrake', name: 'Контроль торможения', description: 'После столкновения замедление длится на 15% меньше.' }
     };
@@ -85,7 +86,8 @@ export const ITEMS_DB = {
         
         // Легендарные двухподвесы.
         part('f3', 'Cannondale Jekyll Carbon', 'legendary', 8, 5, 8, 4, 5600, 0, { color: '#22c55e', width: 15, type: 'dh', stability: 26 }),
-        part('f13', 'Specialized Stumpjumper EVO Carbon', 'legendary', 10, 7, 11, 6, 7000, 0, { color: '#f97316', width: 16, type: 'dh', stability: 27 })
+        part('f13', 'Specialized Stumpjumper EVO Carbon', 'legendary', 10, 7, 11, 6, 7000, 0, { color: '#f97316', width: 16, type: 'dh', stability: 27 }),
+        part('f14', 'Laufmaschine Карла Дреза', 'special', 0, 0, 0, 0, 0, 0, { color: '#9a6538', width: 12, type: 'hardtail', stability: 1, specialHistoryFrame: true, rearRadius: 14, frontRadius: 11, rimColor: '#704522', hubColor: '#c4965d' })
     ],
 
     // =====================================
@@ -178,7 +180,8 @@ export const ITEMS_DB = {
         part('w3', 'WTB ST i25', 'rare', 3, 3, 3, 4, 700, 0, { rimColor: '#1e293b', radius: 9.5, hubColor: '#9ca3af' }),
         part('w4', 'DT Swiss M 1900', 'rare', 4, 4, 4, 5, 1200, 0, { rimColor: '#e2e8f0', radius: 9.8, hubColor: '#ef4444' }),
         part('w5', 'DT Swiss XM 1700', 'legendary', 7, 6, 6, 7, 2300, 0, { rimColor: '#f43f5e', radius: 10.2, hubColor: '#f8fafc' }),
-        part('w6', 'DT Swiss XRC 1200 Carbon', 'legendary', 9, 8, 8, 8, 3500, 0, { rimColor: '#fbbf24', radius: 10.5, hubColor: '#fcd34d' })
+        part('w6', 'DT Swiss XRC 1200 Carbon', 'legendary', 9, 8, 8, 8, 3500, 0, { rimColor: '#fbbf24', radius: 10.5, hubColor: '#fcd34d' }),
+        part('w7', 'Разновеликие деревянные колёса', 'special', 0, 0, 0, 0, 0, 0, { rimColor: '#8b5a2b', hubColor: '#563819', radius: 12, rearRadius: 15, frontRadius: 12 })
     ],
 
     // =====================================
@@ -253,7 +256,8 @@ export const ITEMS_DB = {
         part('hb2', 'Alloy Riser 680 мм', 'common', 1, 2, 2, 1, 250, 0, { color: '#1e293b', width: 1.8 }),
         part('hb3', 'Giant Connect Trail 780 мм', 'rare', 2, 3, 3, 2, 500, 0, { color: '#cbd5e1', width: 2.1 }),
         part('hb4', 'Race Face Chester', 'rare', 3, 4, 4, 2, 850, 0, { color: '#ef4444', width: 2.1 }),
-        part('hb5', 'Renthal Fatbar Carbon', 'legendary', 5, 5, 6, 3, 1800, 0, { color: '#d97706', width: 2.5 })
+        part('hb5', 'Renthal Fatbar Carbon', 'legendary', 5, 5, 6, 3, 1800, 0, { color: '#d97706', width: 2.5 }),
+        part('hb6', 'Деревянный руль Дреза', 'special', 0, 0, 0, 0, 0, 0, { color: '#9a6538', width: 1.6 })
     ],
 
     // =====================================
@@ -263,7 +267,8 @@ export const ITEMS_DB = {
         part('st1', 'Стальной вынос', 'common', 0, 1, 0, 0, 100),
         part('st2', 'Alloy Ahead 60 mm', 'common', 1, 2, 1, 0, 200),
         part('st3', 'Race Face Ride', 'rare', 2, 3, 2, 0, 450),
-        part('st4', 'Race Face Turbine', 'legendary', 4, 5, 3, 0, 1000)
+        part('st4', 'Race Face Turbine', 'legendary', 4, 5, 3, 0, 1000),
+        part('st5', 'Деревянный вынос Дреза', 'special', 0, 0, 0, 0, 0, 0, { color: '#9a6538' })
     ],
 
     // =====================================
@@ -274,7 +279,8 @@ export const ITEMS_DB = {
         part('sa2', 'Giant Sport Saddle', 'common', 1, 1, 2, 0, 250, 0, { color: '#334155' }),
         part('sa3', 'Specialized Bridge Sport', 'rare', 2, 2, 3, 0, 500, 0, { color: '#ef4444' }),
         part('sa4', 'WTB Volt', 'rare', 3, 3, 4, 0, 750, 0, { color: '#f8fafc' }),
-        part('sa5', 'Fizik Terra Argo X3', 'legendary', 5, 4, 6, 0, 1400, 0, { color: '#f59e0b' })
+        part('sa5', 'Fizik Terra Argo X3', 'legendary', 5, 4, 6, 0, 1400, 0, { color: '#f59e0b' }),
+        part('sa6', 'Кожаное седло Дреза', 'special', 0, 0, 0, 0, 0, 0, { color: '#5b3824' })
     ],
 
     // =====================================
@@ -324,7 +330,7 @@ export const ITEMS_DB = {
 
     // =====================================
     // РАЙДЕРЫ (ГОНЩИКИ)
-    // Добавляют только мощность подъёма!
+    // Райдеры дают тягу на подъёмах; исторический Дрез также добавляет стабильность.
     // =====================================
     riders: [
         part('r1', 'Школьник', 'common', 0, 0, 0, 0, 1000, 10),
@@ -342,6 +348,19 @@ export const ITEMS_DB = {
             price: 100,
             power: 100,
             currency: 'coupon'
+        },
+        {
+            id: 'r6',
+            name: 'Карл Дрез',
+            rarity: 'special',
+            speed: 0,
+            accel: 0,
+            jump: 0,
+            brake: 0,
+            price: 0,
+            power: 17,
+            stability: 8,
+            visuals: { jerseyColor: '#6b4d31', pantsColor: '#332c24', hatColor: '#30251e' }
         }
     ]
 };
@@ -473,6 +492,12 @@ export const OBSTACLE_TYPES = {
     pulse_gate: { name: '\u0421\u0432\u0435\u0442\u043e\u0432\u043e\u0439 \u0437\u0430\u0442\u0432\u043e\u0440', width: 52, height: 56, color: '#c084fc' },
     rolling_boulder: { name: '\u041a\u0430\u0442\u044f\u0449\u0438\u0439\u0441\u044f \u0432\u0430\u043b\u0443\u043d', width: 42, height: 38, color: '#a8a29e' }
 };
+
+// Небольшие декорации-механики для исторической главы. Они дают короткую
+// потерю скорости или требуют подпрыгнуть, но не добавляют сложных правил.
+OBSTACLE_TYPES.cobblestones = { name: 'Булыжная мостовая', width: 92, height: 9, color: '#8b8174' };
+OBSTACLE_TYPES.plank_bridge = { name: 'Деревянный настил', width: 118, height: 12, color: '#9a6538' };
+OBSTACLE_TYPES.wooden_gate = { name: 'Садовая калитка', width: 48, height: 32, color: '#704522' };
 
 
 // =========================================
@@ -658,5 +683,59 @@ export const TRACKS_DB = [
         winReward: 2750,
         lossReward: 160,
         couponReward: 3
+    }
+];
+
+export const HISTORY_TRACKS_DB = [
+    {
+        id: 'h1', historyStage: 1, isHistory: true, musicTheme: '1h1',
+        name: 'Первые метры · Мангейм', year: '1817', opponent: 'Макс',
+        historyFeature: 'Булыжная дорожка замедляет наезд; небольшой трамплин позволяет перепрыгнуть её.',
+        length: 15000, hills: 12, botMaxSpeed: 4, botAccel: 0.05,
+        botDifficultyTrackId: 't1', obstacles: 3,
+        obstacleTypes: ['cobblestones', 'log', 'ramp'], winReward: 0, lossReward: 0, couponReward: 0,
+        historyRewards: [{ type: 'coupons', amount: 5 }]
+    },
+    {
+        id: 'h2', historyStage: 2, isHistory: true, musicTheme: '1h2',
+        name: 'Дорога к Шветцингену', year: '1817', opponent: 'Макс',
+        historyFeature: 'Корни и лужи сбивают темп; невысокие ветки можно перепрыгнуть.',
+        length: 15000, hills: 15, botMaxSpeed: 4, botAccel: 0.05,
+        botDifficultyTrackId: 't2', obstacles: 3,
+        obstacleTypes: ['fallen_branch', 'water_splash', 'cobblestones'], winReward: 0, lossReward: 0, couponReward: 0,
+        historyRewards: [{ category: 'handlebars', id: 'hb6' }]
+    },
+    {
+        id: 'h3', historyStage: 3, isHistory: true, musicTheme: '1h3',
+        name: 'Аллея и деревянный мост', year: '1817', opponent: 'Макс',
+        historyFeature: 'Узкий деревянный настил проходится на скорости, а бревно лучше перепрыгнуть.',
+        length: 15000, hills: 18, botMaxSpeed: 4, botAccel: 0.05,
+        botDifficultyTrackId: 't3', obstacles: 4,
+        obstacleTypes: ['plank_bridge', 'log', 'rock', 'ramp'], winReward: 0, lossReward: 0, couponReward: 0,
+        historyRewards: [{ category: 'wheels', id: 'w7' }]
+    },
+    {
+        id: 'h4', historyStage: 4, isHistory: true, musicTheme: '1h4',
+        name: 'Парижский показ', year: '1818', opponent: 'Макс',
+        historyFeature: 'Садовая калитка и короткие рампы напоминают о демонстрации в Люксембургском саду.',
+        length: 15000, hills: 20, botMaxSpeed: 4, botAccel: 0.05,
+        botDifficultyTrackId: 't4', obstacles: 4,
+        obstacleTypes: ['wooden_gate', 'ramp', 'fallen_branch', 'plank_bridge'], winReward: 0, lossReward: 0, couponReward: 0,
+        historyRewards: [
+            { category: 'stems', id: 'st5' },
+            { category: 'saddles', id: 'sa6' }
+        ]
+    },
+    {
+        id: 'h5', historyStage: 5, isHistory: true, musicTheme: '1h5',
+        name: 'Заезд Карла Дреза', year: '1818', opponent: 'Карл Дрез',
+        historyFeature: 'Финальный маршрут: лужи, камни и настил. Соперник едет на Laufmaschine и отталкивается ногами.',
+        length: 25000, hills: 30, botMaxSpeed: 6.5, botAccel: 0.08,
+        botDifficultyTrackId: 't2', obstacles: 6,
+        obstacleTypes: ['plank_bridge', 'rock', 'water_splash', 'log', 'cobblestones'], winReward: 0, lossReward: 0, couponReward: 0,
+        historyRewards: [
+            { category: 'frames', id: 'f14' },
+            { category: 'riders', id: 'r6' }
+        ]
     }
 ];

@@ -1,7 +1,7 @@
-import { player } from './state.js?v=89';
-import { TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=89';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=89';
-import { playCoinSound, playBoostSound } from './audio.js?v=89';
+import { player } from './state.js?v=94';
+import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=94';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=94';
+import { playCoinSound, playBoostSound } from './audio.js?v=94';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -50,6 +50,11 @@ const TRACK_BALANCE = {
 // =========================================
 
 const TRACK_TERRAIN = {
+    h1:  { amplitude: 6, longFrequency: 0.0032, shortFrequency: 0.0075, micro: 0.8, phase: 0.1, ridge: 0.03, chop: 0.015 },
+    h2:  { amplitude: 8, longFrequency: 0.0035, shortFrequency: 0.008, micro: 1, phase: 0.4, ridge: 0.04, chop: 0.02 },
+    h3:  { amplitude: 10, longFrequency: 0.0038, shortFrequency: 0.009, micro: 1.2, phase: 0.8, ridge: 0.05, chop: 0.025 },
+    h4:  { amplitude: 12, longFrequency: 0.004, shortFrequency: 0.0095, micro: 1.4, phase: 1.1, ridge: 0.06, chop: 0.03 },
+    h5:  { amplitude: 15, longFrequency: 0.0042, shortFrequency: 0.01, micro: 1.5, phase: 1.4, ridge: 0.07, chop: 0.035 },
     t1:  { amplitude: 8,  longFrequency: 0.0034, shortFrequency: 0.0080, micro: 1.0, phase: 0.2, ridge: 0.04, chop: 0.02 },
     t2:  { amplitude: 15, longFrequency: 0.0038, shortFrequency: 0.0095, micro: 1.5, phase: 0.5, ridge: 0.07, chop: 0.035 },
     t3:  { amplitude: 21, longFrequency: 0.0042, shortFrequency: 0.0110, micro: 2.0, phase: 0.8, ridge: 0.11, chop: 0.05 },
@@ -67,6 +72,11 @@ const TRACK_TERRAIN = {
 // =========================================
 
 const TRACK_PALETTES = {
+    h1:  { skyTop: '#302a2b', skyMid: '#92755c', skyBottom: '#d4b483', far: '#75634d', near: '#514331', road: '#6f6252', edge: '#d2b284', accent: '#f0d6a5' },
+    h2:  { skyTop: '#19313a', skyMid: '#668a79', skyBottom: '#c9c69c', far: '#657957', near: '#3d563e', road: '#575b4b', edge: '#c7c59a', accent: '#d8d5a5' },
+    h3:  { skyTop: '#273643', skyMid: '#8d8870', skyBottom: '#d8c99a', far: '#796b4f', near: '#534b37', road: '#655b47', edge: '#d7bd88', accent: '#eed5a1' },
+    h4:  { skyTop: '#3c3441', skyMid: '#a7756a', skyBottom: '#e1c19a', far: '#84695b', near: '#59453d', road: '#665447', edge: '#dfbf95', accent: '#f1d5aa' },
+    h5:  { skyTop: '#292c3b', skyMid: '#9a7061', skyBottom: '#e0bd8c', far: '#765e53', near: '#4c4038', road: '#60534a', edge: '#d6b37e', accent: '#f1d4a1' },
     t1:  { skyTop: '#102b3d', skyMid: '#397b88', skyBottom: '#b8d4bc', far: '#345b59', near: '#1d3938', road: '#475569', edge: '#a8b7bd', accent: '#bbf7d0' },
     t2:  { skyTop: '#392b43', skyMid: '#bd7952', skyBottom: '#f2c78b', far: '#8e5b4c', near: '#583b3c', road: '#51434a', edge: '#e8b98a', accent: '#fed7aa' },
     t3:  { skyTop: '#112d36', skyMid: '#39756a', skyBottom: '#b5c98d', far: '#456b50', near: '#294b39', road: '#46564b', edge: '#a3b18a', accent: '#bbf7d0' },
@@ -138,6 +148,7 @@ function getTrackBalance(trackId) {
 }
 
 function getTrackLevel() {
+    if (currentTrack?.isHistory) return Math.max(1, Number(currentTrack.historyStage) || 1);
     const storyTracks = TRACKS_DB.filter(track => !track.alwaysUnlocked);
     const index = storyTracks.findIndex(track => track.id === currentTrack?.id);
 
@@ -149,6 +160,10 @@ function getTrackLevel() {
 // =========================================
 
 function getBotDifficultyTrack(botIndex) {
+    if (currentTrack?.isHistory) {
+        return TRACKS_DB.find(track => track.id === currentTrack.botDifficultyTrackId) || currentTrack;
+    }
+
     const storyTracks = TRACKS_DB.filter(track => !track.alwaysUnlocked);
     const currentIndex = storyTracks.findIndex(
         track => track.id === currentTrack?.id
@@ -349,7 +364,9 @@ function createObstacles() {
     );
     // Обычные ямы гарантированы на каждой сюжетной трассе и растут по уровню:
     // 3 на первой, затем +2 на каждой следующей. Генерация не зависит от удачи.
-    const pitCount = Math.min(obstacleCount, currentTrackLevel * 2 + 1);
+    const pitCount = currentTrack.isHistory
+        ? (typePool.includes('pit') ? Math.min(obstacleCount, Math.ceil(currentTrackLevel / 2)) : 0)
+        : Math.min(obstacleCount, currentTrackLevel * 2 + 1);
     const pitIndices = new Set();
     for (let pitIndex = 0; pitIndex < pitCount; pitIndex++) {
         const targetIndex = Math.round(
@@ -448,6 +465,7 @@ function getPlayerPartAbilities() {
         landingFrame: abilityIds.has('landingFrame'),
         nitroUnlocked: abilityIds.has('nitro'),
         superJumpUnlocked: abilityIds.has('superJump'),
+        noAirFlip: abilityIds.has('noAirFlip'),
         mudGrip: abilityIds.has('mudGrip'),
         impactBrake: abilityIds.has('impactBrake'),
         shieldCharges: abilityIds.has('jekyllShield') ? 1 : 0
@@ -469,17 +487,20 @@ function getBikeVisualProfile() {
     const seatpost = getEquippedPart('seatposts');
     const saddle = getEquippedPart('saddles');
     const handlebar = getEquippedPart('handlebars');
+    const stem = getEquippedPart('stems');
     const electronics = getEquippedPart('electronics'); // Добавили электронику
     const fullSuspension = frame?.visuals?.type === 'dh';
     const stability = Math.min(100,
         (Number(frame?.stability) || 0) +
         (Number(fork?.stability) || 0) +
-        (fullSuspension ? Number(shock?.stability) || 0 : 0)
+        (fullSuspension ? Number(shock?.stability) || 0 : 0) +
+        (Number(rider?.stability) || 0)
     );
     const frameTubeSize = Number(frame?.visuals?.width) || 0;
 
     return {
         riderId: rider?.id || 'r1',
+        riderVisuals: rider?.visuals || {},
         
         // --- РАМА ---
         frameColor: frame?.visuals?.color || getRarityAccent(frame?.rarity),
@@ -487,6 +508,7 @@ function getBikeVisualProfile() {
         // в Canvas матча переводим её в реальную толщину труб в пикселях.
         frameWidth: frameTubeSize ? clamp(frameTubeSize / 4, 2.5, 4) : (frame?.rarity === 'legendary' ? 3.5 : frame?.rarity === 'rare' ? 3 : 2.5),
         frameType: frame?.visuals?.type || 'normal',
+        draisine: Boolean(frame?.visuals?.specialHistoryFrame),
         fullSuspension,
         rearSuspension: Boolean(fullSuspension && shock),
         rearShockColor: shock?.visuals?.color || getRarityAccent(shock?.rarity),
@@ -504,15 +526,18 @@ function getBikeVisualProfile() {
         crankColor: crank?.visuals?.color || getRarityAccent(crank?.rarity),
         seatpostColor: seatpost?.visuals?.color || getRarityAccent(seatpost?.rarity),
         saddleColor: saddle?.visuals?.color || getRarityAccent(saddle?.rarity),
+        stemColor: stem?.visuals?.color || getRarityAccent(stem?.rarity),
         
         // --- РУЛЬ ---
         handlebarColor: handlebar?.visuals?.color || getRarityAccent(handlebar?.rarity),
         handlebarWidth: handlebar?.visuals?.width || (handlebar?.rarity === 'legendary' ? 2.4 : handlebar?.rarity === 'rare' ? 2.1 : 1.8),
         
         // --- КОЛЕСА ---
-        rimColor: wheel?.visuals?.rimColor || (wheel?.rarity === 'legendary' ? '#fbbf24' : wheel?.rarity === 'rare' ? '#38bdf8' : '#64748b'),
-        hubColor: wheel?.visuals?.hubColor || '#e2e8f0',
+        rimColor: wheel?.visuals?.rimColor || frame?.visuals?.rimColor || (wheel?.rarity === 'legendary' ? '#fbbf24' : wheel?.rarity === 'rare' ? '#38bdf8' : '#64748b'),
+        hubColor: wheel?.visuals?.hubColor || frame?.visuals?.hubColor || '#e2e8f0',
         wheelRadius: wheel?.visuals?.radius || (9.5 + Math.min(1.2, Math.max(0, Number(wheel?.speed) || 0) * 0.08)),
+        rearWheelRadius: wheel?.visuals?.rearRadius || frame?.visuals?.rearRadius || 0,
+        frontWheelRadius: wheel?.visuals?.frontRadius || frame?.visuals?.frontRadius || 0,
         tireWidth: tire?.visuals?.width || (tire?.rarity === 'legendary' ? 4.2 : tire?.rarity === 'rare' ? 3.7 : 3.2),
         
         // --- МОДИФИКАТОРЫ ---
@@ -543,6 +568,7 @@ function getBotVisualProfile(botIndex) {
         crankColor: '#e2e8f0',
         seatpostColor: '#cbd5e1',
         saddleColor: '#f8fafc',
+        stemColor: '#cbd5e1',
         handlebarColor: '#e2e8f0',
         handlebarWidth: 2,
         rimColor: botIndex === 1 ? '#fecaca' : '#e9d5ff',
@@ -627,6 +653,11 @@ function createBike(isBot = false, botIndex = 1) {
 
 function startBikeFlip(bike, direction = 1, message = 'ПЕРЕВОРОТ! Низкая стабильность') {
     if (!bike || bike.flippedTimer > 0) return false;
+    if (bike.abilities?.noAirFlip && !bike.grounded) {
+        bike.pitchVelocity = clamp(Number(bike.pitchVelocity) || 0, -0.012, 0.012);
+        bike.pitchAngle = clamp(Number(bike.pitchAngle) || 0, -1.1, 1.1);
+        return false;
+    }
     bike.flippedTimer = 74;
     bike.flipDirection = direction < 0 ? -1 : 1;
     const instability = 1 - clamp(Number(bike.stability) || 0, 0, 100) / 100;
@@ -642,6 +673,15 @@ function startBikeFlip(bike, direction = 1, message = 'ПЕРЕВОРОТ! Ни�
     if (!bike.isBot) {
         addFloatingText(bike.x, getGroundY(bike.x, 0) - 58, message, '#fb7185');
     }
+    return true;
+}
+
+function queuePlayerCrash(bike, reason) {
+    if (!bike || bike.isBot || bike.crashPending) return false;
+
+    bike.crashPending = true;
+    bike.crashReason = reason;
+    bike.crashFrames = 42;
     return true;
 }
 
@@ -665,7 +705,9 @@ function maybeFlipFromImpact(bike, impactForce, direction = 1, message = 'КОЧ
         chance += instability * 0.04;
     }
 
-    return Math.random() < chance && startBikeFlip(bike, direction, message);
+    const flipped = Math.random() < chance && startBikeFlip(bike, direction, message);
+    if (flipped) queuePlayerCrash(bike, 'stability-flip');
+    return flipped;
 }
 
 function getBikePitchInertia(bike) {
@@ -711,7 +753,7 @@ function updateBikeFlipRecovery(bike) {
     bike.velocityX = Math.max(0.2, bike.velocityX * 0.955);
 
     const stabilityRatio = clamp(Number(bike.stability) || 0, 0, 100) / 100;
-    const stillFalling = bike.flippedTimer > 36;
+    const stillFalling = Boolean(bike.crashPending) || bike.flippedTimer > 36;
     let restingAngle = 0;
     if (!stillFalling && bike.grounded) {
         const frontY = getGroundY(bike.x + 25, 0);
@@ -881,7 +923,7 @@ function updateJumpPhysics(bike) {
         bike.pitchVelocity *= 0.965 - stabilityRatio * 0.055;
         bike.pitchVelocity = clamp(bike.pitchVelocity, -0.045, 0.045);
     }
-    const pitchLimit = 2.35;
+    const pitchLimit = bike.abilities?.noAirFlip && !bike.grounded ? 1.1 : 2.35;
     bike.pitchAngle = clamp(bike.pitchAngle + bike.pitchVelocity, -pitchLimit, pitchLimit);
 
     if (bike.grounded) {
@@ -949,10 +991,7 @@ function updateJumpPhysics(bike) {
                 landingAngle < 0 ? -1 : 1,
                 'ЖЁСТКОЕ ПРИЗЕМЛЕНИЕ!'
             );
-            if (!bike.isBot) {
-                bike.hardLandingPending = true;
-                bike.hardLandingCrashFrames = 42;
-            }
+            queuePlayerCrash(bike, 'hard-landing');
         } else {
             bike.pitchVelocity *= 0.72;
             if (!bike.isBot && bike.abilities?.landingFrame && bike.landingBoostCooldown <= 0) {
@@ -1569,7 +1608,10 @@ function updateBotPhysics(bike) {
     );
 
     if (bike.grounded) {
-        bike.velocityX += baseAcceleration;
+        const legPush = bike.visuals?.draisine
+            ? 0.55 + (Math.sin(frameCounter * 0.13) + 1) * 0.38
+            : 1;
+        bike.velocityX += baseAcceleration * legPush;
     }
 
     // Соревновательный азарт: бот активнее крутит педали (драфтинг), если отстает от лидера или соперника
@@ -1742,6 +1784,13 @@ function updatePlayerCollisions() {
             }
             continue;
         }
+        if (obstacle.type === 'cobblestones' || obstacle.type === 'plank_bridge') {
+            if (playerBike.grounded) {
+                const speedFactor = obstacle.type === 'cobblestones' ? 0.78 : 0.9;
+                applyPlayerImpact(obstacle, Math.max(0.7, playerBike.velocityX * speedFactor));
+            }
+            continue;
+        }
         if (obstacle.type === 'ramp') continue;
 
         if (obstacle.type === 'rock' || obstacle.type === 'rolling_boulder') {
@@ -1756,7 +1805,7 @@ function updatePlayerCollisions() {
         }
         if (
             obstacle.type === 'log' ||
-            obstacle.type === 'barrier' || obstacle.type === 'cone' || obstacle.type === 'fallen_branch'
+            obstacle.type === 'barrier' || obstacle.type === 'wooden_gate' || obstacle.type === 'cone' || obstacle.type === 'fallen_branch'
         ) {
             const requiredJump =
                 obstacle.height + 9;
@@ -1884,6 +1933,13 @@ function updateBotCollisions(bike) {
             }
             continue;
         }
+        if (obstacle.type === 'cobblestones' || obstacle.type === 'plank_bridge') {
+            if (bike.grounded) {
+                const factor = obstacle.type === 'cobblestones' ? 0.72 : 0.9;
+                applyBotImpact(bike, obstacle, factor, 36);
+            }
+            continue;
+        }
         if (obstacle.type === 'ramp') continue;
 
         if (obstacle.type === 'rock' || obstacle.type === 'rolling_boulder') {
@@ -1905,7 +1961,7 @@ function updateBotCollisions(bike) {
         // Стало (убран obstacle.type === 'pulse_gate'):
         if (
             obstacle.type === 'log' ||
-            obstacle.type === 'barrier' || obstacle.type === 'cone' || obstacle.type === 'fallen_branch'
+            obstacle.type === 'barrier' || obstacle.type === 'wooden_gate' || obstacle.type === 'cone' || obstacle.type === 'fallen_branch'
         ) {
             if (
                 bike.jumpHeight <
@@ -2528,6 +2584,66 @@ function drawObstacle(obstacle) {
     const width = obstacle.width;
     const height = obstacle.height;
 
+    if (obstacle.type === 'cobblestones') {
+        const stoneColors = ['#8f8271', '#a29480', '#71695e', '#b0a08a'];
+        for (let i = 0; i < 6; i++) {
+            const stoneWidth = width / 7;
+            ctx.fillStyle = stoneColors[i % stoneColors.length];
+            ctx.beginPath();
+            ctx.ellipse(
+                screenX + stoneWidth * (i + 0.65),
+                groundY - 2 + (i % 2) * 1.5,
+                stoneWidth * 0.42,
+                Math.max(3, height * 0.46),
+                0,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+        }
+        return;
+    }
+
+    if (obstacle.type === 'plank_bridge') {
+        ctx.fillStyle = '#4b3020';
+        ctx.fillRect(screenX, groundY - height * 0.4, width, height * 0.8);
+        for (let i = 0; i < 6; i++) {
+            const plankX = screenX + i * width / 6;
+            ctx.fillStyle = i % 2 ? '#a97843' : '#8b5a2b';
+            ctx.fillRect(plankX + 1, groundY - height, width / 6 - 2, height * 0.64);
+            ctx.strokeStyle = '#56371f';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(plankX + 1, groundY - height, width / 6 - 2, height * 0.64);
+        }
+        ctx.strokeStyle = '#d0a166';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(screenX, groundY - height);
+        ctx.lineTo(screenX + width, groundY - height);
+        ctx.stroke();
+        return;
+    }
+
+    if (obstacle.type === 'wooden_gate') {
+        ctx.strokeStyle = '#57361f';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(screenX + 5, groundY);
+        ctx.lineTo(screenX + 5, groundY - height);
+        ctx.lineTo(screenX + width - 5, groundY - height);
+        ctx.lineTo(screenX + width - 5, groundY);
+        ctx.moveTo(screenX + 5, groundY - height * 0.5);
+        ctx.lineTo(screenX + width - 5, groundY - height * 0.5);
+        ctx.stroke();
+        ctx.strokeStyle = '#b98249';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(screenX + 8, groundY - height + 4);
+        ctx.lineTo(screenX + width - 8, groundY - height + 4);
+        ctx.stroke();
+        return;
+    }
+
     if (obstacle.type === 'mud' || obstacle.type === 'ice_patch' || obstacle.type === 'water_splash') {
         ctx.fillStyle = obstacle.color; ctx.beginPath();
         ctx.ellipse(screenX + width / 2, groundY + 1, width / 2, Math.max(5, height / 2), 0, 0, Math.PI * 2); ctx.fill();
@@ -2720,7 +2836,180 @@ function drawObstacles() {
 // ОТРИСОВКА ВЕЛОСИПЕДА
 // =========================================
 
+function drawDraisineBike(bike, label) {
+    ctx.save();
+    if (bike.isGhost) ctx.globalAlpha = 0.4;
+
+    const x = bike.x - cameraX;
+    const groundY = getGroundY(bike.x, 0);
+    const bodyY = groundY - (Number(bike.jumpHeight) || 0) - (Number(bike.rampLift) || 0);
+    const rearRadius = 17;
+    const frontRadius = 12.5;
+    const rear = { x: x - 31, y: bodyY - rearRadius + 1 };
+    const front = { x: x + 34, y: bodyY - frontRadius + 1 };
+    const travel = Number(bike.x) - (Number(bike.previousX) || Number(bike.x));
+    bike.wheelRotation = (Number(bike.wheelRotation) || 0) + travel / 17;
+    const wheelAngle = Number(bike.wheelRotation) || 0;
+
+    ctx.fillStyle = 'rgba(0,0,0,.25)';
+    ctx.beginPath();
+    ctx.ellipse(x, groundY - 1, 47, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.save();
+    ctx.translate(x, bodyY - 19);
+    ctx.rotate(Number(bike.pitchAngle) || 0);
+    ctx.translate(-x, -(bodyY - 19));
+
+    const drawWoodWheel = (wheel, radius) => {
+        ctx.save();
+        ctx.translate(wheel.x, wheel.y);
+        ctx.rotate(wheelAngle);
+        ctx.strokeStyle = '#211a14';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = '#8a6742';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius - 2, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = '#5e4a35';
+        ctx.lineWidth = 1.2;
+        for (let i = 0; i < 10; i++) {
+            const angle = i * Math.PI / 5;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(Math.cos(angle) * (radius - 3), Math.sin(angle) * (radius - 3));
+            ctx.stroke();
+        }
+        ctx.fillStyle = '#ba8a53';
+        ctx.beginPath();
+        ctx.arc(0, 0, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    };
+    drawWoodWheel(rear, rearRadius);
+    drawWoodWheel(front, frontRadius);
+
+    // Длинная резная деревянная балка, седло и рулевой рычаг без цепи и педалей.
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#3d2818';
+    ctx.lineWidth = 13;
+    ctx.beginPath();
+    ctx.moveTo(rear.x, rear.y - 1);
+    ctx.quadraticCurveTo(x - 11, bodyY - 56, x + 14, bodyY - 46);
+    ctx.lineTo(front.x, front.y - 1);
+    ctx.moveTo(rear.x, rear.y - 1);
+    ctx.lineTo(x - 15, bodyY - 18);
+    ctx.lineTo(x + 6, bodyY - 35);
+    ctx.lineTo(x + 14, bodyY - 46);
+    ctx.moveTo(x - 15, bodyY - 18);
+    ctx.lineTo(x + 7, bodyY - 17);
+    ctx.lineTo(front.x, front.y - 1);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#b88043';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.moveTo(rear.x, rear.y - 1);
+    ctx.quadraticCurveTo(x - 11, bodyY - 56, x + 14, bodyY - 46);
+    ctx.lineTo(front.x, front.y - 1);
+    ctx.stroke();
+    ctx.strokeStyle = '#d3a064';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(rear.x + 3, rear.y - 4);
+    ctx.quadraticCurveTo(x - 8, bodyY - 52, x + 15, bodyY - 44);
+    ctx.stroke();
+
+    // Руль и кожаное седло.
+    ctx.strokeStyle = '#704522';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(x + 14, bodyY - 46);
+    ctx.lineTo(x + 20, bodyY - 73);
+    ctx.lineTo(x + 35, bodyY - 73);
+    ctx.moveTo(x + 15, bodyY - 76);
+    ctx.lineTo(x + 39, bodyY - 76);
+    ctx.stroke();
+    ctx.strokeStyle = '#342319';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.moveTo(x - 26, bodyY - 71);
+    ctx.quadraticCurveTo(x - 8, bodyY - 77, x + 7, bodyY - 70);
+    ctx.stroke();
+
+    // Карл Дрез: сюртук, цилиндр и ноги, которые попеременно отталкиваются от земли.
+    const push = bike.grounded ? Math.sin(frameCounter * 0.13) : 0;
+    const hip = { x: x - 5, y: bodyY - 66 };
+    const shoulder = { x: x + 1, y: bodyY - 81 };
+    const head = { x: x + 3, y: bodyY - 91 };
+    const legNear = { knee: { x: x - 11 + push * 5, y: bodyY - 38 + Math.abs(push) * 5 }, foot: { x: x - 15 + push * 12, y: bodyY - 2 } };
+    const legFar = { knee: { x: x - 1 - push * 4, y: bodyY - 39 + Math.abs(push) * 4 }, foot: { x: x - 4 - push * 10, y: bodyY - 2 } };
+
+    ctx.strokeStyle = '#39342d';
+    ctx.lineWidth = 4.1;
+    ctx.beginPath();
+    ctx.moveTo(hip.x, hip.y);
+    ctx.lineTo(legFar.knee.x, legFar.knee.y);
+    ctx.lineTo(legFar.foot.x, legFar.foot.y);
+    ctx.stroke();
+    ctx.strokeStyle = '#554c40';
+    ctx.lineWidth = 4.4;
+    ctx.beginPath();
+    ctx.moveTo(hip.x, hip.y);
+    ctx.lineTo(legNear.knee.x, legNear.knee.y);
+    ctx.lineTo(legNear.foot.x, legNear.foot.y);
+    ctx.stroke();
+    ctx.strokeStyle = '#211a14';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.moveTo(legNear.foot.x - 2, legNear.foot.y);
+    ctx.lineTo(legNear.foot.x + 5, legNear.foot.y);
+    ctx.moveTo(legFar.foot.x - 2, legFar.foot.y);
+    ctx.lineTo(legFar.foot.x + 5, legFar.foot.y);
+    ctx.stroke();
+
+    ctx.fillStyle = '#4b3b2a';
+    ctx.beginPath();
+    ctx.moveTo(shoulder.x - 5, shoulder.y);
+    ctx.lineTo(shoulder.x + 4, shoulder.y - 1);
+    ctx.lineTo(hip.x + 5, hip.y + 2);
+    ctx.lineTo(hip.x - 5, hip.y + 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#32271c';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(shoulder.x + 2, shoulder.y + 1);
+    ctx.lineTo(x + 15, bodyY - 77);
+    ctx.lineTo(x + 34, bodyY - 75);
+    ctx.stroke();
+    ctx.fillStyle = '#d8b58b';
+    ctx.beginPath();
+    ctx.arc(head.x, head.y, 4.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#35271d';
+    ctx.fillRect(head.x - 5, head.y - 7, 10, 2.5);
+    ctx.fillRect(head.x - 3.5, head.y - 14, 7, 8);
+
+    ctx.restore();
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff7e8';
+    ctx.fillText(label, x, bodyY - 119);
+    ctx.restore();
+}
+
 function drawBike(bike, label, color) {
+    if (bike.visuals?.draisine) {
+        drawDraisineBike(bike, label);
+        return;
+    }
+
     ctx.save();
     if (bike.isGhost) {
         ctx.globalAlpha = 0.4;
@@ -2732,10 +3021,14 @@ function drawBike(bike, label, color) {
     const visuals = bike.visuals || {};
     // В каталоге радиус задан в игровых единицах; матчевую модель немного
     // увеличиваем, чтобы колёса и рама читались, а не слипались в тонкие линии.
-    const radius = clamp((Number(visuals.wheelRadius) || 9.5) * 1.24, 11.5, 15.5);
+    const rearRadius = clamp((Number(visuals.rearWheelRadius) || Number(visuals.wheelRadius) || 9.5) * 1.24, 11.5, 19.5);
+    const frontRadius = clamp((Number(visuals.frontWheelRadius) || Number(visuals.wheelRadius) || 9.5) * 1.24, 11.5, 19.5);
+    const radius = (rearRadius + frontRadius) / 2;
     const wheelY = y - radius + 1;
     const rearWheelX = x - 25;
     const frontWheelX = x + 25;
+    const rearWheelY = y - rearRadius + 1;
+    const frontWheelY = y - frontRadius + 1;
     const bottomX = x - 3;
     const bottomY = wheelY - radius * 0.42;
     const seatX = x - 10;
@@ -2779,29 +3072,29 @@ function drawBike(bike, label, color) {
     ctx.translate(-x, -(wheelY - 15));
     // -----------------------
 
-    function drawWheel(cx) {
+    function drawWheel(cx, cy, wheelRadius) {
         ctx.save();
-        ctx.translate(cx, wheelY);
+        ctx.translate(cx, cy);
         ctx.rotate(wheelAngle);
 
         const tireWidth = clamp((Number(visuals.tireWidth) || 3.2) * 1.18, 3.8, 5.2);
         ctx.strokeStyle = '#0f172a';
         ctx.lineWidth = tireWidth + 1.2;
         ctx.beginPath();
-        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.arc(0, 0, wheelRadius, 0, Math.PI * 2);
         ctx.stroke();
 
         ctx.strokeStyle = '#334155';
         ctx.lineWidth = tireWidth * 0.42;
         ctx.beginPath();
-        ctx.arc(0, 0, radius - tireWidth * 0.42, 0, Math.PI * 2);
+        ctx.arc(0, 0, wheelRadius - tireWidth * 0.42, 0, Math.PI * 2);
         ctx.stroke();
 
         // Чёткая окантовка обода и равномерные спицы вместо хаотичной сетки.
         ctx.strokeStyle = visuals.rimColor || '#64748b';
         ctx.lineWidth = 1.55;
         ctx.beginPath();
-        ctx.arc(0, 0, radius * 0.76, 0, Math.PI * 2);
+        ctx.arc(0, 0, wheelRadius * 0.76, 0, Math.PI * 2);
         ctx.stroke();
         ctx.strokeStyle = 'rgba(203,213,225,0.82)';
         ctx.lineWidth = 0.85;
@@ -2809,7 +3102,7 @@ function drawBike(bike, label, color) {
         for (let i = 0; i < 10; i++) {
             const angle = i * Math.PI / 5;
             ctx.moveTo(0, 0);
-            ctx.lineTo(Math.cos(angle) * radius * 0.72, Math.sin(angle) * radius * 0.72);
+            ctx.lineTo(Math.cos(angle) * wheelRadius * 0.72, Math.sin(angle) * wheelRadius * 0.72);
         }
         ctx.stroke();
 
@@ -2819,8 +3112,8 @@ function drawBike(bike, label, color) {
         ctx.beginPath();
         for (let i = 0; i < 18; i++) {
             const angle = i * Math.PI / 9;
-            const inner = radius - tireWidth * 0.36;
-            const outer = radius + tireWidth * 0.34;
+            const inner = wheelRadius - tireWidth * 0.36;
+            const outer = wheelRadius + tireWidth * 0.34;
             ctx.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
             ctx.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer);
         }
@@ -2839,21 +3132,21 @@ function drawBike(bike, label, color) {
             ctx.strokeStyle = 'rgba(148,163,184,0.9)';
             ctx.lineWidth = 1.15;
             ctx.beginPath();
-            ctx.arc(0, 0, radius * 0.43, 0, Math.PI * 2);
+            ctx.arc(0, 0, wheelRadius * 0.43, 0, Math.PI * 2);
             ctx.stroke();
             ctx.fillStyle = '#0f172a';
             for (let i = 0; i < 6; i++) {
                 const angle = i * Math.PI / 3;
                 ctx.beginPath();
-                ctx.arc(Math.cos(angle) * radius * 0.43, Math.sin(angle) * radius * 0.43, 0.7, 0, Math.PI * 2);
+                ctx.arc(Math.cos(angle) * wheelRadius * 0.43, Math.sin(angle) * wheelRadius * 0.43, 0.7, 0, Math.PI * 2);
                 ctx.fill();
             }
         }
         ctx.restore();
     }
 
-    drawWheel(rearWheelX);
-    drawWheel(frontWheelX);
+    drawWheel(rearWheelX, rearWheelY, rearRadius);
+    drawWheel(frontWheelX, frontWheelY, frontRadius);
 
     if (!bike.isBot && input.braking && bike.hasBrakes && bike.velocityX > 0.15) {
         ctx.save();
@@ -2861,7 +3154,7 @@ function drawBike(bike, label, color) {
         ctx.shadowBlur = 10;
         ctx.fillStyle = '#fb384f';
         ctx.beginPath();
-        ctx.arc(rearWheelX, wheelY, radius * 0.34, 0, Math.PI * 2);
+        ctx.arc(rearWheelX, rearWheelY, rearRadius * 0.34, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
     }
@@ -2899,19 +3192,19 @@ function drawBike(bike, label, color) {
         drawTube(seatX, wheelY - 27, headX, wheelY - 19);
         drawTube(headX, wheelY - 19, bottomX, bottomY);
     } else {
-        drawTube(rearWheelX, wheelY, bottomX, bottomY);
+        drawTube(rearWheelX, rearWheelY, bottomX, bottomY);
         drawTube(bottomX, bottomY, seatX, wheelY - 27);
-        drawTube(seatX, wheelY - 27, rearWheelX, wheelY);
+        drawTube(seatX, wheelY - 27, rearWheelX, rearWheelY);
         drawTube(seatX, wheelY - 27, headX, wheelY - 19);
         drawTube(headX, wheelY - 19, bottomX, bottomY);
     }
 
     if (visuals.fullSuspension) {
-        const swingPivot = { x: rearWheelX + 11, y: wheelY - 4 };
+        const swingPivot = { x: rearWheelX + 11, y: rearWheelY - 4 };
         const rocker = { x: seatX - 7, y: wheelY - 15 };
-        drawTube(rearWheelX, wheelY, swingPivot.x, swingPivot.y, frameColor, frameWidth * 0.8);
+        drawTube(rearWheelX, rearWheelY, swingPivot.x, swingPivot.y, frameColor, frameWidth * 0.8);
         drawTube(swingPivot.x, swingPivot.y, bottomX, bottomY, frameColor, frameWidth * 0.8);
-        drawTube(rearWheelX, wheelY, rocker.x, rocker.y, frameColor, frameWidth * 0.8);
+        drawTube(rearWheelX, rearWheelY, rocker.x, rocker.y, frameColor, frameWidth * 0.8);
         drawTube(rocker.x, rocker.y, seatX, wheelY - 27, frameColor, frameWidth * 0.8);
         drawTube(rocker.x, rocker.y, swingPivot.x, swingPivot.y, frameColor, frameWidth * 0.8);
         ctx.fillStyle = '#e2e8f0';
@@ -2952,34 +3245,34 @@ function drawBike(bike, label, color) {
 
     // Вилка начинается у рулевого стакана и доходит до оси переднего колеса.
     // Раньше верхняя точка была сдвинута вправо, из-за чего вилка выглядела отдельной деталью.
-    drawTube(headX + 1, wheelY - 19, frontWheelX - 1, wheelY, visuals.forkColor || '#cbd5e1', 4);
+    drawTube(headX + 1, wheelY - 19, frontWheelX - 1, frontWheelY, visuals.forkColor || '#cbd5e1', 4);
     if (visuals.suspension) {
         const forkCompression = bike.frontCompression || 0;
-        drawTube(headX + 3, wheelY - 17, frontWheelX - 3, wheelY - 5 + forkCompression * 0.35, '#fbbf24', 1.5);
+        drawTube(headX + 3, wheelY - 17, frontWheelX - 3, frontWheelY - 5 + forkCompression * 0.35, '#fbbf24', 1.5);
     }
 
     ctx.strokeStyle = visuals.gearColor || '#94a3b8';
     ctx.lineWidth = 0.8;
     for (const gearRadius of [2.4, 3.4, 4.2]) {
         ctx.beginPath();
-        ctx.arc(rearWheelX, wheelY, gearRadius, 0, Math.PI * 2);
+        ctx.arc(rearWheelX, rearWheelY, gearRadius, 0, Math.PI * 2);
         ctx.stroke();
     }
     ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.moveTo(rearWheelX + 1, wheelY + 3);
-    ctx.lineTo(rearWheelX + 5, wheelY + 7);
-    ctx.lineTo(rearWheelX + 9, wheelY + 4);
-    ctx.arc(rearWheelX + 9, wheelY + 2, 2, 0.5, Math.PI * 1.5);
+    ctx.moveTo(rearWheelX + 1, rearWheelY + 3);
+    ctx.lineTo(rearWheelX + 5, rearWheelY + 7);
+    ctx.lineTo(rearWheelX + 9, rearWheelY + 4);
+    ctx.arc(rearWheelX + 9, rearWheelY + 2, 2, 0.5, Math.PI * 1.5);
     ctx.stroke();
 
     ctx.strokeStyle = visuals.chainColor || '#cbd5e1';
     ctx.lineWidth = 1.3;
     ctx.beginPath();
-    ctx.moveTo(rearWheelX + 3, wheelY - 2.6);
+    ctx.moveTo(rearWheelX + 3, rearWheelY - 2.6);
     ctx.lineTo(bottomX - 4, bottomY - 3.5);
     ctx.moveTo(bottomX - 4, bottomY + 3.5);
-    ctx.lineTo(rearWheelX + 3, wheelY + 2.6);
+    ctx.lineTo(rearWheelX + 3, rearWheelY + 2.6);
     ctx.arc(bottomX, bottomY, 4.5, 0, Math.PI * 2);
     ctx.stroke();
 
@@ -3034,8 +3327,8 @@ function drawBike(bike, label, color) {
     const kneeA = { x: (hip.x + leftPedal.x) / 2 + 3, y: (hip.y + leftPedal.y) / 2 - 3 };
     const kneeB = { x: (hip.x + rightPedal.x) / 2 - 3, y: (hip.y + rightPedal.y) / 2 - 3 };
 
-    const riderFallProgress = !bike.isBot && bike.hardLandingPending
-        ? clamp(1 - (Number(bike.hardLandingCrashFrames) || 0) / 42, 0, 1)
+    const riderFallProgress = !bike.isBot && bike.crashPending
+        ? clamp(1 - (Number(bike.crashFrames) || 0) / 42, 0, 1)
         : 0;
     ctx.save();
     if (riderFallProgress > 0) {
@@ -3082,6 +3375,11 @@ function drawBike(bike, label, color) {
             jersey = '#18181b';
             helmetColor = '#d97706';
             pantsColor = '#09090b';
+        } else if (riderId === 'r6') {
+            // Карл Дрез: тёмный сюртук, жилет и цилиндр начала XIX века.
+            jersey = visuals.riderVisuals?.jerseyColor || '#6b4d31';
+            helmetColor = visuals.riderVisuals?.hatColor || '#30251e';
+            pantsColor = visuals.riderVisuals?.pantsColor || '#332c24';
         }
     }
 
@@ -3163,6 +3461,14 @@ function drawBike(bike, label, color) {
             ctx.moveTo(shoulder.x - 2, shoulder.y + 1);
             ctx.lineTo(hip.x + 1, hip.y);
             ctx.stroke();
+        } else if (riderId === 'r6') {
+            // Светлая линия жилета делает исторический костюм читаемым в масштабе гонки.
+            ctx.strokeStyle = '#c6a06b';
+            ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            ctx.moveTo(shoulder.x, shoulder.y + 1);
+            ctx.lineTo(hip.x, hip.y);
+            ctx.stroke();
         }
     }
 
@@ -3217,6 +3523,11 @@ function drawBike(bike, label, color) {
         ctx.fill();
         ctx.fillStyle = '#0f172a'; // черный зеркальный визор
         ctx.fillRect(head.x - 0.5, head.y - 2.5, 5, 2.8);
+    } else if (!bike.isBot && riderId === 'r6') {
+        // Небольшой цилиндр вместо современного шлема.
+        ctx.fillStyle = visuals.riderVisuals?.hatColor || '#30251e';
+        ctx.fillRect(head.x - 4.5, head.y - 2.6, 9, 2.2);
+        ctx.fillRect(head.x - 3.1, head.y - 8.2, 6.2, 6);
     } else {
         // Стандартный велошлем или каска
         ctx.beginPath();
@@ -3232,11 +3543,17 @@ function drawBike(bike, label, color) {
 
     ctx.restore(); // Райдер отделяется от рамы при падении.
 
-    ctx.strokeStyle = visuals.handlebarColor || '#f8fafc';
-    ctx.lineWidth = visuals.handlebarWidth || 2;
+    ctx.strokeStyle = visuals.stemColor || visuals.handlebarColor || '#f8fafc';
+    ctx.lineWidth = Math.max(2.2, (visuals.handlebarWidth || 2) + 0.4);
     ctx.beginPath();
     ctx.moveTo(headX, wheelY - 19);
     ctx.lineTo(headX + 2, wheelY - 35);
+    ctx.stroke();
+
+    ctx.strokeStyle = visuals.handlebarColor || '#f8fafc';
+    ctx.lineWidth = visuals.handlebarWidth || 2;
+    ctx.beginPath();
+    ctx.moveTo(headX + 2, wheelY - 35);
     ctx.lineTo(headX + 14, wheelY - 35);
     ctx.moveTo(headX - 3, wheelY - 37);
     ctx.lineTo(headX + 19, wheelY - 37);
@@ -3298,6 +3615,25 @@ function drawBike(bike, label, color) {
 }
 
 function drawRaceHUD() {
+    if (currentTrack?.isHistory) {
+        ctx.save();
+        const badgeWidth = Math.min(270, Math.max(185, viewWidth * 0.46));
+        ctx.fillStyle = 'rgba(31, 24, 18, .78)';
+        ctx.strokeStyle = 'rgba(230, 180, 108, .7)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        if (typeof ctx.roundRect === 'function') ctx.roundRect(12, 12, badgeWidth, 34, 8);
+        else ctx.rect(12, 12, badgeWidth, 34);
+        ctx.fill();
+        ctx.stroke();
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#f2d5a5';
+        ctx.font = '900 11px Arial';
+        ctx.fillText(`ИСТОРИЯ · ${currentTrack.historyStage}/5 · ${currentTrack.year}`, 22, 29);
+        ctx.restore();
+    }
+
     if (currentTrack?.id === 'sprint') {
         ctx.save();
         ctx.textAlign = 'center';
@@ -3347,20 +3683,22 @@ function drawRaceHUD() {
     const mobileLayout =
     window.matchMedia('(max-width: 768px)').matches ||
     window.matchMedia('(pointer: coarse)').matches;
+    const landscapePhone = mobileLayout &&
+        window.matchMedia('(orientation: landscape) and (max-height: 600px)').matches;
     const uiScale = mobileLayout ? 1 / getCameraZoom() : 1;
     const panelWidth = mobileLayout
-        ? Math.min(390 * uiScale, viewWidth - 20 * uiScale)
+        ? Math.min((landscapePhone ? 360 : 390) * uiScale, viewWidth - 20 * uiScale)
         : Math.min(390, viewWidth - 28);
-    const rowHeight = mobileLayout ? 29 * uiScale : 19;
+    const rowHeight = mobileLayout ? (landscapePhone ? 22 : 29) * uiScale : 19;
     const panelHeight = mobileLayout
-        ? (42 + racers.length * 29) * uiScale
+        ? ((landscapePhone ? 28 : 42) + racers.length * (landscapePhone ? 22 : 29)) * uiScale
         : 35 + racers.length * rowHeight;
     const panelX = mobileLayout ? 12 * uiScale : 14;
-    const panelY = mobileLayout ? 52 * uiScale : 12;
+    const panelY = mobileLayout ? (landscapePhone ? 32 : 52) * uiScale : 12;
     const pad = mobileLayout ? 11 * uiScale : 11;
-    const titleHeight = mobileLayout ? 24 * uiScale : 18;
-    const rowOffset = mobileLayout ? 34 * uiScale : 31;
-    const rowBarHeight = mobileLayout ? 11 * uiScale : 7;
+    const titleHeight = mobileLayout ? (landscapePhone ? 18 : 24) * uiScale : 18;
+    const rowOffset = mobileLayout ? (landscapePhone ? 22 : 34) * uiScale : 31;
+    const rowBarHeight = mobileLayout ? (landscapePhone ? 8 : 11) * uiScale : 7;
 
     ctx.fillStyle = mobileLayout ? 'rgba(15,23,42,0.94)' : 'rgba(15,23,42,0.84)';
     ctx.strokeStyle = 'rgba(148,163,184,0.42)';
@@ -3374,7 +3712,7 @@ function drawRaceHUD() {
     );
     if (mobileLayout) ctx.strokeRect(panelX, panelY, panelWidth, panelHeight);
 
-    ctx.font = `bold ${mobileLayout ? 15 * uiScale : 13}px Arial`;
+    ctx.font = `bold ${mobileLayout ? (landscapePhone ? 12 : 15) * uiScale : 13}px Arial`;
     ctx.textAlign = 'left';
     ctx.fillStyle = '#e2e8f0';
 
@@ -3384,13 +3722,13 @@ function drawRaceHUD() {
         panelY + titleHeight
     );
 
-    const labelWidth = mobileLayout ? Math.min(105 * uiScale, panelWidth * 0.34) : 53;
-    const percentWidth = mobileLayout ? 42 * uiScale : 38;
+    const labelWidth = mobileLayout ? Math.min((landscapePhone ? 88 : 105) * uiScale, panelWidth * 0.34) : 53;
+    const percentWidth = mobileLayout ? (landscapePhone ? 36 : 42) * uiScale : 38;
 
     const barX = panelX + pad + labelWidth;
 
     const barWidth = Math.max(
-        mobileLayout ? 70 * uiScale : 55,
+        mobileLayout ? (landscapePhone ? 60 : 70) * uiScale : 55,
         panelWidth - labelWidth - percentWidth - (mobileLayout ? 24 * uiScale : 24)
     );
 
@@ -3403,7 +3741,7 @@ function drawRaceHUD() {
 
         const y = panelY + rowOffset + index * rowHeight;
 
-        ctx.font = `bold ${mobileLayout ? 13 * uiScale : 10}px Arial`;
+        ctx.font = `bold ${mobileLayout ? (landscapePhone ? 11 : 13) * uiScale : 10}px Arial`;
         ctx.textAlign = 'left';
         ctx.fillStyle = racer.color;
 
@@ -3547,15 +3885,15 @@ function render() {
 function update() {
     if (!raceRunning || raceFinished) return;
 
-    if (playerBike?.hardLandingPending) {
+    if (playerBike?.crashPending) {
         frameCounter++;
         updateBikeFlipRecovery(playerBike);
-        playerBike.hardLandingCrashFrames = Math.max(
+        playerBike.crashFrames = Math.max(
             0,
-            (Number(playerBike.hardLandingCrashFrames) || 0) - 1
+            (Number(playerBike.crashFrames) || 0) - 1
         );
-        if (playerBike.hardLandingCrashFrames === 0) {
-            finishRace(false, 'hard-landing');
+        if (playerBike.crashFrames === 0) {
+            finishRace(false, playerBike.crashReason || 'hard-landing');
         }
         return;
     }
@@ -3743,7 +4081,7 @@ export function initRace(onRaceEnd) {
 
     callbackOnRaceEnd = onRaceEnd;
 
-    currentTrack = TRACKS_DB.find(
+    currentTrack = [...TRACKS_DB, ...HISTORY_TRACKS_DB].find(
         track => track.id === player.selectedTrack
     ) || TRACKS_DB[0];
 
@@ -3801,7 +4139,24 @@ export function initRace(onRaceEnd) {
         }
     } else {
         botBike = createBike(true, 1);
-        additionalBots = currentTrackLevel >= 2
+        if (currentTrack.isHistory) {
+            botBike.displayName = currentTrack.opponent || 'Макс';
+            botBike.abilities = { nitroUnlocked: false, superJumpUnlocked: false, shieldCharges: 0 };
+            if (currentTrack.historyStage === 5) {
+                botBike.color = '#8b5a2b';
+                botBike.visuals = {
+                    ...botBike.visuals,
+                    draisine: true,
+                    frameColor: '#9a6538',
+                    rimColor: '#704522',
+                    hubColor: '#c4965d',
+                    wheelRadius: 13,
+                    rearWheelRadius: 15,
+                    frontWheelRadius: 12
+                };
+            }
+        }
+        additionalBots = !currentTrack.isHistory && currentTrackLevel >= 2
             ? [createBike(true, 2)]
             : [];
         activeBots = [botBike, ...additionalBots];
@@ -3832,6 +4187,10 @@ export function initRace(onRaceEnd) {
             'resize',
             resizeCanvas
         );
+        window.addEventListener('orientationchange', () => {
+            window.setTimeout(resizeCanvas, 140);
+        }, { passive: true });
+        window.visualViewport?.addEventListener('resize', resizeCanvas, { passive: true });
 
         resizeHandlerAttached = true;
     }

@@ -1,4 +1,4 @@
-import { clamp } from './utils.js?v=89';
+import { clamp } from './utils.js?v=94';
 
 const AUDIO_STORAGE_KEY = 'velorider_audio_settings_v9';
 
@@ -84,7 +84,7 @@ function updateBgmVolume() {
 function playBgm(sceneName) {
     if (!enabled || !audioUnlocked) return;
 
-    const trackName = /^t\d+$/.test(sceneName) ? sceneName : 'garage';
+    const trackName = /^(?:t\d+|1h[1-5])$/.test(sceneName) ? sceneName : 'garage';
     const fileName = `music/${trackName}.mp3`;
 
     // Если этот же трек уже играет и не на паузе — не дергаем лишний раз

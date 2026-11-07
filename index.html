@@ -42,14 +42,22 @@
     <script src="https://cdn.tailwindcss.com"></script>
 
 
-    <link rel="stylesheet" href="style.css?v=89">
-    <link rel="stylesheet" href="garage.css?v=89">
-    <link rel="stylesheet" href="tracks-overrides.css?v=89">
-    <link rel="stylesheet" href="mobile-fix.css?v=89">
+    <link rel="stylesheet" href="style.css?v=94">
+    <link rel="stylesheet" href="garage.css?v=94">
+    <link rel="stylesheet" href="tracks-overrides.css?v=94">
+    <link rel="stylesheet" href="mobile-fix.css?v=94">
 </head>
 
 
-<body data-game-build="89" class="bg-gray-900 text-white font-sans h-screen flex flex-col select-none overflow-hidden">
+<body data-game-build="94" class="bg-gray-900 text-white font-sans h-screen flex flex-col select-none overflow-hidden">
+
+<div id="mobile-orientation-prompt" class="hidden" role="status" aria-live="polite">
+    <div class="race-orientation-prompt__card">
+        <span class="race-orientation-prompt__icon" aria-hidden="true">↻</span>
+        <strong>Поверни телефон горизонтально</strong>
+        <span>Так гараж, магазин, трассы и гонка удобнее помещаются на экране.</span>
+    </div>
+</div>
 
 
 <!-- =====================================
@@ -64,9 +72,9 @@
 
         <span>VELO<span class="text-white">RIDER</span></span>
 
-        <span id="game-version-badge" title="Версия игры: сборка 85" aria-label="Версия игры: сборка 85" class="not-italic inline-flex items-center gap-1 rounded-md border border-emerald-400/25 bg-emerald-950/70 px-1.5 py-1 text-[9px] font-black leading-none tracking-wide text-emerald-200">
+        <span id="game-version-badge" title="Версия игры: сборка 94" aria-label="Версия игры: сборка 94" class="not-italic inline-flex items-center gap-1 rounded-md border border-emerald-400/25 bg-emerald-950/70 px-1.5 py-1 text-[9px] font-black leading-none tracking-wide text-emerald-200">
             <span aria-hidden="true">🏷️</span>
-            <span data-game-version-label>BUILD 89</span>
+            <span data-game-version-label>BUILD 94</span>
         </span>
 
     </div>
@@ -221,6 +229,14 @@
 
             В ГОНКУ
 
+        </button>
+
+        <button
+            onclick="showScreen('history')"
+            title="История велосипеда"
+            class="nav-btn bg-amber-900/70 hover:bg-amber-800 active:bg-amber-700 p-4 rounded-xl text-center w-full transition duration-200 flex items-center justify-center gap-2 font-bold border border-amber-700/70">
+            <span class="text-xl" aria-hidden="true">📜</span>
+            История
         </button>
 
 
@@ -681,12 +697,60 @@
                  ЭКРАН ГОНКИ
             ================================== -->
 
+            <section id="screen-history" class="screen history-screen hidden flex flex-col h-full" aria-labelledby="history-title">
+                <div class="history-scroll">
+                    <div class="history-hero">
+                        <div class="history-hero__copy">
+                            <span class="history-kicker">ИСТОРИЯ ВЕЛОСИПЕДА · ГЛАВА I</span>
+                            <h2 id="history-title">Машина для бега</h2>
+                            <p>Пройди путь от первых пробных поездок Карла фон Дреза до парижского показа его необычного двухколёсного изобретения.</p>
+                            <div class="history-year">1817 <span>—</span> 1818</div>
+                        </div>
+                        <div class="history-hero__machine" role="img" aria-label="Деревянная Laufmaschine с большим задним колесом">
+                            <svg viewBox="0 0 420 210" aria-hidden="true">
+                                <defs>
+                                    <linearGradient id="history-wood" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#c89152"/><stop offset="1" stop-color="#704522"/></linearGradient>
+                                    <linearGradient id="history-iron" x1="0" x2="1"><stop offset="0" stop-color="#3b3024"/><stop offset=".5" stop-color="#a98959"/><stop offset="1" stop-color="#302820"/></linearGradient>
+                                </defs>
+                                <ellipse cx="210" cy="184" rx="175" ry="10" fill="#1a120d" opacity=".45"/>
+                                <g fill="none" stroke="url(#history-iron)" stroke-width="5">
+                                    <circle cx="96" cy="145" r="56"/><circle cx="319" cy="145" r="42"/>
+                                    <circle cx="96" cy="145" r="4" fill="#6a4628"/><circle cx="319" cy="145" r="4" fill="#6a4628"/>
+                                    <path d="M96 145L96 89M96 145L54 109M96 145L139 107M96 145L151 146M96 145L137 184M96 145L55 182M319 145L319 103M319 145L286 116M319 145L351 117M319 145L360 145M319 145L348 174M319 145L289 174" stroke-width="2"/>
+                                </g>
+                                <path d="M96 141 Q144 76 203 87 L279 98 Q299 101 319 143 L284 134 Q263 116 234 118 L175 114 Q135 113 96 141Z" fill="url(#history-wood)" stroke="#4b2e18" stroke-width="5" stroke-linejoin="round"/>
+                                <path d="M202 88L196 60L213 43M185 42L218 42" fill="none" stroke="#704522" stroke-width="7" stroke-linecap="round"/>
+                                <path d="M156 65 Q181 55 205 63" fill="none" stroke="#3f2d20" stroke-width="11" stroke-linecap="round"/>
+                                <path d="M96 145L158 144M158 144L199 91M199 91L281 102M281 102L319 145" fill="none" stroke="#d0a166" stroke-width="3" opacity=".7"/>
+                                <circle cx="199" cy="91" r="5" fill="#e8c487"/>
+                            </svg>
+                            <span>1817 ГОД · ДЕРЕВЯННЫЙ ПРОТОТИП БЕЗ ПЕДАЛЕЙ</span>
+                        </div>
+                    </div>
+
+                    <section class="history-story-card">
+                        <div class="history-story-card__date"><span>6</span><strong>АПРЕЛЯ<br>1818</strong></div>
+                        <div>
+                            <h3>Париж знакомится с Laufmaschine</h3>
+                            <p>В апреле 1818 года в Париже публике показали двухколёсную машину Карла фон Дреза. Это была не первая поездка изобретения: годом раньше Дрез уже испытывал его в окрестностях Мангейма. Парижская демонстрация помогла новой идее стать известной за пределами Бадена.</p>
+                            <p>Рама была деревянной, переднее колесо поворачивалось рулём, а ездок сидел верхом. Педалей ещё не существовало: разгонялись, поочерёдно отталкиваясь ногами. На ровной дороге ранняя машина могла проходить около 14 километров за час.</p>
+                            <small>В публикациях встречаются 5 и 6 апреля как дата парижского показа; первая известная публичная поездка Дреза состоялась в Мангейме в июне 1817 года.</small>
+                        </div>
+                    </section>
+
+                    <div class="history-stage-heading">
+                        <div><span class="history-kicker">ПЯТЬ ЗАЕЗДОВ · ПЯТЬ НАГРАД</span><h3>Путь машины Дреза</h3></div>
+                        <span id="history-progress-label">0 / 5 этапов</span>
+                    </div>
+                    <div id="history-stage-list" class="history-stage-grid" aria-label="Этапы истории велосипеда"></div>
+                    <p class="history-reward-note">Специальные детали нельзя купить или выбить из контейнеров. Каждую награду за победу можно получить один раз, а гонки — переигрывать.</p>
+                </div>
+            </section>
+
 
             <div 
                 id="screen-race" 
                 class="screen hidden flex flex-col h-full gap-4">
-
-
 
                 <div 
                     class="flex-1 min-h-0 bg-gray-900 rounded-2xl relative overflow-hidden border-2 border-gray-700 shadow-2xl">
@@ -707,9 +771,9 @@
                         <strong class="sprint-reward-countdown block mt-0.5 tabular-nums">Сверяю время…</strong>
                     </div>
 
-                    <div id="game-version-race" aria-label="Версия игры: сборка 85" class="absolute bottom-2 right-2 z-10 flex pointer-events-none items-center gap-1 rounded-md border border-emerald-300/20 bg-slate-950/75 px-1.5 py-1 text-[9px] font-black tracking-wide text-emerald-100 md:hidden">
+                    <div id="game-version-race" aria-label="Версия игры: сборка 94" class="absolute bottom-2 right-2 z-10 flex pointer-events-none items-center gap-1 rounded-md border border-emerald-300/20 bg-slate-950/75 px-1.5 py-1 text-[9px] font-black tracking-wide text-emerald-100 md:hidden">
                         <span aria-hidden="true">🏷️</span>
-                        <span data-game-version-label>BUILD 89</span>
+                        <span data-game-version-label>BUILD 94</span>
                     </div>
 
                     <!-- === НОВАЯ КНОПКА ВЫХОДА (ПОВЕРХ ХОЛСТА) === -->
@@ -982,7 +1046,7 @@
     ====================================== -->
 
 
-    <script type="module" src="main.js?v=89"></script>
+    <script type="module" src="main.js?v=94"></script>
 
 
 

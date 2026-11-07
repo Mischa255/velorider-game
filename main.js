@@ -1,4 +1,4 @@
-import { ITEMS_DB, TRACKS_DB, CONTAINERS_DB } from './db.js?v=89';
+import { ITEMS_DB, TRACKS_DB, HISTORY_TRACKS_DB, CONTAINERS_DB } from './db.js?v=94';
 import {
     player,
     loadPlayerState,
@@ -6,24 +6,24 @@ import {
     clearSavedProgress,
     forceSavePlayerState,
     getServerTime
-} from './state.js?v=89';
+} from './state.js?v=94';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=89';
+} from './race.js?v=94';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=89';
-import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=89';
+} from './audio.js?v=94';
+import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=94';
 
 function renderGameVersionBadge() {
-    const build = document.body?.dataset.gameBuild || '85';
+    const build = document.body?.dataset.gameBuild || '94';
     document.querySelectorAll('[data-game-version-label]').forEach(label => {
         label.textContent = `BUILD ${build}`;
     });
@@ -177,7 +177,8 @@ const CATEGORY_ICONS = {
 const RARITY_NAMES = {
     common: 'Обычная',
     rare: 'Редкая',
-    legendary: 'Легендарная'
+    legendary: 'Легендарная',
+    special: 'Специальная'
 };
 
 const TRACK_ICONS = {
@@ -617,6 +618,8 @@ function normalizePlayerState() {
     if (!Array.isArray(player.unlockedTracks)) player.unlockedTracks = ['t1'];
     if (!Array.isArray(player.completedTracks)) player.completedTracks = [];
     if (!Array.isArray(player.trackRewardsClaimed)) player.trackRewardsClaimed = [];
+    if (!Array.isArray(player.historyUnlockedStages)) player.historyUnlockedStages = ['h1'];
+    if (!Array.isArray(player.historyCompletedStages)) player.historyCompletedStages = [];
     player.track4BonusClaimed = Boolean(player.track4BonusClaimed);
 
     if (!Array.isArray(player.unlockedComponentRarities)) {
@@ -729,6 +732,9 @@ function syncProgression() {
 }
 
 function getRarityRequirement(rarity) {
+    if (rarity === 'special') {
+        return 'Награда за прохождение исторических этапов. Нельзя купить или получить из контейнера.';
+    }
     if (rarity === 'rare') {
         const track = TRACKS_DB.find(item => item.id === 't2');
         return track
@@ -760,8 +766,68 @@ function canPlayTrack(trackId) {
     return true;
 }
 
+let mobileFullscreenProvider = '';
+
+function enterMobileLandscape() {
+    if (!window.matchMedia('(max-width: 900px) and (pointer: coarse)').matches) return;
+
+    const lockLandscape = () => {
+        try {
+            const orientation = window.screen?.orientation;
+            const lockResult = orientation?.lock?.('landscape');
+            if (lockResult && typeof lockResult.catch === 'function') lockResult.catch(() => {});
+        } catch (error) {
+            // Некоторые мобильные браузеры не разрешают блокировать ориентацию.
+        }
+    };
+    const finishFullscreenEntry = provider => {
+        mobileFullscreenProvider = provider;
+        lockLandscape();
+    };
+
+    if (document.fullscreenElement || mobileFullscreenProvider) {
+        lockLandscape();
+        return;
+    }
+
+    const requestBrowserFullscreen = () => {
+        if (typeof document.documentElement.requestFullscreen !== 'function') {
+            lockLandscape();
+            return;
+        }
+
+        try {
+            Promise.resolve(document.documentElement.requestFullscreen({ navigationUI: 'hide' })).then(() => {
+                finishFullscreenEntry('browser');
+            }).catch(lockLandscape);
+        } catch (error) {
+            lockLandscape();
+        }
+    };
+
+    const telegramApp = window.Telegram?.WebApp;
+    if (telegramApp?.isFullscreen) {
+        lockLandscape();
+        return;
+    }
+
+    if (typeof telegramApp?.requestFullscreen === 'function') {
+        try {
+            Promise.resolve(telegramApp.requestFullscreen()).then(() => {
+                finishFullscreenEntry('telegram');
+            }).catch(requestBrowserFullscreen);
+            return;
+        } catch (error) {
+            // Продолжаем с обычным полноэкранным API или подсказкой поворота.
+        }
+    }
+
+    requestBrowserFullscreen();
+}
+
 function showScreen(screenName) {
-    const selectedTrack = TRACKS_DB.find(track => track.id === player.selectedTrack);
+    const selectedTrack = [...TRACKS_DB, ...HISTORY_TRACKS_DB]
+        .find(track => track.id === player.selectedTrack);
     setAudioScene(
         screenName === 'race'
             ? (selectedTrack?.musicTheme || player.selectedTrack || 'race')
@@ -785,9 +851,12 @@ function showScreen(screenName) {
 
     if (screenName === 'upgrade') updateUpgradeUI();
     if (screenName === 'tracks') updateTracksUI();
+    if (screenName === 'history') updateHistoryUI();
     if (screenName === 'shop') {
         renderContainerShop();
     }
+
+    enterMobileLandscape();
 
     if (screenName === 'race') {
         document.getElementById('race-ui')?.classList.add('hidden');
@@ -1013,7 +1082,7 @@ function getPartStatsHTML(part) {
 function getPartInfoHTML(category, part) {
     const ability = part.ability;
     const description = typeof ability === 'string' ? ability : ability?.description;
-    if (part.rarity !== 'legendary' || !description) return '';
+    if (!['legendary', 'special'].includes(part.rarity) || !description) return '';
 
     return `
         <div class="upgrade-part-info">
@@ -1497,7 +1566,11 @@ function updateUpgradeUI() {
     categoryItems.forEach(part => {
         const owned = hasPart(category, part.id);
         const equipped = player.equipped?.[category] === part.id;
-        const unlocked = category === 'riders' ? true : isRarityUnlocked(part.rarity);
+        const unlocked = part.rarity === 'special'
+            ? owned
+            : category === 'riders'
+                ? true
+                : isRarityUnlocked(part.rarity);
         const price = getUpgradePrice(part);
         const abilityName = typeof part.ability === 'string'
             ? part.ability
@@ -1515,6 +1588,7 @@ function updateUpgradeUI() {
         const card = document.createElement('div');
         card.className =
             'relative bg-gray-900 border border-gray-700 rounded-xl p-4 flex flex-col gap-3';
+        card.classList.toggle('upgrade-part-card--special', part.rarity === 'special');
 
         const statsHTML = `
             <div class="garage-part-stats">
@@ -1676,6 +1750,11 @@ function buyPart(category, id) {
     const part = ITEMS_DB[category]?.find(item => item.id === id);
     if (!part) return;
 
+    if (part.rarity === 'special') {
+        alert('Специальные детали выдаются только за прохождение исторических этапов.');
+        return;
+    }
+
     if (hasPart(category, id)) {
         alert('Этот предмет уже есть в инвентаре!');
         return;
@@ -1747,6 +1826,11 @@ function buyAndReplacePart(category, id) {
         return;
     }
 
+    if (part.rarity === 'special') {
+        alert('Специальные детали выдаются только за прохождение исторических этапов.');
+        return;
+    }
+
     if (isCouponPurchaseItem(part)) {
         if (part.rarity === 'legendary' && category !== 'riders' && !isRarityUnlocked('legendary')) {
             alert('Сначала открой легендарную редкость победой на трассе!');
@@ -1812,7 +1896,7 @@ function installPart(category, id) {
         return;
     }
 
-    if (!isRarityUnlocked(part.rarity)) {
+    if (part.rarity !== 'special' && !isRarityUnlocked(part.rarity)) {
         alert('Эта редкость ещё не открыта!');
         return;
     }
@@ -1967,7 +2051,7 @@ function updateTracksUI() {
                                 <strong>+${lossReward.toLocaleString('ru-RU')} 🪙</strong>
                             </div>
                             <div class="track-reward">
-                                <span>Яма / жёсткая посадка</span>
+                                <span>Падение или переворот</span>
                                 <strong>+100 🪙</strong>
                             </div>
                             <div class="track-reward">
@@ -2060,6 +2144,64 @@ function updateTracksUI() {
     if (list.querySelector('.sprint-reward-countdown')) {
         void refreshSprintRewardCountdown();
     }
+}
+
+function getHistoryRewardMarkup(track) {
+    return (track.historyRewards || []).map(reward => {
+        if (reward.type === 'coupons') {
+            return `<span class="history-stage-reward">🎟️ +${Number(reward.amount) || 0} велокупонов</span>`;
+        }
+
+        const part = ITEMS_DB[reward.category]?.find(item => item.id === reward.id);
+        if (!part) return '';
+        const specialClass = part.rarity === 'special' ? ' history-stage-reward--special' : '';
+        return `<span class="history-stage-reward${specialClass}">🔧 ${escapeHTML(part.name)}</span>`;
+    }).join('');
+}
+
+function updateHistoryUI() {
+    const list = document.getElementById('history-stage-list');
+    if (!list) return;
+
+    if (!Array.isArray(player.historyUnlockedStages)) player.historyUnlockedStages = ['h1'];
+    if (!Array.isArray(player.historyCompletedStages)) player.historyCompletedStages = [];
+    if (!player.historyUnlockedStages.includes('h1')) player.historyUnlockedStages.unshift('h1');
+
+    const completed = new Set(player.historyCompletedStages);
+    const unlocked = new Set(player.historyUnlockedStages);
+    const progress = document.getElementById('history-progress-label');
+    if (progress) progress.textContent = `${completed.size} / ${HISTORY_TRACKS_DB.length} этапов`;
+
+    list.innerHTML = '';
+    HISTORY_TRACKS_DB.forEach(track => {
+        const isCompleted = completed.has(track.id);
+        const canPlay = unlocked.has(track.id) || isCompleted;
+        const isFinal = track.historyStage === HISTORY_TRACKS_DB.length;
+        const rewardMarkup = getHistoryRewardMarkup(track);
+        const card = document.createElement('article');
+        card.className = `history-stage-card${isCompleted ? ' is-completed' : ''}${canPlay ? ' is-open' : ' is-locked'}`;
+        card.innerHTML = `
+            <div class="history-stage-card__top">
+                <span class="history-stage-number">ЭТАП ${track.historyStage}</span>
+                <span class="history-stage-status">${isCompleted ? '✓ Пройдена' : canPlay ? '● Доступна' : '🔒 Закрыта'}</span>
+            </div>
+            <h4>${escapeHTML(track.name)}</h4>
+            <div class="history-stage-meta">${escapeHTML(track.year)} · Соперник: ${escapeHTML(track.opponent)}</div>
+            <p>${escapeHTML(track.historyFeature)}</p>
+            <div class="history-stage-rewards">${rewardMarkup}</div>
+            <button type="button" class="history-stage-play" ${canPlay ? '' : 'disabled'}>
+                ${canPlay ? (isCompleted ? 'Переиграть' : 'Начать этап') : 'Сначала пройди прошлый этап'}
+            </button>
+            ${isFinal ? '<span class="history-final-mark">ФИНАЛ · ДРЕЗ НА ДРЕЗИНЕ</span>' : ''}
+        `;
+        card.querySelector('.history-stage-play')?.addEventListener('click', () => {
+            if (!canPlay) return;
+            player.selectedTrack = track.id;
+            void forceSavePlayerState();
+            showScreen('race');
+        });
+        list.appendChild(card);
+    });
 }
 
 function grantGuaranteedPart(rarity) {
@@ -2389,15 +2531,73 @@ function showRaceResult(win, reason, bonusText) {
     }
 }
 
+async function handleHistoryRaceEnd(win, reason = 'finish') {
+    const track = HISTORY_TRACKS_DB.find(item => item.id === player.selectedTrack);
+    if (!track) return;
+
+    const isFirstVictory = Boolean(win) && !player.historyCompletedStages.includes(track.id);
+    let bonusText = '';
+
+    if (win) {
+        player.totalWins = (Number(player.totalWins) || 0) + 1;
+        if (isFirstVictory) {
+            player.historyCompletedStages.push(track.id);
+            const nextTrack = HISTORY_TRACKS_DB[track.historyStage];
+            if (nextTrack && !player.historyUnlockedStages.includes(nextTrack.id)) {
+                player.historyUnlockedStages.push(nextTrack.id);
+            }
+
+            const prizes = [];
+            (track.historyRewards || []).forEach(reward => {
+                if (reward.type === 'coupons') {
+                    const amount = Math.max(0, Number(reward.amount) || 0);
+                    player.coupons = (Number(player.coupons) || 0) + amount;
+                    prizes.push(`+${amount} 🎟️ велокупонов`);
+                    return;
+                }
+
+                const part = ITEMS_DB[reward.category]?.find(item => item.id === reward.id);
+                if (!part || hasPart(reward.category, reward.id)) return;
+                player.inventory.push(partKey(reward.category, reward.id));
+                prizes.push(part.name);
+            });
+
+            bonusText = `Победа! Первый проход этапа.<br>Получено: ${prizes.map(escapeHTML).join(', ') || 'награда уже была получена'}.`;
+        } else {
+            bonusText = 'Победа! Награда за этот этап уже получена, но его можно проходить снова.';
+        }
+    } else if (reason === 'stability-flip') {
+        bonusText = 'Поражение. Laufmaschine перевернулась после удара. Попробуй объехать препятствие или перепрыгнуть его.';
+    } else if (reason === 'hard-landing') {
+        bonusText = 'Поражение. Дрез не удержал Laufmaschine после жёсткого приземления.';
+    } else {
+        bonusText = 'Поражение. Соперник добрался до финиша первым. Попробуй ещё раз.';
+    }
+
+    updateHUD();
+    updateGarageUI();
+    updateTracksUI();
+    updateHistoryUI();
+    updateUpgradeUI();
+    showRaceResult(Boolean(win), reason, bonusText);
+    void forceSavePlayerState();
+}
+
 async function handleRaceEnd(win, reason = 'finish', raceTimeMs = 0, collectedCoins = 0) {
     const selectedId = player.selectedTrack;
 
-    if (selectedId === 'sprint' && !win && (reason === 'pit' || reason === 'hard-landing')) {
+    if (HISTORY_TRACKS_DB.some(track => track.id === selectedId)) {
+        return handleHistoryRaceEnd(win, reason);
+    }
+
+    if (selectedId === 'sprint' && !win && ['pit', 'hard-landing', 'stability-flip'].includes(reason)) {
         const consolationCoins = 100;
         player.coins = (Number(player.coins) || 0) + consolationCoins;
         const causeText = reason === 'hard-landing'
             ? '💥 Жёсткое приземление — райдер упал.'
-            : '🕳️ Ты попал в яму!';
+            : reason === 'stability-flip'
+                ? '🚵‍♂️ Низкая стабильность: байк перевернулся после удара.'
+                : '🕳️ Ты попал в яму!';
         const bonusText = `Поражение: +${consolationCoins} 🪙<br>${causeText}`;
 
         updateHUD();
@@ -2461,7 +2661,7 @@ async function handleRaceEnd(win, reason = 'finish', raceTimeMs = 0, collectedCo
         ? storyTracks[trackIndex]
         : storyTracks[0];
     const result = Boolean(win);
-    const isCrashLoss = !result && (reason === 'pit' || reason === 'hard-landing');
+    const isCrashLoss = !result && ['pit', 'hard-landing', 'stability-flip'].includes(reason);
     const rewardCoins = isCrashLoss ? 100 : getRaceReward(track, result);
 
     player.coins = (Number(player.coins) || 0) + rewardCoins;
@@ -2552,6 +2752,8 @@ async function handleRaceEnd(win, reason = 'finish', raceTimeMs = 0, collectedCo
             bonusText += '<br>🕳️ Ты попал в яму! Следи за препятствиями и прыгай вовремя.';
         } else if (reason === 'hard-landing') {
             bonusText += '<br>💥 Жёсткое приземление — райдер упал. Попробуй лучше сбалансировать байк в воздухе.';
+        } else if (reason === 'stability-flip') {
+            bonusText += '<br>🚵‍♂️ Байк перевернулся после удара из-за низкой стабильности. Увеличь стабильность сборки и аккуратнее проходи препятствия.';
         } else if (reason === 'bot-finish') {
             bonusText += '<br>🤖 Бот пересёк финиш первым.';
         } else {

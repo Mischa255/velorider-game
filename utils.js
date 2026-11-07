@@ -7,6 +7,7 @@ export const MIN_SPRINT_RECORD_IMPROVEMENT_MS = 10;
 export function getRarityAccent(rarity) {
     if (rarity === 'legendary') return '#fbbf24';
     if (rarity === 'rare') return '#38bdf8';
+    if (rarity === 'special') return '#c084fc';
     return '#94a3b8';
 }
 

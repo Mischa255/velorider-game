@@ -560,10 +560,10 @@
     width: 25px;
     height: 25px;
     padding: 0 !important;
-    border: 1px solid #fbbf24 !important;
+    border: 1px solid #c084fc !important;
     border-radius: 50% !important;
-    color: #fde68a !important;
-    background: #78350f !important;
+    color: #f3e8ff !important;
+    background: #581c87 !important;
     font-size: 14px !important;
     font-weight: 900;
     line-height: 1;
@@ -577,10 +577,10 @@
     right: 0;
     width: min(260px, calc(100vw - 48px));
     padding: 11px;
-    border: 1px solid #a16207;
+    border: 1px solid #a855f7;
     border-radius: 10px;
-    color: #fef3c7;
-    background: #1c1917;
+    color: #f3e8ff;
+    background: #241333;
     box-shadow: 0 8px 24px #0009;
     font-size: 11px;
     font-weight: 500;
@@ -599,7 +599,7 @@
     float: right;
     margin: -5px -5px 4px 8px;
     padding: 0 5px !important;
-    color: #fde68a !important;
+    color: #e9d5ff !important;
     background: transparent !important;
     font-size: 22px !important;
     line-height: 1.1;
