@@ -451,8 +451,8 @@
     #btn-accelerate { grid-area: accelerate; }
 }
 
-@media screen and (max-width: 900px) and (orientation: portrait) and (pointer: coarse) {
-    #mobile-orientation-prompt {
+@media screen and (orientation: portrait) {
+    html.touch-device #mobile-orientation-prompt {
         position: fixed;
         inset: 0;
         z-index: 12000;
@@ -465,7 +465,7 @@
         background: radial-gradient(circle at 50% 36%, rgba(30, 64, 82, .98), rgba(2, 6, 23, .99) 72%);
     }
 
-    .race-orientation-prompt__card {
+    html.touch-device .race-orientation-prompt__card {
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -478,7 +478,7 @@
         box-shadow: 0 24px 70px rgba(0, 0, 0, .45);
     }
 
-    .race-orientation-prompt__icon {
+    html.touch-device .race-orientation-prompt__icon {
         display: grid;
         place-items: center;
         width: 76px;
@@ -491,19 +491,19 @@
         transform: rotate(-90deg);
     }
 
-    .race-orientation-prompt__card strong {
+    html.touch-device .race-orientation-prompt__card strong {
         font-size: clamp(20px, 6vw, 26px);
         font-weight: 900;
     }
 
-    .race-orientation-prompt__card > span:last-child {
+    html.touch-device .race-orientation-prompt__card > span:last-child {
         max-width: 280px;
         color: #cbd5e1;
         font-size: 14px;
         line-height: 1.5;
     }
 
-    .race-orientation-prompt__card button {
+    html.touch-device .race-orientation-prompt__card button {
         min-height: 44px;
         margin-top: 2px;
         padding: 10px 24px;
@@ -514,7 +514,7 @@
         font-weight: 800;
     }
 
-    #race-controls {
+    html.touch-device #race-controls {
         visibility: hidden !important;
         pointer-events: none !important;
     }
@@ -1214,4 +1214,159 @@
 
 @media screen and (max-width: 620px) and (max-height: 600px) and (orientation: landscape) and (pointer: coarse) {
     .history-stage-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Race layout for touch devices: use the whole Telegram WebView, even when
+   the device reports a tablet-sized CSS viewport. */
+@media screen and (orientation: landscape) {
+    html.touch-device,
+    html.touch-device body {
+        width: 100%;
+        height: 100%;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden !important;
+    }
+
+    html.touch-device body.h-screen {
+        height: 100dvh !important;
+        min-height: 100dvh !important;
+    }
+
+    html.touch-device body:has(#screen-race.active) > header,
+    html.touch-device body:has(#screen-race.active) > .flex.flex-1.overflow-hidden > aside {
+        display: none !important;
+    }
+
+    html.touch-device body:has(#screen-race.active) > .flex.flex-1.overflow-hidden > main {
+        position: fixed !important;
+        inset: 0 !important;
+        z-index: 1000 !important;
+        width: 100vw !important;
+        height: 100dvh !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+    }
+
+    html.touch-device #screen-race.active {
+        position: fixed !important;
+        inset: 0 !important;
+        z-index: 2000 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0 !important;
+        width: 100vw !important;
+        height: 100dvh !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 8px 8px calc(150px + env(safe-area-inset-bottom, 0px)) !important;
+        overflow: hidden !important;
+        transform: none !important;
+        animation: none !important;
+        opacity: 1 !important;
+        background: #030712 !important;
+    }
+
+    html.touch-device #screen-race.active > div:first-child {
+        flex: 1 1 auto !important;
+        width: 100% !important;
+        height: auto !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        border-radius: 10px !important;
+    }
+
+    html.touch-device #raceCanvas {
+        width: 100% !important;
+        height: 100% !important;
+    }
+
+    html.touch-device #race-controls {
+        position: absolute !important;
+        left: 50% !important;
+        right: auto !important;
+        bottom: calc(24px + env(safe-area-inset-bottom, 0px)) !important;
+        z-index: 10070 !important;
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        grid-template-rows: repeat(2, minmax(40px, 1fr)) !important;
+        grid-template-areas:
+            "brake jump"
+            "reverse accelerate" !important;
+        gap: 6px !important;
+        width: min(560px, calc(100vw - 24px)) !important;
+        height: clamp(96px, 19dvh, 116px) !important;
+        margin: 0 !important;
+        padding: 6px !important;
+        border: 1px solid rgba(203, 213, 225, .35) !important;
+        border-radius: 18px !important;
+        background: rgba(15, 23, 42, .96) !important;
+        box-shadow: 0 8px 28px rgba(0, 0, 0, .55) !important;
+        transform: translateX(-50%) !important;
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+    }
+
+    html.touch-device #btn-brake { grid-area: brake; background: #b91c1c !important; color: #fff1f2 !important; }
+    html.touch-device #btn-jump { grid-area: jump; background: #2563eb !important; color: #eff6ff !important; }
+    html.touch-device #btn-reverse { grid-area: reverse; background: #7e22ce !important; color: #f3e8ff !important; }
+    html.touch-device #btn-accelerate { grid-area: accelerate; background: #16a34a !important; color: #f0fdf4 !important; }
+
+    html.touch-device #race-controls button {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 7px !important;
+        width: 100% !important;
+        height: 100% !important;
+        min-width: 0 !important;
+        min-height: 40px !important;
+        padding: 5px 8px !important;
+        overflow: hidden !important;
+        border: 1px solid rgba(255, 255, 255, .24) !important;
+        border-radius: 12px !important;
+        box-shadow: 0 3px 0 rgba(0, 0, 0, .34) !important;
+        transform: none !important;
+        font-size: clamp(13px, 2.5vw, 17px) !important;
+        line-height: 1 !important;
+        white-space: nowrap !important;
+        touch-action: none !important;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    html.touch-device #race-controls button span:first-child {
+        display: block !important;
+        font-size: inherit !important;
+        white-space: nowrap !important;
+        text-align: center !important;
+    }
+
+    html.touch-device #race-controls button span:last-child {
+        display: none !important;
+    }
+
+    html.touch-device #race-controls button.is-pressed {
+        filter: brightness(1.22) saturate(1.1);
+        transform: translateY(2px) !important;
+    }
+
+    html.touch-device #race-exit-button {
+        position: fixed !important;
+        top: auto !important;
+        bottom: calc(148px + env(safe-area-inset-bottom, 0px)) !important;
+        left: max(12px, env(safe-area-inset-left, 0px)) !important;
+        z-index: 10080 !important;
+    }
+
+    html.touch-device #game-version-race {
+        display: flex !important;
+        font-size: 10px !important;
+    }
 }

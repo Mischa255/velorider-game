@@ -5,6 +5,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
+    <script>
+        (() => {
+            const hasTouchscreen = navigator.maxTouchPoints > 0
+                || 'ontouchstart' in window
+                || window.matchMedia('(pointer: coarse), (any-pointer: coarse)').matches;
+            if (hasTouchscreen) document.documentElement.classList.add('touch-device');
+        })();
+    </script>
+
     <!-- Запрет кэширования HTML в Telegram -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -27,9 +36,14 @@
             }
 
             // Полноэкранный режим на мобильных устройствах
-            if (typeof tg.requestFullscreen === 'function' && window.innerWidth <= 768) {
+            const hasTouchscreen = navigator.maxTouchPoints > 0
+                || 'ontouchstart' in window
+                || window.matchMedia('(pointer: coarse), (any-pointer: coarse)').matches;
+            if (typeof tg.requestFullscreen === 'function' && hasTouchscreen) {
                 try {
-                    tg.requestFullscreen();
+                    Promise.resolve(tg.requestFullscreen()).catch(e => {
+                        console.warn('Полноэкранный режим Telegram недоступен:', e);
+                    });
                 } catch (e) {
                     console.warn('Fullscreen недоступен:', e);
                 }
@@ -42,14 +56,14 @@
     <script src="https://cdn.tailwindcss.com"></script>
 
 
-    <link rel="stylesheet" href="style.css?v=94">
-    <link rel="stylesheet" href="garage.css?v=94">
-    <link rel="stylesheet" href="tracks-overrides.css?v=94">
-    <link rel="stylesheet" href="mobile-fix.css?v=94">
+    <link rel="stylesheet" href="style.css?v=100">
+    <link rel="stylesheet" href="garage.css?v=100">
+    <link rel="stylesheet" href="tracks-overrides.css?v=100">
+    <link rel="stylesheet" href="mobile-fix.css?v=100">
 </head>
 
 
-<body data-game-build="94" class="bg-gray-900 text-white font-sans h-screen flex flex-col select-none overflow-hidden">
+<body data-game-build="100" class="bg-gray-900 text-white font-sans h-screen flex flex-col select-none overflow-hidden">
 
 <div id="mobile-orientation-prompt" class="hidden" role="status" aria-live="polite">
     <div class="race-orientation-prompt__card">
@@ -72,9 +86,9 @@
 
         <span>VELO<span class="text-white">RIDER</span></span>
 
-        <span id="game-version-badge" title="Версия игры: сборка 94" aria-label="Версия игры: сборка 94" class="not-italic inline-flex items-center gap-1 rounded-md border border-emerald-400/25 bg-emerald-950/70 px-1.5 py-1 text-[9px] font-black leading-none tracking-wide text-emerald-200">
+        <span id="game-version-badge" title="Версия игры: сборка 100" aria-label="Версия игры: сборка 100" class="not-italic inline-flex items-center gap-1 rounded-md border border-emerald-400/25 bg-emerald-950/70 px-1.5 py-1 text-[9px] font-black leading-none tracking-wide text-emerald-200">
             <span aria-hidden="true">🏷️</span>
-            <span data-game-version-label>BUILD 94</span>
+            <span data-game-version-label>BUILD 100</span>
         </span>
 
     </div>
@@ -771,13 +785,13 @@
                         <strong class="sprint-reward-countdown block mt-0.5 tabular-nums">Сверяю время…</strong>
                     </div>
 
-                    <div id="game-version-race" aria-label="Версия игры: сборка 94" class="absolute bottom-2 right-2 z-10 flex pointer-events-none items-center gap-1 rounded-md border border-emerald-300/20 bg-slate-950/75 px-1.5 py-1 text-[9px] font-black tracking-wide text-emerald-100 md:hidden">
+                    <div id="game-version-race" aria-label="Версия игры: сборка 100" class="absolute bottom-2 right-2 z-10 flex pointer-events-none items-center gap-1 rounded-md border border-emerald-300/20 bg-slate-950/75 px-1.5 py-1 text-[9px] font-black tracking-wide text-emerald-100 md:hidden">
                         <span aria-hidden="true">🏷️</span>
-                        <span data-game-version-label>BUILD 94</span>
+                        <span data-game-version-label>BUILD 100</span>
                     </div>
 
                     <!-- === НОВАЯ КНОПКА ВЫХОДА (ПОВЕРХ ХОЛСТА) === -->
-                    <div class="absolute top-2 left-3 z-10">
+                    <div id="race-exit-button" class="absolute top-2 left-3 z-10">
                         <button
                             onclick="resetRace()"
                             class="bg-red-900/80 hover:bg-red-800/90 border border-red-700/50 text-red-200 px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider font-bold transition flex items-center gap-1.5 shadow-lg backdrop-blur-sm">
@@ -1046,7 +1060,7 @@
     ====================================== -->
 
 
-    <script type="module" src="main.js?v=94"></script>
+    <script type="module" src="main.js?v=100"></script>
 
 
 

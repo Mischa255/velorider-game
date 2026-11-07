@@ -1,4 +1,4 @@
-import { ITEMS_DB, TRACKS_DB, HISTORY_TRACKS_DB, CONTAINERS_DB } from './db.js?v=94';
+import { ITEMS_DB, TRACKS_DB, HISTORY_TRACKS_DB, CONTAINERS_DB } from './db.js?v=100';
 import {
     player,
     loadPlayerState,
@@ -6,24 +6,24 @@ import {
     clearSavedProgress,
     forceSavePlayerState,
     getServerTime
-} from './state.js?v=94';
+} from './state.js?v=100';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=94';
+} from './race.js?v=100';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=94';
-import { randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=94';
+} from './audio.js?v=100';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=100';
 
 function renderGameVersionBadge() {
-    const build = document.body?.dataset.gameBuild || '94';
+    const build = document.body?.dataset.gameBuild || '100';
     document.querySelectorAll('[data-game-version-label]').forEach(label => {
         label.textContent = `BUILD ${build}`;
     });
@@ -411,7 +411,7 @@ function ensureGarageLayout() {
                                     <path d="M150 195 L160 204 L166 194 L159 188" stroke-width="4"/><circle cx="160" cy="204" r="3" fill="#0f172a"/><circle cx="166" cy="194" r="3" fill="#0f172a"/>
                                 </g>
                                 <g class="bike-chain-detail" fill="none" stroke="#cbd5e1" stroke-width="2"><path d="M157 177 L283 166 M283 204 L157 193"/><circle cx="300" cy="185" r="21"/><circle id="garage-bike-chainring-outer" cx="300" cy="185" r="25" display="none"/><circle id="garage-bike-chainring-inner" cx="300" cy="185" r="17" display="none"/><circle cx="150" cy="185" r="10"/></g>
-                                <g fill="#e2e8f0" stroke="#0f172a" stroke-width="2"><circle cx="150" cy="185" r="6"/><circle cx="520" cy="185" r="6"/><circle cx="300" cy="185" r="6"/></g>
+                                <g class="bike-hubs" fill="#e2e8f0" stroke="#0f172a" stroke-width="2"><circle cx="150" cy="185" r="6"/><circle cx="520" cy="185" r="6"/><circle cx="300" cy="185" r="6"/></g>
                                 <path d="M415 135 Q427 143 417 151" stroke="#fbbf24" stroke-width="4"/>
                                 <path class="bike-vbrakes" d="M160 157 Q150 149 140 157 M550 157 Q520 149 530 157" stroke="#ef4444" stroke-width="3"/>
                             </g>
@@ -769,7 +769,10 @@ function canPlayTrack(trackId) {
 let mobileFullscreenProvider = '';
 
 function enterMobileLandscape() {
-    if (!window.matchMedia('(max-width: 900px) and (pointer: coarse)').matches) return;
+    const hasTouchscreen = navigator.maxTouchPoints > 0
+        || 'ontouchstart' in window
+        || window.matchMedia('(pointer: coarse), (any-pointer: coarse)').matches;
+    if (!hasTouchscreen) return;
 
     const lockLandscape = () => {
         try {
@@ -1253,6 +1256,20 @@ function updateGarageUI() {
         const seatpost = getEquippedPart('seatposts');
         const rearShock = getEquippedPart('suspension');
         const isFullSuspension = frame?.visuals?.type === 'dh';
+        const wheelVisuals = wheels?.visuals || {};
+        const frameVisuals = frame?.visuals || {};
+        const baseWheelSize = Number(wheelVisuals.radius) || Number(frameVisuals.radius) || 9.5;
+        const rearWheelSize = Number(wheelVisuals.rearRadius) || Number(frameVisuals.rearRadius) || baseWheelSize;
+        const frontWheelSize = Number(wheelVisuals.frontRadius) || Number(frameVisuals.frontRadius) || baseWheelSize;
+        const largestWheelSize = Math.max(rearWheelSize, frontWheelSize, 1);
+        const rearWheelScale = clamp(rearWheelSize / largestWheelSize, 0.65, 1.15);
+        const frontWheelScale = clamp(frontWheelSize / largestWheelSize, 0.65, 1.15);
+        const rearWheelCenter = { x: 150, y: 185 };
+        const wheelGroundY = 274;
+        const frontWheelCenter = {
+            x: 520,
+            y: wheelGroundY - 89 * frontWheelScale
+        };
         
         // --- ЦВЕТА И СТИЛИ ИЗ VISUALS ---
         const frameColor = frame?.visuals?.color || getRarityAccent(frame?.rarity);
@@ -1297,9 +1314,9 @@ function updateGarageUI() {
             const values = [
                 isFullSuspension
                     ? `M300 185 L${xy(points.seat)}`
-                    : `M150 185 L300 185 L${xy(points.seat)} L150 185`,
+                    : `M${rearWheelCenter.x} ${rearWheelCenter.y} L300 185 L${xy(points.seat)} L${rearWheelCenter.x} ${rearWheelCenter.y}`,
                 `M${xy(points.seat)} L${xy(points.head)} L300 185`,
-                `M${xy(points.head)} L${xy(points.lower)} L520 185`,
+                `M${xy(points.head)} L${xy(points.lower)} L${frontWheelCenter.x} ${frontWheelCenter.y}`,
                 `M${xy(points.seat)} L${xy(points.lower)}`
             ];
             paths.forEach((path, index) => { if (values[index]) path.setAttribute('d', values[index]); });
@@ -1316,7 +1333,7 @@ function updateGarageUI() {
             if (rearShockBody) rearShockBody.setAttribute('stroke', rearShock?.visuals?.color || getRarityAccent(rearShock?.rarity));
             
             bikeSvg.querySelectorAll('.bike-fork, .bike-fork-highlight').forEach(path =>
-                path.setAttribute('d', `M${xy(points.lower)} L520 185`)
+                path.setAttribute('d', `M${xy(points.lower)} L${frontWheelCenter.x} ${frontWheelCenter.y}`)
             );
             const cockpitPaths = bikeSvg.querySelectorAll('#garage-bike-cockpit path');
             if (cockpitPaths[0]) cockpitPaths[0].setAttribute('d', `M${xy(points.head)} L${points.head[0] + 16} 27 L${points.head[0] + 33} 27`);
@@ -1347,6 +1364,64 @@ function updateGarageUI() {
         
         const rimGroup = bikeSvg.querySelector('.bike-rims');
         if (rimGroup) rimGroup.setAttribute('stroke', wheels?.visuals?.rimColor || (wheels?.rarity === 'legendary' ? '#fbbf24' : wheels?.rarity === 'rare' ? '#38bdf8' : '#64748b'));
+
+        // Радиусы колёс синхронизированы с матчем. Смещаем меньшую переднюю
+        // втулку вниз, чтобы оба колеса касались одной линии земли.
+        const setWheelCircle = (circle, center, radius) => {
+            if (!circle) return;
+            circle.setAttribute('cx', center.x);
+            circle.setAttribute('cy', center.y);
+            circle.setAttribute('r', radius);
+        };
+        const tireCircles = bikeSvg.querySelectorAll('.bike-tire circle');
+        setWheelCircle(tireCircles[0], rearWheelCenter, 79 * rearWheelScale);
+        setWheelCircle(tireCircles[1], frontWheelCenter, 79 * frontWheelScale);
+        const rimCircles = bikeSvg.querySelectorAll('.bike-rims circle');
+        setWheelCircle(rimCircles[0], rearWheelCenter, 67 * rearWheelScale);
+        setWheelCircle(rimCircles[1], frontWheelCenter, 67 * frontWheelScale);
+
+        const spokePaths = bikeSvg.querySelectorAll('.bike-spoke path');
+        const treadPaths = bikeSvg.querySelectorAll('.bike-tread path');
+        [
+            { center: rearWheelCenter, scale: rearWheelScale },
+            { center: frontWheelCenter, scale: frontWheelScale }
+        ].forEach(({ center, scale }, wheelIndex) => {
+            for (let spokeIndex = 0; spokeIndex < 18; spokeIndex++) {
+                const angle = spokeIndex * Math.PI / 9;
+                const spoke = spokePaths[wheelIndex * 18 + spokeIndex];
+                if (spoke) {
+                    spoke.setAttribute('d', `M${center.x} ${center.y} L${center.x + Math.cos(angle) * 66 * scale} ${center.y + Math.sin(angle) * 66 * scale}`);
+                }
+            }
+            for (let treadIndex = 0; treadIndex < 28; treadIndex++) {
+                const angle = treadIndex * Math.PI / 14;
+                const tread = treadPaths[wheelIndex * 28 + treadIndex];
+                if (tread) {
+                    const inner = 85 * scale;
+                    const outer = 89 * scale;
+                    tread.setAttribute('d', `M${center.x + Math.cos(angle) * inner} ${center.y + Math.sin(angle) * inner} L${center.x + Math.cos(angle) * outer} ${center.y + Math.sin(angle) * outer}`);
+                }
+            }
+        });
+
+        const glowCircles = bikeSvg.querySelectorAll('circle[fill="url(#garage-wheel-glow)"]');
+        setWheelCircle(glowCircles[0], rearWheelCenter, 105 * rearWheelScale);
+        setWheelCircle(glowCircles[1], frontWheelCenter, 105 * frontWheelScale);
+        const brakeDiscCircles = bikeSvg.querySelectorAll('.bike-brake-discs circle');
+        setWheelCircle(brakeDiscCircles[0], rearWheelCenter, 27 * rearWheelScale);
+        setWheelCircle(brakeDiscCircles[1], frontWheelCenter, 27 * frontWheelScale);
+        setWheelCircle(brakeDiscCircles[2], rearWheelCenter, 19 * rearWheelScale);
+        setWheelCircle(brakeDiscCircles[3], frontWheelCenter, 19 * frontWheelScale);
+        const hubCircles = bikeSvg.querySelectorAll('.bike-hubs circle');
+        setWheelCircle(hubCircles[0], rearWheelCenter, 6);
+        setWheelCircle(hubCircles[1], frontWheelCenter, 6);
+
+        const wheelGearset = bikeSvg.querySelector('#garage-bike-gearset');
+        if (wheelGearset) {
+            wheelGearset.setAttribute('transform', `translate(${rearWheelCenter.x} ${rearWheelCenter.y}) scale(${rearWheelScale}) translate(${-rearWheelCenter.x} ${-rearWheelCenter.y})`);
+        }
+        const chainRearHub = bikeSvg.querySelectorAll('.bike-chain-detail circle')[3];
+        setWheelCircle(chainRearHub, rearWheelCenter, 10 * rearWheelScale);
         
         const motor = bikeSvg.querySelector('#garage-bike-motor');
         if (motor) motor.setAttribute('display', electronics && electronics.id !== 'e1' ? 'inline' : 'none');
@@ -1356,7 +1431,10 @@ function updateGarageUI() {
         });
         
         const vBrakes = bikeSvg.querySelector('.bike-vbrakes');
-        if (vBrakes) vBrakes.setAttribute('display', brakes && !['b1', 'b2'].includes(brakes.id) ? 'none' : 'inline');
+        if (vBrakes) {
+            vBrakes.setAttribute('display', brakes && !['b1', 'b2'].includes(brakes.id) ? 'none' : 'inline');
+            vBrakes.setAttribute('d', `M160 ${rearWheelCenter.y - 28 * rearWheelScale} Q${rearWheelCenter.x} ${rearWheelCenter.y - 36 * rearWheelScale} 140 ${rearWheelCenter.y - 28 * rearWheelScale} M550 ${frontWheelCenter.y - 28 * frontWheelScale} Q${frontWheelCenter.x} ${frontWheelCenter.y - 36 * frontWheelScale} 530 ${frontWheelCenter.y - 28 * frontWheelScale}`);
+        }
         
         const cockpit = bikeSvg.querySelector('#garage-bike-cockpit');
         if (cockpit) cockpit.querySelectorAll('path').forEach(path => path.setAttribute('stroke-width', handlebar?.visuals?.width ? handlebar.visuals.width * 3 : (handlebar?.rarity === 'legendary' ? '8' : handlebar?.rarity === 'rare' ? '7' : '6')));
@@ -1365,7 +1443,10 @@ function updateGarageUI() {
         if (forkLine) forkLine.setAttribute('stroke', fork?.visuals?.color || getRarityAccent(fork?.rarity));
         
         const suspension = bikeSvg.querySelector('#garage-bike-suspension');
-        if (suspension) suspension.setAttribute('display', fork && fork.id !== 'fk1' ? 'inline' : 'none');
+        if (suspension) {
+            suspension.setAttribute('display', fork && fork.id !== 'fk1' ? 'inline' : 'none');
+            suspension.setAttribute('transform', `translate(0 ${frontWheelCenter.y - 185})`);
+        }
         
         const saddleElement = bikeSvg.querySelector('#garage-bike-saddle');
         if (saddleElement) saddleElement.setAttribute('stroke', saddle?.visuals?.color || getRarityAccent(saddle?.rarity));
@@ -2567,9 +2648,11 @@ async function handleHistoryRaceEnd(win, reason = 'finish') {
             bonusText = 'Победа! Награда за этот этап уже получена, но его можно проходить снова.';
         }
     } else if (reason === 'stability-flip') {
-        bonusText = 'Поражение. Laufmaschine перевернулась после удара. Попробуй объехать препятствие или перепрыгнуть его.';
+        bonusText = 'Поражение. Велосипед перевернулся после удара из-за низкой стабильности. Попробуй объехать препятствие или перепрыгнуть его.';
     } else if (reason === 'hard-landing') {
         bonusText = 'Поражение. Дрез не удержал Laufmaschine после жёсткого приземления.';
+    } else if (reason === 'pit') {
+        bonusText = 'Поражение. Ты провалился в яму или сорвался с обрыва. Перепрыгивай опасный участок.';
     } else {
         bonusText = 'Поражение. Соперник добрался до финиша первым. Попробуй ещё раз.';
     }

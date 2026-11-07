@@ -498,6 +498,7 @@ export const OBSTACLE_TYPES = {
 OBSTACLE_TYPES.cobblestones = { name: 'Булыжная мостовая', width: 92, height: 9, color: '#8b8174' };
 OBSTACLE_TYPES.plank_bridge = { name: 'Деревянный настил', width: 118, height: 12, color: '#9a6538' };
 OBSTACLE_TYPES.wooden_gate = { name: 'Садовая калитка', width: 48, height: 32, color: '#704522' };
+OBSTACLE_TYPES.cliff = { name: 'Обрыв перед финишем', width: 150, height: 72, color: '#020617' };
 
 
 // =========================================
@@ -693,7 +694,7 @@ export const HISTORY_TRACKS_DB = [
         historyFeature: 'Булыжная дорожка замедляет наезд; небольшой трамплин позволяет перепрыгнуть её.',
         length: 15000, hills: 12, botMaxSpeed: 4, botAccel: 0.05,
         botDifficultyTrackId: 't1', obstacles: 3,
-        obstacleTypes: ['cobblestones', 'log', 'ramp'], winReward: 0, lossReward: 0, couponReward: 0,
+        obstacleTypes: ['pit', 'cobblestones', 'log', 'ramp'], winReward: 0, lossReward: 0, couponReward: 0,
         historyRewards: [{ type: 'coupons', amount: 5 }]
     },
     {
@@ -702,7 +703,7 @@ export const HISTORY_TRACKS_DB = [
         historyFeature: 'Корни и лужи сбивают темп; невысокие ветки можно перепрыгнуть.',
         length: 15000, hills: 15, botMaxSpeed: 4, botAccel: 0.05,
         botDifficultyTrackId: 't2', obstacles: 3,
-        obstacleTypes: ['fallen_branch', 'water_splash', 'cobblestones'], winReward: 0, lossReward: 0, couponReward: 0,
+        obstacleTypes: ['pit', 'fallen_branch', 'water_splash', 'cobblestones'], winReward: 0, lossReward: 0, couponReward: 0,
         historyRewards: [{ category: 'handlebars', id: 'hb6' }]
     },
     {
@@ -711,16 +712,16 @@ export const HISTORY_TRACKS_DB = [
         historyFeature: 'Узкий деревянный настил проходится на скорости, а бревно лучше перепрыгнуть.',
         length: 15000, hills: 18, botMaxSpeed: 4, botAccel: 0.05,
         botDifficultyTrackId: 't3', obstacles: 4,
-        obstacleTypes: ['plank_bridge', 'log', 'rock', 'ramp'], winReward: 0, lossReward: 0, couponReward: 0,
+        obstacleTypes: ['pit', 'plank_bridge', 'log', 'rock', 'ramp'], winReward: 0, lossReward: 0, couponReward: 0,
         historyRewards: [{ category: 'wheels', id: 'w7' }]
     },
     {
         id: 'h4', historyStage: 4, isHistory: true, musicTheme: '1h4',
         name: 'Парижский показ', year: '1818', opponent: 'Макс',
-        historyFeature: 'Садовая калитка и короткие рампы напоминают о демонстрации в Люксембургском саду.',
+        historyFeature: 'Садовая калитка, короткие рампы, ямы и обрыв перед финишем напоминают о демонстрации в Люксембургском саду.',
         length: 15000, hills: 20, botMaxSpeed: 4, botAccel: 0.05,
-        botDifficultyTrackId: 't4', obstacles: 4,
-        obstacleTypes: ['wooden_gate', 'ramp', 'fallen_branch', 'plank_bridge'], winReward: 0, lossReward: 0, couponReward: 0,
+        botDifficultyTrackId: 't4', obstacles: 5,
+        obstacleTypes: ['pit', 'wooden_gate', 'ramp', 'fallen_branch', 'plank_bridge'], winReward: 0, lossReward: 0, couponReward: 0,
         historyRewards: [
             { category: 'stems', id: 'st5' },
             { category: 'saddles', id: 'sa6' }
@@ -729,10 +730,10 @@ export const HISTORY_TRACKS_DB = [
     {
         id: 'h5', historyStage: 5, isHistory: true, musicTheme: '1h5',
         name: 'Заезд Карла Дреза', year: '1818', opponent: 'Карл Дрез',
-        historyFeature: 'Финальный маршрут: лужи, камни и настил. Соперник едет на Laufmaschine и отталкивается ногами.',
+        historyFeature: 'Финальный маршрут: ямы, лужи, камни, настил и обрыв у финиша. Соперник едет на Laufmaschine и отталкивается ногами.',
         length: 25000, hills: 30, botMaxSpeed: 6.5, botAccel: 0.08,
-        botDifficultyTrackId: 't2', obstacles: 6,
-        obstacleTypes: ['plank_bridge', 'rock', 'water_splash', 'log', 'cobblestones'], winReward: 0, lossReward: 0, couponReward: 0,
+        botDifficultyTrackId: 't2', obstacles: 7,
+        obstacleTypes: ['pit', 'plank_bridge', 'rock', 'water_splash', 'log', 'cobblestones'], winReward: 0, lossReward: 0, couponReward: 0,
         historyRewards: [
             { category: 'frames', id: 'f14' },
             { category: 'riders', id: 'r6' }

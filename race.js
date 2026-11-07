@@ -1,7 +1,7 @@
-import { player } from './state.js?v=94';
-import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=94';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=94';
-import { playCoinSound, playBoostSound } from './audio.js?v=94';
+import { player } from './state.js?v=100';
+import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=100';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=100';
+import { playCoinSound, playBoostSound } from './audio.js?v=100';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -112,6 +112,7 @@ let raceRunning = false;
 let raceStarted = false;
 let raceTimeMs = 0;
 let timerStarted = false;
+let historyVictoryOutro = null;
 
 let input = {
     accelerating: false,
@@ -421,6 +422,25 @@ function createObstacles() {
         previousRight = x + definition.width;
     }
 
+    // На последних двух исторических этапах обрыв стоит гарантированно
+    // прямо перед финишем, отдельно от случайного набора препятствий.
+    if (currentTrack.isHistory && [4, 5].includes(Number(currentTrack.historyStage))) {
+        const cliff = OBSTACLE_TYPES.cliff;
+        generated.push({
+            id: `${currentTrack.id}-finish-cliff`,
+            type: 'cliff',
+            x: Math.max(firstObstacleX, finishX - cliff.width - 300),
+            width: cliff.width,
+            height: cliff.height,
+            color: cliff.color,
+            playerHit: false,
+            botHitBy: new Set(),
+            botJumpAttemptedBy: new Set(),
+            playerRampUsed: false,
+            botRampUsedBy: new Set()
+        });
+    }
+
     return generated.sort((a, b) => a.x - b.x);
 }
 
@@ -655,7 +675,15 @@ function startBikeFlip(bike, direction = 1, message = 'ПЕРЕВОРОТ! Ни�
     if (!bike || bike.flippedTimer > 0) return false;
     if (bike.abilities?.noAirFlip && !bike.grounded) {
         bike.pitchVelocity = clamp(Number(bike.pitchVelocity) || 0, -0.012, 0.012);
-        bike.pitchAngle = clamp(Number(bike.pitchAngle) || 0, -1.1, 1.1);
+        const groundPitch = Math.atan2(
+            getGroundY(bike.x + 25, 0) - getGroundY(bike.x - 25, 0),
+            50
+        );
+        const relativePitch = Math.atan2(
+            Math.sin((Number(bike.pitchAngle) || 0) - groundPitch),
+            Math.cos((Number(bike.pitchAngle) || 0) - groundPitch)
+        );
+        bike.pitchAngle = groundPitch + clamp(relativePitch, -1.1, 1.1);
         return false;
     }
     bike.flippedTimer = 74;
@@ -923,8 +951,22 @@ function updateJumpPhysics(bike) {
         bike.pitchVelocity *= 0.965 - stabilityRatio * 0.055;
         bike.pitchVelocity = clamp(bike.pitchVelocity, -0.045, 0.045);
     }
-    const pitchLimit = bike.abilities?.noAirFlip && !bike.grounded ? 1.1 : 2.35;
-    bike.pitchAngle = clamp(bike.pitchAngle + bike.pitchVelocity, -pitchLimit, pitchLimit);
+    const nextPitch = bike.pitchAngle + bike.pitchVelocity;
+    if (bike.abilities?.noAirFlip && !bike.grounded) {
+        // Защищаем наклон относительно поверхности под велосипедом, а не
+        // горизонта: иначе на крутом склоне посадка могла считаться переворотом.
+        const groundPitch = Math.atan2(
+            getGroundY(bike.x + 25, 0) - getGroundY(bike.x - 25, 0),
+            50
+        );
+        const relativePitch = Math.atan2(
+            Math.sin(nextPitch - groundPitch),
+            Math.cos(nextPitch - groundPitch)
+        );
+        bike.pitchAngle = groundPitch + clamp(relativePitch, -1.1, 1.1);
+    } else {
+        bike.pitchAngle = clamp(nextPitch, -2.35, 2.35);
+    }
 
     if (bike.grounded) {
         bike.airY = null;
@@ -986,11 +1028,22 @@ function updateJumpPhysics(bike) {
             bike.bumpCooldown = Math.max(bike.bumpCooldown || 0, 75);
         }
         if (failedLanding && !shieldSavedLanding) {
-            startBikeFlip(
-                bike,
-                landingAngle < 0 ? -1 : 1,
-                'ЖЁСТКОЕ ПРИЗЕМЛЕНИЕ!'
-            );
+            if (bike.abilities?.noAirFlip) {
+                // Можно проиграть из-за слишком жёсткого удара, но способность
+                // не должна запускать переворот после того, как байк коснулся земли.
+                bike.pitchAngle = groundPitch + clamp(
+                    landingAngle,
+                    -safeLandingAngle * 0.72,
+                    safeLandingAngle * 0.72
+                );
+                bike.pitchVelocity *= 0.25;
+            } else {
+                startBikeFlip(
+                    bike,
+                    landingAngle < 0 ? -1 : 1,
+                    'ЖЁСТКОЕ ПРИЗЕМЛЕНИЕ!'
+                );
+            }
             queuePlayerCrash(bike, 'hard-landing');
         } else {
             bike.pitchVelocity *= 0.72;
@@ -1753,7 +1806,7 @@ function updatePlayerCollisions() {
             continue;
         }
 
-        if (obstacle.type === 'pit' || obstacle.type === 'bridge_gap') {
+        if (obstacle.type === 'pit' || obstacle.type === 'bridge_gap' || obstacle.type === 'cliff') {
             if (
                 playerBike.grounded &&
                 playerBike.jumpHeight < 8
@@ -1905,7 +1958,7 @@ function updateBotCollisions(bike) {
             continue;
         }
 
-        if (obstacle.type === 'pit' || obstacle.type === 'bridge_gap') {
+        if (obstacle.type === 'pit' || obstacle.type === 'bridge_gap' || obstacle.type === 'cliff') {
             if (
                 bike.jumpHeight <
                 Math.max(22, obstacle.height * 0.75)
@@ -2017,6 +2070,104 @@ function finishRace(playerWon, reason = 'finish') {
     }
 }
 
+function startHistoryVictoryOutro() {
+    if (
+        !currentTrack?.isHistory ||
+        Number(currentTrack.historyStage) !== 5 ||
+        !botBike?.visuals?.draisine ||
+        !playerBike
+    ) {
+        return false;
+    }
+    if (historyVictoryOutro) return true;
+
+    const stopDistance = Math.max(90, Math.min(150, viewWidth * 0.15));
+    const approachStartX = playerBike.x - Math.max(260, Math.min(viewWidth * 0.65, 650));
+    if (botBike.x < approachStartX) botBike.x = approachStartX;
+    const targetX = Math.max(0, playerBike.x - stopDistance, botBike.x);
+    botBike.previousX = botBike.x;
+    botBike.velocityX = 0;
+    botBike.grounded = true;
+    botBike.jumpHeight = 0;
+    botBike.rampLift = 0;
+    botBike.pitchAngle = 0;
+    botBike.pitchVelocity = 0;
+    botBike.historyVictoryPhase = 'approach';
+    botBike.historyVictoryPhaseFrame = 0;
+    input = { accelerating: false, braking: false, reversing: false, jumpRequested: false };
+    playerBike.velocityX = 0;
+    historyVictoryOutro = { phase: 'approach', phaseFrame: 0, targetX, runnerX: null };
+    cameraX = Math.max(0, playerBike.x - viewWidth * 0.5);
+    return true;
+}
+
+function updateHistoryVictoryOutro() {
+    const outro = historyVictoryOutro;
+    if (!outro || !botBike || !playerBike) return;
+
+    frameCounter++;
+    const cameraTarget = Math.max(0, playerBike.x - viewWidth * 0.5);
+    cameraX += (cameraTarget - cameraX) * 0.16;
+
+    const oldX = botBike.x;
+    botBike.previousX = oldX;
+    botBike.grounded = true;
+    botBike.jumpHeight = 0;
+    botBike.rampLift = 0;
+    botBike.pitchAngle = 0;
+    botBike.pitchVelocity = 0;
+
+    const enterPhase = phase => {
+        outro.phase = phase;
+        outro.phaseFrame = 0;
+    };
+
+    if (outro.phase === 'approach') {
+        const delta = outro.targetX - botBike.x;
+        const step = Math.sign(delta) * Math.min(6, Math.abs(delta));
+        botBike.x += step;
+        botBike.velocityX = step;
+        if (Math.abs(delta) <= 6) {
+            botBike.x = outro.targetX;
+            botBike.velocityX = 0;
+            enterPhase('stop');
+        } else {
+            outro.phaseFrame++;
+        }
+    } else if (outro.phase === 'stop') {
+        botBike.velocityX = 0;
+        if (outro.phaseFrame >= 22) {
+            outro.runnerX = botBike.x - 7;
+            enterPhase('dismount');
+        } else {
+            outro.phaseFrame++;
+        }
+    } else if (outro.phase === 'dismount') {
+        botBike.velocityX = 0;
+        outro.runnerX = botBike.x - 7 - Math.min(20, outro.phaseFrame * 0.9);
+        if (outro.phaseFrame >= 21) enterPhase('wave');
+        else outro.phaseFrame++;
+    } else if (outro.phase === 'wave') {
+        botBike.velocityX = 0;
+        outro.runnerX = botBike.x - 27;
+        if (outro.phaseFrame >= 78) enterPhase('run');
+        else outro.phaseFrame++;
+    } else if (outro.phase === 'run') {
+        botBike.velocityX = 0;
+        outro.runnerX -= 5.5;
+        if (outro.runnerX < cameraX - 70) {
+            historyVictoryOutro = null;
+            finishRace(true, 'finish');
+            return;
+        }
+        outro.phaseFrame++;
+    }
+
+    botBike.historyVictoryPhase = outro.phase;
+    botBike.historyVictoryPhaseFrame = outro.phaseFrame;
+    botBike.historyVictoryRunnerX = outro.runnerX;
+}
+
 function checkFinish() {
     const playerFinished =
         playerBike.x >= finishX;
@@ -2049,6 +2200,7 @@ function checkFinish() {
         playerFinished &&
         finishedBots.length === 0
     ) {
+        if (startHistoryVictoryOutro()) return;
         finishRace(true, 'finish');
         return;
     }
@@ -2065,10 +2217,9 @@ function checkFinish() {
         ...finishedBots.map(bike => bike.x)
     );
 
-    finishRace(
-        playerBike.x >= furthestBot,
-        'photo-finish'
-    );
+    const playerWon = playerBike.x >= furthestBot;
+    if (playerWon && startHistoryVictoryOutro()) return;
+    finishRace(playerWon, 'photo-finish');
 }
 
 function getSprintGhostProgress(elapsedMs, bestTimeMs) {
@@ -2667,6 +2818,41 @@ function drawObstacle(obstacle) {
         ctx.beginPath(); ctx.moveTo(screenX + 5, groundY); ctx.lineTo(screenX + 5, groundY - height); ctx.lineTo(screenX + width - 5, groundY - height); ctx.lineTo(screenX + width - 5, groundY); ctx.stroke();
         if (!open) { ctx.fillStyle = obstacle.color; ctx.fillRect(screenX, groundY - height * .55, width, 8); } return;
     }
+    if (obstacle.type === 'cliff') {
+        const bottom = Math.max(viewHeight + 60, groundY + height + 30);
+        ctx.fillStyle = '#020617';
+        ctx.fillRect(screenX, groundY - 18, width, bottom - groundY + 18);
+
+        ctx.fillStyle = '#475569';
+        ctx.beginPath();
+        ctx.moveTo(screenX, groundY - 15);
+        ctx.lineTo(screenX + 18, groundY + 4);
+        ctx.lineTo(screenX + 26, groundY + 27);
+        ctx.lineTo(screenX + 42, groundY + 38);
+        ctx.lineTo(screenX + 42, bottom);
+        ctx.lineTo(screenX, bottom);
+        ctx.closePath();
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(screenX + width, groundY - 15);
+        ctx.lineTo(screenX + width - 17, groundY + 6);
+        ctx.lineTo(screenX + width - 31, groundY + 20);
+        ctx.lineTo(screenX + width - 45, groundY + 42);
+        ctx.lineTo(screenX + width - 45, bottom);
+        ctx.lineTo(screenX + width, bottom);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(screenX - 5, groundY - 15);
+        ctx.lineTo(screenX + 16, groundY - 11);
+        ctx.moveTo(screenX + width - 16, groundY - 11);
+        ctx.lineTo(screenX + width + 5, groundY - 15);
+        ctx.stroke();
+        return;
+    }
     if (obstacle.type === 'bridge_gap') { ctx.fillStyle = '#020617'; ctx.fillRect(screenX, groundY - 2, width, 12); ctx.strokeStyle = '#a16207'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(screenX, groundY - 5); ctx.lineTo(screenX + width, groundY - 5); ctx.stroke(); return; }
     if (obstacle.type === 'rolling_boulder') {
         ctx.fillStyle = obstacle.color; ctx.beginPath(); ctx.arc(screenX + width / 2, groundY - height / 2, height / 2, 0, Math.PI * 2); ctx.fill();
@@ -2836,6 +3022,69 @@ function drawObstacles() {
 // ОТРИСОВКА ВЕЛОСИПЕДА
 // =========================================
 
+function drawHistoryVictoryRider(x, groundY, phase, phaseFrame, riseProgress = 1) {
+    if (riseProgress <= 0.02) return;
+
+    const running = phase === 'run';
+    const stride = running ? Math.sin(phaseFrame * 0.42) * 8 : 0;
+    const bob = running ? Math.abs(Math.sin(phaseFrame * 0.42)) * 2 : 0;
+    const wave = phase === 'wave' ? Math.sin(phaseFrame * 0.32) * 4 : 0;
+
+    ctx.save();
+    ctx.translate(x, groundY - bob);
+    ctx.scale(1, clamp(riseProgress, 0, 1));
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    ctx.strokeStyle = '#39342d';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-3, -22);
+    ctx.lineTo(-8 - stride * 0.35, -11);
+    ctx.lineTo(-8 - stride, 0);
+    ctx.moveTo(3, -22);
+    ctx.lineTo(8 + stride * 0.35, -11);
+    ctx.lineTo(8 + stride, 0);
+    ctx.stroke();
+
+    ctx.fillStyle = '#4b3b2a';
+    ctx.beginPath();
+    ctx.moveTo(-6, -40);
+    ctx.lineTo(5, -40);
+    ctx.lineTo(7, -23);
+    ctx.lineTo(-5, -22);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = '#554c40';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(3, -37);
+    if (running) {
+        ctx.lineTo(10 - stride * 0.35, -29);
+        ctx.lineTo(5 - stride * 0.6, -24);
+        ctx.moveTo(-3, -37);
+        ctx.lineTo(-10 + stride * 0.35, -31);
+        ctx.lineTo(-5 + stride * 0.6, -27);
+    } else {
+        ctx.lineTo(10, -34);
+        ctx.lineTo(13 + wave, -48);
+        ctx.moveTo(-3, -37);
+        ctx.lineTo(-10, -29);
+        ctx.lineTo(-13, -27);
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = '#d8b58b';
+    ctx.beginPath();
+    ctx.arc(2, -49, 4.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#35271d';
+    ctx.fillRect(-3, -56, 10, 2.5);
+    ctx.fillRect(-1.5, -63, 7, 8);
+    ctx.restore();
+}
+
 function drawDraisineBike(bike, label) {
     ctx.save();
     if (bike.isGhost) ctx.globalAlpha = 0.4;
@@ -2942,65 +3191,91 @@ function drawDraisineBike(bike, label) {
     ctx.quadraticCurveTo(x - 8, bodyY - 77, x + 7, bodyY - 70);
     ctx.stroke();
 
-    // Карл Дрез: сюртук, цилиндр и ноги, которые попеременно отталкиваются от земли.
-    const push = bike.grounded ? Math.sin(frameCounter * 0.13) : 0;
-    const hip = { x: x - 5, y: bodyY - 66 };
-    const shoulder = { x: x + 1, y: bodyY - 81 };
-    const head = { x: x + 3, y: bodyY - 91 };
-    const legNear = { knee: { x: x - 11 + push * 5, y: bodyY - 38 + Math.abs(push) * 5 }, foot: { x: x - 15 + push * 12, y: bodyY - 2 } };
-    const legFar = { knee: { x: x - 1 - push * 4, y: bodyY - 39 + Math.abs(push) * 4 }, foot: { x: x - 4 - push * 10, y: bodyY - 2 } };
+    const outroPhase = bike.historyVictoryPhase;
+    const outroPhaseFrame = Number(bike.historyVictoryPhaseFrame) || 0;
+    const seatedOpacity = outroPhase === 'dismount'
+        ? 1 - clamp((outroPhaseFrame - 2) / 12, 0, 1)
+        : ['wave', 'run'].includes(outroPhase) ? 0 : 1;
+    if (seatedOpacity > 0.01) {
+        ctx.save();
+        ctx.globalAlpha *= seatedOpacity;
+        // Карл Дрез: сюртук, цилиндр и ноги, которые попеременно отталкиваются от земли.
+        const push = bike.grounded ? Math.sin(frameCounter * 0.13) : 0;
+        const hip = { x: x - 5, y: bodyY - 66 };
+        const shoulder = { x: x + 1, y: bodyY - 81 };
+        const head = { x: x + 3, y: bodyY - 91 };
+        const legNear = { knee: { x: x - 11 + push * 5, y: bodyY - 38 + Math.abs(push) * 5 }, foot: { x: x - 15 + push * 12, y: bodyY - 2 } };
+        const legFar = { knee: { x: x - 1 - push * 4, y: bodyY - 39 + Math.abs(push) * 4 }, foot: { x: x - 4 - push * 10, y: bodyY - 2 } };
 
-    ctx.strokeStyle = '#39342d';
-    ctx.lineWidth = 4.1;
-    ctx.beginPath();
-    ctx.moveTo(hip.x, hip.y);
-    ctx.lineTo(legFar.knee.x, legFar.knee.y);
-    ctx.lineTo(legFar.foot.x, legFar.foot.y);
-    ctx.stroke();
-    ctx.strokeStyle = '#554c40';
-    ctx.lineWidth = 4.4;
-    ctx.beginPath();
-    ctx.moveTo(hip.x, hip.y);
-    ctx.lineTo(legNear.knee.x, legNear.knee.y);
-    ctx.lineTo(legNear.foot.x, legNear.foot.y);
-    ctx.stroke();
-    ctx.strokeStyle = '#211a14';
-    ctx.lineWidth = 3.5;
-    ctx.beginPath();
-    ctx.moveTo(legNear.foot.x - 2, legNear.foot.y);
-    ctx.lineTo(legNear.foot.x + 5, legNear.foot.y);
-    ctx.moveTo(legFar.foot.x - 2, legFar.foot.y);
-    ctx.lineTo(legFar.foot.x + 5, legFar.foot.y);
-    ctx.stroke();
+        ctx.strokeStyle = '#39342d';
+        ctx.lineWidth = 4.1;
+        ctx.beginPath();
+        ctx.moveTo(hip.x, hip.y);
+        ctx.lineTo(legFar.knee.x, legFar.knee.y);
+        ctx.lineTo(legFar.foot.x, legFar.foot.y);
+        ctx.stroke();
+        ctx.strokeStyle = '#554c40';
+        ctx.lineWidth = 4.4;
+        ctx.beginPath();
+        ctx.moveTo(hip.x, hip.y);
+        ctx.lineTo(legNear.knee.x, legNear.knee.y);
+        ctx.lineTo(legNear.foot.x, legNear.foot.y);
+        ctx.stroke();
+        ctx.strokeStyle = '#211a14';
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.moveTo(legNear.foot.x - 2, legNear.foot.y);
+        ctx.lineTo(legNear.foot.x + 5, legNear.foot.y);
+        ctx.moveTo(legFar.foot.x - 2, legFar.foot.y);
+        ctx.lineTo(legFar.foot.x + 5, legFar.foot.y);
+        ctx.stroke();
 
-    ctx.fillStyle = '#4b3b2a';
-    ctx.beginPath();
-    ctx.moveTo(shoulder.x - 5, shoulder.y);
-    ctx.lineTo(shoulder.x + 4, shoulder.y - 1);
-    ctx.lineTo(hip.x + 5, hip.y + 2);
-    ctx.lineTo(hip.x - 5, hip.y + 2);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = '#32271c';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.moveTo(shoulder.x + 2, shoulder.y + 1);
-    ctx.lineTo(x + 15, bodyY - 77);
-    ctx.lineTo(x + 34, bodyY - 75);
-    ctx.stroke();
-    ctx.fillStyle = '#d8b58b';
-    ctx.beginPath();
-    ctx.arc(head.x, head.y, 4.2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#35271d';
-    ctx.fillRect(head.x - 5, head.y - 7, 10, 2.5);
-    ctx.fillRect(head.x - 3.5, head.y - 14, 7, 8);
+        ctx.fillStyle = '#4b3b2a';
+        ctx.beginPath();
+        ctx.moveTo(shoulder.x - 5, shoulder.y);
+        ctx.lineTo(shoulder.x + 4, shoulder.y - 1);
+        ctx.lineTo(hip.x + 5, hip.y + 2);
+        ctx.lineTo(hip.x - 5, hip.y + 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#32271c';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(shoulder.x + 2, shoulder.y + 1);
+        ctx.lineTo(x + 15, bodyY - 77);
+        ctx.lineTo(x + 34, bodyY - 75);
+        ctx.stroke();
+        ctx.fillStyle = '#d8b58b';
+        ctx.beginPath();
+        ctx.arc(head.x, head.y, 4.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#35271d';
+        ctx.fillRect(head.x - 5, head.y - 7, 10, 2.5);
+        ctx.fillRect(head.x - 3.5, head.y - 14, 7, 8);
+        ctx.restore();
+    }
 
     ctx.restore();
-    ctx.font = 'bold 12px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#fff7e8';
-    ctx.fillText(label, x, bodyY - 119);
+    if (['dismount', 'wave', 'run'].includes(outroPhase)) {
+        const riderX = Number.isFinite(Number(bike.historyVictoryRunnerX))
+            ? Number(bike.historyVictoryRunnerX) - cameraX
+            : x - 10;
+        const riderWorldX = Number.isFinite(Number(bike.historyVictoryRunnerX))
+            ? Number(bike.historyVictoryRunnerX)
+            : bike.x - 10;
+        const riderGroundY = getGroundY(riderWorldX, 0);
+        const riseProgress = outroPhase === 'dismount'
+            ? clamp((outroPhaseFrame - 3) / 15, 0, 1)
+            : 1;
+        drawHistoryVictoryRider(riderX, riderGroundY, outroPhase, outroPhaseFrame, riseProgress);
+    }
+
+    if (!['wave', 'run'].includes(outroPhase)) {
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#fff7e8';
+        ctx.fillText(label, x, bodyY - 119);
+    }
     ctx.restore();
 }
 
@@ -3885,6 +4160,11 @@ function render() {
 function update() {
     if (!raceRunning || raceFinished) return;
 
+    if (historyVictoryOutro) {
+        updateHistoryVictoryOutro();
+        return;
+    }
+
     if (playerBike?.crashPending) {
         frameCounter++;
         updateBikeFlipRecovery(playerBike);
@@ -4168,6 +4448,7 @@ export function initRace(onRaceEnd) {
     raceFinished = false;
     raceRunning = true;
     raceStarted = false;
+    historyVictoryOutro = null;
 
     input = {
         accelerating: false,
