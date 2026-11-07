@@ -1,4 +1,4 @@
-import { ITEMS_DB, TRACKS_DB, HISTORY_TRACKS_DB, CONTAINERS_DB } from './db.js?v=107';
+import { ITEMS_DB, TRACKS_DB, HISTORY_TRACKS_DB, CONTAINERS_DB } from './db.js?v=108';
 import {
     player,
     loadPlayerState,
@@ -6,21 +6,21 @@ import {
     clearSavedProgress,
     forceSavePlayerState,
     getServerTime
-} from './state.js?v=107';
+} from './state.js?v=108';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=107';
+} from './race.js?v=108';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=107';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=107';
+} from './audio.js?v=108';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=108';
 
 function renderGameVersionBadge() {
     const build = document.body?.dataset.gameBuild || '100';
@@ -1224,7 +1224,7 @@ function updateGarageUI() {
 
     if (frameCaption) {
         frameCaption.textContent = frame
-            ? `${frame.visuals?.type === 'dh' ? 'Двухподвес · передняя вилка и задний амортизатор' : 'Хардтейл · передняя вилка'} · ${getRarityName(frame.rarity)}`
+            ? `${frame.visuals?.specialHistoryFrame ? 'Лауфмашина Дреза · отталкивание ногами' : frame.visuals?.type === 'dh' ? 'Двухподвес · передняя вилка и задний амортизатор' : 'Хардтейл · передняя вилка'} · ${getRarityName(frame.rarity)}`
             : 'Выбери раму во вкладке «Модернизация», чтобы завершить сборку.';
     }
 
@@ -1299,7 +1299,7 @@ function updateGarageUI() {
         if (frameGroup) {
             let geometry;
             if (isDraisineFrame) {
-                geometry = { seat: [250, 80], head: [435, 88], lower: [447, 145] };
+                geometry = { seat: [282, 80], head: [406, 88], lower: [447, 145] };
             } else if (frame?.visuals?.type === 'dh') {
                 geometry = { seat: [250, 80], head: [435, 88], lower: [447, 135] };
             } else if (frame?.visuals?.type === 'hardtail') {
@@ -1318,9 +1318,9 @@ function updateGarageUI() {
             const values = isDraisineFrame
                 ? [
                     `M${rearWheelCenter.x} ${rearWheelCenter.y} Q205 72 ${xy(points.seat)} Q340 55 ${xy(points.head)} L${frontWheelCenter.x} ${frontWheelCenter.y}`,
-                    `M${rearWheelCenter.x} ${rearWheelCenter.y} L300 185 L${xy(points.seat)}`,
+                    `M${rearWheelCenter.x} ${rearWheelCenter.y} L241 190 L${xy(points.seat)}`,
                     `M${xy(points.head)} L${xy(points.lower)} L${frontWheelCenter.x} ${frontWheelCenter.y}`,
-                    `M235 136 L${xy(points.seat)}`
+                    `M241 190 L366 187 L${frontWheelCenter.x} ${frontWheelCenter.y}`
                 ]
                 : [
                     isFullSuspension
@@ -1357,7 +1357,7 @@ function updateGarageUI() {
         // --- КООРДИНАТЫ ПОДСЕДЕЛА ---
         let seatCoordinates;
         if (isDraisineFrame) {
-            seatCoordinates = { x: 250, y: 80 };
+            seatCoordinates = { x: 282, y: 80 };
         } else if (frame?.visuals?.type === 'dh') {
             seatCoordinates = { x: 250, y: 80 };
         } else if (frame?.visuals?.type === 'hardtail') {

@@ -1,7 +1,7 @@
-import { player } from './state.js?v=107';
-import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=107';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=107';
-import { playCoinSound, playBoostSound } from './audio.js?v=107';
+import { player } from './state.js?v=108';
+import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=108';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=108';
+import { playCoinSound, playBoostSound } from './audio.js?v=108';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -3407,6 +3407,98 @@ function drawPlayerHistoryObserver(x, groundY, phaseFrame, riseProgress, visuals
     ctx.restore();
 }
 
+function getDraisineFramePoints(x, bodyY, rear, front) {
+    return {
+        rearJoint: { x: x - 15, y: bodyY - 18 },
+        upperRear: { x: x - 11, y: bodyY - 56 },
+        upperHead: { x: x + 14, y: bodyY - 46 },
+        middleHead: { x: x + 6, y: bodyY - 35 },
+        lowerJoint: { x: x + 7, y: bodyY - 17 },
+        seat: { x: x - 8, y: bodyY - 70 },
+        seatBrace: { x: x - 11, y: bodyY - 56 },
+        rear,
+        front
+    };
+}
+
+function drawDraisineFrame(points, frameColor = '#9a6538') {
+    const strokeWood = (drawPath, outlineWidth, fillWidth) => {
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = '#3d2818';
+        ctx.lineWidth = outlineWidth;
+        ctx.beginPath();
+        drawPath();
+        ctx.stroke();
+        ctx.strokeStyle = frameColor;
+        ctx.lineWidth = fillWidth;
+        ctx.beginPath();
+        drawPath();
+        ctx.stroke();
+        ctx.globalAlpha *= 0.48;
+        ctx.strokeStyle = '#f0c98b';
+        ctx.lineWidth = Math.max(0.8, fillWidth * 0.18);
+        ctx.beginPath();
+        drawPath();
+        ctx.stroke();
+        ctx.restore();
+    };
+
+    strokeWood(() => {
+        ctx.moveTo(points.rear.x, points.rear.y - 1);
+        ctx.quadraticCurveTo(points.upperRear.x, points.upperRear.y, points.upperHead.x, points.upperHead.y);
+        ctx.lineTo(points.front.x, points.front.y - 1);
+    }, 13, 7);
+
+    strokeWood(() => {
+        ctx.moveTo(points.rear.x, points.rear.y - 1);
+        ctx.lineTo(points.rearJoint.x, points.rearJoint.y);
+        ctx.lineTo(points.middleHead.x, points.middleHead.y);
+        ctx.lineTo(points.upperHead.x, points.upperHead.y);
+        ctx.moveTo(points.rearJoint.x, points.rearJoint.y);
+        ctx.lineTo(points.lowerJoint.x, points.lowerJoint.y);
+        ctx.lineTo(points.front.x, points.front.y - 1);
+        ctx.moveTo(points.seatBrace.x, points.seatBrace.y);
+        ctx.lineTo(points.seat.x, points.seat.y + 13);
+    }, 10, 5.5);
+}
+
+function drawDraisineSeatAndCockpit(points, visuals = {}) {
+    const x = points.seat.x + 8;
+    const bodyY = points.seat.y + 70;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    ctx.strokeStyle = visuals.seatpostColor || '#704522';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(points.seat.x, bodyY - 56);
+    ctx.lineTo(points.seat.x, points.seat.y + 1);
+    ctx.stroke();
+    ctx.strokeStyle = visuals.saddleColor || '#342319';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.moveTo(x - 26, bodyY - 71);
+    ctx.quadraticCurveTo(x - 8, bodyY - 77, x + 7, bodyY - 70);
+    ctx.stroke();
+
+    ctx.strokeStyle = visuals.stemColor || visuals.handlebarColor || '#704522';
+    ctx.lineWidth = Math.max(2.5, Number(visuals.handlebarWidth) || 4);
+    ctx.beginPath();
+    ctx.moveTo(points.upperHead.x, points.upperHead.y);
+    ctx.lineTo(x + 20, bodyY - 73);
+    ctx.stroke();
+    ctx.strokeStyle = visuals.handlebarColor || '#704522';
+    ctx.lineWidth = Math.max(2, Number(visuals.handlebarWidth) || 3);
+    ctx.beginPath();
+    ctx.moveTo(x + 13, bodyY - 76);
+    ctx.lineTo(x + 39, bodyY - 76);
+    ctx.moveTo(x + 19, bodyY - 73);
+    ctx.lineTo(x + 21, bodyY - 76);
+    ctx.stroke();
+}
+
 function drawDraisineBike(bike, label) {
     ctx.save();
     if (bike.isGhost) ctx.globalAlpha = 0.4;
@@ -3515,54 +3607,15 @@ function drawDraisineBike(bike, label) {
     drawWoodWheel(rear, rearRadius);
     drawWoodWheel(front, frontRadius);
 
-    // Длинная резная деревянная балка, седло и рулевой рычаг без цепи и педалей.
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#3d2818';
-    ctx.lineWidth = 13;
-    ctx.beginPath();
-    ctx.moveTo(rear.x, rear.y - 1);
-    ctx.quadraticCurveTo(x - 11, bodyY - 56, x + 14, bodyY - 46);
-    ctx.lineTo(front.x, front.y - 1);
-    ctx.moveTo(rear.x, rear.y - 1);
-    ctx.lineTo(x - 15, bodyY - 18);
-    ctx.lineTo(x + 6, bodyY - 35);
-    ctx.lineTo(x + 14, bodyY - 46);
-    ctx.moveTo(x - 15, bodyY - 18);
-    ctx.lineTo(x + 7, bodyY - 17);
-    ctx.lineTo(front.x, front.y - 1);
-    ctx.stroke();
-
-    ctx.strokeStyle = '#b88043';
-    ctx.lineWidth = 7;
-    ctx.beginPath();
-    ctx.moveTo(rear.x, rear.y - 1);
-    ctx.quadraticCurveTo(x - 11, bodyY - 56, x + 14, bodyY - 46);
-    ctx.lineTo(front.x, front.y - 1);
-    ctx.stroke();
-    ctx.strokeStyle = '#d3a064';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(rear.x + 3, rear.y - 4);
-    ctx.quadraticCurveTo(x - 8, bodyY - 52, x + 15, bodyY - 44);
-    ctx.stroke();
-
-    // Руль и кожаное седло.
-    ctx.strokeStyle = '#704522';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(x + 14, bodyY - 46);
-    ctx.lineTo(x + 20, bodyY - 73);
-    ctx.lineTo(x + 35, bodyY - 73);
-    ctx.moveTo(x + 15, bodyY - 76);
-    ctx.lineTo(x + 39, bodyY - 76);
-    ctx.stroke();
-    ctx.strokeStyle = '#342319';
-    ctx.lineWidth = 7;
-    ctx.beginPath();
-    ctx.moveTo(x - 26, bodyY - 71);
-    ctx.quadraticCurveTo(x - 8, bodyY - 77, x + 7, bodyY - 70);
-    ctx.stroke();
+    const framePoints = getDraisineFramePoints(x, bodyY, rear, front);
+    drawDraisineFrame(framePoints, bike.visuals?.frameColor || '#9a6538');
+    drawDraisineSeatAndCockpit(framePoints, {
+        stemColor: '#704522',
+        handlebarColor: '#704522',
+        handlebarWidth: 4,
+        seatpostColor: '#704522',
+        saddleColor: '#342319'
+    });
 
     const seatedOpacity = outroPhase === 'dismount'
         ? 1 - easeInOutCubic((outroPhaseFrame - 3) / 21)
@@ -3675,16 +3728,24 @@ function drawBike(bike, label, color) {
     const frontRadius = clamp((Number(visuals.frontWheelRadius) || Number(visuals.wheelRadius) || 9.5) * 1.24, 11.5, 19.5);
     const radius = (rearRadius + frontRadius) / 2;
     const wheelY = y - radius + 1;
-    const rearWheelX = x - 25;
-    const frontWheelX = x + 25;
+    const draisineFrame = Boolean(visuals.draisine);
+    const rearWheelX = x - (draisineFrame ? 31 : 25);
+    const frontWheelX = x + (draisineFrame ? 34 : 25);
     const rearWheelY = y - rearRadius + 1;
     const frontWheelY = y - frontRadius + 1;
+    const framePoints = draisineFrame
+        ? getDraisineFramePoints(
+            x,
+            y,
+            { x: rearWheelX, y: rearWheelY },
+            { x: frontWheelX, y: frontWheelY }
+        )
+        : null;
     const bottomX = x - 3;
     const bottomY = wheelY - radius * 0.42;
-    const draisineFrame = Boolean(visuals.draisine);
-    const seatX = x - 10;
-    const seatBaseY = draisineFrame ? wheelY - 43 : wheelY - 27;
-    const saddleY = draisineFrame ? wheelY - 58 : wheelY - 33;
+    const seatX = draisineFrame ? x - 8 : x - 10;
+    const seatBaseY = draisineFrame ? y - 56 : wheelY - 27;
+    const saddleY = draisineFrame ? y - 70 : wheelY - 33;
     const headX = x + 11;
     const travel = Number.isFinite(bike.previousX)
         ? bike.x - bike.previousX
@@ -3714,7 +3775,7 @@ function drawBike(bike, label, color) {
     ctx.fill();
 
     // Увеличиваем только рисунок: физика и позиции колёс на трассе не меняются.
-    const bikeRenderScale = 1.16;
+    const bikeRenderScale = draisineFrame ? 1 : 1.16;
     ctx.save();
     ctx.translate(x, wheelY);
     ctx.scale(bikeRenderScale, bikeRenderScale);
@@ -3722,9 +3783,10 @@ function drawBike(bike, label, color) {
 
     // --- НАКЛОНЯЕМ ХОЛСТ ---
     ctx.save();
-    ctx.translate(x, wheelY - 15);
+    const pitchPivotY = draisineFrame ? y - 19 : wheelY - 15;
+    ctx.translate(x, pitchPivotY);
     ctx.rotate(bike.pitchAngle || 0);
-    ctx.translate(-x, -(wheelY - 15));
+    ctx.translate(-x, -pitchPivotY);
     // -----------------------
 
     function drawWheel(cx, cy, wheelRadius) {
@@ -3843,30 +3905,8 @@ function drawBike(bike, label, color) {
     };
 
     if (draisineFrame) {
-        // Длинная изогнутая деревянная балка узнаваемой Laufmaschine,
-        // а цвет и толщина по-прежнему берутся только у выбранной рамы.
-        const drawDraisineBeam = (stroke, width) => {
-            ctx.strokeStyle = stroke;
-            ctx.lineWidth = width;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.beginPath();
-            ctx.moveTo(rearWheelX, rearWheelY);
-            ctx.quadraticCurveTo(x - 18, wheelY - 50, x - 10, wheelY - 49);
-            ctx.quadraticCurveTo(x + 3, wheelY - 51, x + 14, wheelY - 42);
-            ctx.lineTo(frontWheelX, frontWheelY);
-            ctx.stroke();
-        };
-        drawDraisineBeam('#3d2818', 12);
-        drawDraisineBeam(frameColor, 8);
-        drawDraisineBeam('rgba(245,205,145,.65)', 1.25);
-
-        const beamRear = { x: x - 12, y: wheelY - 43 };
-        const beamFront = { x: x + 13, y: wheelY - 41 };
-        drawTube(rearWheelX, rearWheelY, x - 15, wheelY - 17, '#3d2818', 6);
-        drawTube(x - 15, wheelY - 17, beamRear.x, beamRear.y, frameColor, frameWidth * 1.25);
-        drawTube(x - 15, wheelY - 17, x + 7, wheelY - 18, frameColor, frameWidth * 1.25);
-        drawTube(x + 7, wheelY - 18, beamFront.x, beamFront.y, frameColor, frameWidth * 1.25);
+        // Наградная рама использует тот же контур, что и Laufmaschine Карла.
+        drawDraisineFrame(framePoints, frameColor);
     } else if (visuals.fullSuspension) {
         drawTube(bottomX, bottomY, seatX, wheelY - 27);
         drawTube(seatX, wheelY - 27, headX, wheelY - 19);
@@ -3926,7 +3966,7 @@ function drawBike(bike, label, color) {
     // Вилка начинается у рулевого стакана и доходит до оси переднего колеса.
     // Раньше верхняя точка была сдвинута вправо, из-за чего вилка выглядела отдельной деталью.
     const forkTop = draisineFrame
-        ? { x: x + 14, y: wheelY - 42 }
+        ? framePoints.upperHead
         : { x: headX + 1, y: wheelY - 19 };
     drawTube(forkTop.x, forkTop.y, frontWheelX - 1, frontWheelY, visuals.forkColor || '#cbd5e1', 4);
     if (visuals.suspension) {
@@ -3998,27 +4038,31 @@ function drawBike(bike, label, color) {
     ctx.lineTo(rightPedal.x + 3, rightPedal.y);
     ctx.stroke();
 
-    ctx.strokeStyle = visuals.seatpostColor || '#cbd5e1';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(seatX, seatBaseY);
-    ctx.lineTo(seatX - 1, saddleY);
-    ctx.stroke();
-    ctx.strokeStyle = visuals.saddleColor || '#f8fafc';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(seatX - 8, saddleY);
-    ctx.lineTo(seatX + 6, saddleY);
-    ctx.stroke();
+    if (draisineFrame) {
+        drawDraisineSeatAndCockpit(framePoints, visuals);
+    } else {
+        ctx.strokeStyle = visuals.seatpostColor || '#cbd5e1';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(seatX, seatBaseY);
+        ctx.lineTo(seatX - 1, saddleY);
+        ctx.stroke();
+        ctx.strokeStyle = visuals.saddleColor || '#f8fafc';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(seatX - 8, saddleY);
+        ctx.lineTo(seatX + 6, saddleY);
+        ctx.stroke();
+    }
 
     const hip = draisineFrame
-        ? { x: seatX + 1, y: wheelY - 57 }
+        ? { x: seatX + 1, y: y - 66 }
         : { x: seatX + 1, y: wheelY - 35 };
     const shoulder = draisineFrame
-        ? { x: x + 1, y: wheelY - 73 }
+        ? { x: x + 1, y: y - 81 }
         : { x: x + 1, y: wheelY - 46 };
     const head = draisineFrame
-        ? { x: x + 4, y: wheelY - 84 }
+        ? { x: x + 3, y: y - 91 }
         : { x: x + 4, y: wheelY - 53 };
     const kneeA = { x: (hip.x + leftPedal.x) / 2 + 3, y: (hip.y + leftPedal.y) / 2 - 3 };
     const kneeB = { x: (hip.x + rightPedal.x) / 2 - 3, y: (hip.y + rightPedal.y) / 2 - 3 };
@@ -4211,10 +4255,10 @@ function drawBike(bike, label, color) {
     }
 
     const elbow = draisineFrame
-        ? { x: x + 9, y: wheelY - 72 }
+        ? { x: x + 9, y: y - 72 }
         : { x: x + 10, y: wheelY - 42 };
     const hand = draisineFrame
-        ? { x: x + 25, y: wheelY - 73 }
+        ? { x: x + 25, y: y - 73 }
         : { x: headX + 13, y: wheelY - 37 };
     ctx.strokeStyle = jersey;
     ctx.lineWidth = 3.2;
@@ -4285,33 +4329,23 @@ function drawBike(bike, label, color) {
 
     ctx.restore(); // Райдер отделяется от рамы при падении.
 
-    ctx.strokeStyle = visuals.stemColor || visuals.handlebarColor || '#f8fafc';
-    ctx.lineWidth = Math.max(2.2, (visuals.handlebarWidth || 2) + 0.4);
-    ctx.beginPath();
-    if (draisineFrame) {
-        ctx.moveTo(x + 14, wheelY - 42);
-        ctx.lineTo(x + 19, wheelY - 73);
-    } else {
+    if (!draisineFrame) {
+        ctx.strokeStyle = visuals.stemColor || visuals.handlebarColor || '#f8fafc';
+        ctx.lineWidth = Math.max(2.2, (visuals.handlebarWidth || 2) + 0.4);
+        ctx.beginPath();
         ctx.moveTo(headX, wheelY - 19);
         ctx.lineTo(headX + 2, wheelY - 35);
-    }
-    ctx.stroke();
+        ctx.stroke();
 
-    ctx.strokeStyle = visuals.handlebarColor || '#f8fafc';
-    ctx.lineWidth = visuals.handlebarWidth || 2;
-    ctx.beginPath();
-    if (draisineFrame) {
-        ctx.moveTo(x + 13, wheelY - 76);
-        ctx.lineTo(x + 34, wheelY - 76);
-        ctx.moveTo(x + 19, wheelY - 73);
-        ctx.lineTo(x + 21, wheelY - 76);
-    } else {
+        ctx.strokeStyle = visuals.handlebarColor || '#f8fafc';
+        ctx.lineWidth = visuals.handlebarWidth || 2;
+        ctx.beginPath();
         ctx.moveTo(headX + 2, wheelY - 35);
         ctx.lineTo(headX + 14, wheelY - 35);
         ctx.moveTo(headX - 3, wheelY - 37);
         ctx.lineTo(headX + 19, wheelY - 37);
+        ctx.stroke();
     }
-    ctx.stroke();
 
     if (visuals.motor) {
         ctx.fillStyle = '#334155';
