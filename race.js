@@ -1,7 +1,7 @@
-import { player } from './state.js?v=106';
-import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=106';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=106';
-import { playCoinSound, playBoostSound } from './audio.js?v=106';
+import { player } from './state.js?v=104';
+import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=104';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=104';
+import { playCoinSound, playBoostSound } from './audio.js?v=104';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -30,54 +30,6 @@ function getCameraZoom() {
     if (w <= 920 && h <= 540) return RACE_ZOOM_MOBILE_LANDSCAPE;
     if (w <= 768) return 0.68;
     return RACE_ZOOM_DESKTOP;
-}
-
-function updateRaceCameraZoom() {
-    if (!ctx || !canvas || !canvasCssWidth || !canvasCssHeight) return;
-
-    const baseZoom = getCameraZoom();
-    const mobileViewport = window.matchMedia('(pointer: coarse)').matches ||
-        ((window.innerWidth || 800) <= 920 && (window.innerHeight || 600) <= 700);
-    let targetZoom = baseZoom;
-
-    if (mobileViewport && playerBike) {
-        const verticalSpeed = Math.max(0, Number(playerBike.jumpVelocity) || 0);
-        const gravity = Math.max(0.1, Number(playerBike.jumpGravity) || GRAVITY);
-        const currentHeight = Math.max(
-            Number(playerBike.jumpHeight) || 0,
-            Number(playerBike.rampLift) || 0
-        );
-        const predictedApex = currentHeight + verticalSpeed * verticalSpeed / (2 * gravity);
-        const bikeAndRiderHeight = 68;
-        const safeScreenHeight = canvasCssHeight * 0.56;
-        const projectedHeight = predictedApex + bikeAndRiderHeight;
-
-        if (projectedHeight * baseZoom > safeScreenHeight) {
-            targetZoom = clamp(
-                safeScreenHeight / projectedHeight,
-                baseZoom * 0.55,
-                baseZoom
-            );
-        }
-    }
-
-    // Быстро отдаляемся перед высоким прыжком, чтобы байк не успел уйти за
-    // верхнюю границу экрана; возвращаем исходный масштаб плавно после посадки.
-    cameraZoom = targetZoom < cameraZoom
-        ? targetZoom
-        : cameraZoom + (targetZoom - cameraZoom) * 0.1;
-    if (Math.abs(targetZoom - cameraZoom) < 0.001) cameraZoom = targetZoom;
-
-    viewWidth = canvasCssWidth / cameraZoom;
-    viewHeight = canvasCssHeight / cameraZoom;
-    ctx.setTransform(
-        canvasDpr * cameraZoom,
-        0,
-        0,
-        canvasDpr * cameraZoom,
-        0,
-        0
-    );
 }
 
 const TRACK_BALANCE = {
@@ -145,10 +97,6 @@ let canvas = null;
 let ctx = null;
 let viewWidth = 0;
 let viewHeight = 0;
-let canvasCssWidth = 0;
-let canvasCssHeight = 0;
-let canvasDpr = 1;
-let cameraZoom = 1;
 let animationId = null;
 let lastFrameTime = 0;
 let frameAccumulator = 0;
@@ -605,11 +553,11 @@ function getBikeVisualProfile() {
         handlebarWidth: handlebar?.visuals?.width || (handlebar?.rarity === 'legendary' ? 2.4 : handlebar?.rarity === 'rare' ? 2.1 : 1.8),
         
         // --- КОЛЕСА ---
-        rimColor: wheel?.visuals?.rimColor || (wheel?.rarity === 'legendary' ? '#fbbf24' : wheel?.rarity === 'rare' ? '#38bdf8' : '#64748b'),
-        hubColor: wheel?.visuals?.hubColor || '#e2e8f0',
+        rimColor: wheel?.visuals?.rimColor || frame?.visuals?.rimColor || (wheel?.rarity === 'legendary' ? '#fbbf24' : wheel?.rarity === 'rare' ? '#38bdf8' : '#64748b'),
+        hubColor: wheel?.visuals?.hubColor || frame?.visuals?.hubColor || '#e2e8f0',
         wheelRadius: wheel?.visuals?.radius || (9.5 + Math.min(1.2, Math.max(0, Number(wheel?.speed) || 0) * 0.08)),
-        rearWheelRadius: wheel?.visuals?.rearRadius || 0,
-        frontWheelRadius: wheel?.visuals?.frontRadius || 0,
+        rearWheelRadius: wheel?.visuals?.rearRadius || frame?.visuals?.rearRadius || 0,
+        frontWheelRadius: wheel?.visuals?.frontRadius || frame?.visuals?.frontRadius || 0,
         tireWidth: tire?.visuals?.width || (tire?.rarity === 'legendary' ? 4.2 : tire?.rarity === 'rare' ? 3.7 : 3.2),
         
         // --- МОДИФИКАТОРЫ ---
@@ -738,13 +686,9 @@ function applyNoAirFlipProtection(bike, candidatePitch = bike?.pitchAngle) {
         Math.sin((Number(candidatePitch) || 0) - groundPitch),
         Math.cos((Number(candidatePitch) || 0) - groundPitch)
     );
-    // Ограничение относительно склона сохраняет естественную посадку, а
-    // абсолютный предел не даёт раме оказаться вверх колёсами в воздухе.
-    bike.pitchAngle = clamp(
-        groundPitch + clamp(relativePitch, -0.9, 0.9),
-        -1.2,
-        1.2
-    );
+    const protectedPitch = groundPitch + clamp(relativePitch, -0.9, 0.9);
+    bike.pitchAngle = clamp(protectedPitch, -1.2, 1.2);
+
     if (Math.abs(bike.pitchAngle) >= 1.19 && bike.pitchAngle * bike.pitchVelocity > 0) {
         bike.pitchVelocity = 0;
     }
@@ -844,8 +788,8 @@ function applyImpactPitchImpulse(bike, impactForce, direction = 1) {
 
 function updateBikeFlipRecovery(bike) {
     if (bike.bumpCooldown > 0) bike.bumpCooldown--;
-    // Если нестабильность начала вращение на кочке перед прыжком, способность
-    // останавливает его с отрывом колёс. Само поражение от удара сохраняется.
+    // Стабильность может начать кувырок при контакте с землёй; если байк
+    // оторвался, способность сразу прекращает вращение в воздухе.
     if (hasNoAirFlipProtection(bike) && !bike.grounded && bike.flippedTimer > 0) {
         bike.flippedTimer = 0;
         bike.pitchVelocity = clamp(Number(bike.pitchVelocity) || 0, -0.012, 0.012);
@@ -3382,7 +3326,7 @@ function drawDraisineBike(bike, label) {
 }
 
 function drawBike(bike, label, color) {
-    if (bike.visuals?.draisine && bike.isBot) {
+    if (bike.visuals?.draisine) {
         drawDraisineBike(bike, label);
         return;
     }
@@ -3564,18 +3508,7 @@ function drawBike(bike, label, color) {
         ctx.restore();
     };
 
-    if (visuals.draisine) {
-        // Историческая деревянная рама остаётся отдельной деталью. Колёса,
-        // вилка, привод, руль и экипировка дальше рисуются из своей сборки.
-        const beamRear = { x: x - 12, y: wheelY - 40 };
-        const beamFront = { x: x + 14, y: wheelY - 37 };
-        drawTube(rearWheelX, rearWheelY, beamRear.x, beamRear.y, frameColor, frameWidth * 1.35);
-        drawTube(beamRear.x, beamRear.y, beamFront.x, beamFront.y, frameColor, frameWidth * 1.35);
-        drawTube(beamFront.x, beamFront.y, frontWheelX, frontWheelY, frameColor, frameWidth * 1.35);
-        drawTube(rearWheelX, rearWheelY, bottomX, bottomY, frameColor, frameWidth * 1.2);
-        drawTube(bottomX, bottomY, beamRear.x, beamRear.y, frameColor, frameWidth * 1.2);
-        drawTube(bottomX, bottomY, beamFront.x, beamFront.y, frameColor, frameWidth * 1.2);
-    } else if (visuals.fullSuspension) {
+    if (visuals.fullSuspension) {
         drawTube(bottomX, bottomY, seatX, wheelY - 27);
         drawTube(seatX, wheelY - 27, headX, wheelY - 19);
         drawTube(headX, wheelY - 19, bottomX, bottomY);
@@ -4077,7 +4010,7 @@ function drawRaceHUD() {
     // landscape phones. Scale its complete layout while still cancelling the
     // camera zoom so the HUD remains fixed-size relative to the screen.
     const hudScale = landscapePhone ? 0.72 : 1;
-    const uiScale = mobileLayout ? hudScale / cameraZoom : 1;
+    const uiScale = mobileLayout ? hudScale / getCameraZoom() : 1;
     const panelWidth = mobileLayout
         ? Math.min((landscapePhone ? 360 : 390) * uiScale, viewWidth - 20 * uiScale)
         : Math.min(390, viewWidth - 28);
@@ -4230,7 +4163,6 @@ function render() {
         return;
     }
 
-    updateRaceCameraZoom();
     drawBackground();
     drawTrack();
     drawObstacles();
@@ -4435,12 +4367,9 @@ function resizeCanvas() {
 
     const canvasWidth = Math.max(320, rect.width || canvas.clientWidth || 800);
     const canvasHeight = Math.max(220, rect.height || canvas.clientHeight || 420);
-    canvasCssWidth = canvasWidth;
-    canvasCssHeight = canvasHeight;
-    canvasDpr = dpr;
-    cameraZoom = getCameraZoom();
-    viewWidth = canvasWidth / cameraZoom;
-    viewHeight = canvasHeight / cameraZoom;
+    const zoom = getCameraZoom();
+    viewWidth = canvasWidth / zoom;
+    viewHeight = canvasHeight / zoom;
 
     canvas.width = Math.round(canvasWidth * dpr);
     canvas.height = Math.round(canvasHeight * dpr);
@@ -4449,10 +4378,10 @@ function resizeCanvas() {
 
     if (ctx) {
         ctx.setTransform(
-            dpr * cameraZoom,
+            dpr * zoom,
             0,
             0,
-            dpr * cameraZoom,
+            dpr * zoom,
             0,
             0
         );

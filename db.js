@@ -87,7 +87,7 @@ export const ITEMS_DB = {
         // Легендарные двухподвесы.
         part('f3', 'Cannondale Jekyll Carbon', 'legendary', 8, 5, 8, 4, 5600, 0, { color: '#22c55e', width: 15, type: 'dh', stability: 26 }),
         part('f13', 'Specialized Stumpjumper EVO Carbon', 'legendary', 10, 7, 11, 6, 7000, 0, { color: '#f97316', width: 16, type: 'dh', stability: 27 }),
-        part('f14', 'Laufmaschine Карла Дреза', 'special', 0, 0, 0, 0, 0, 0, { color: '#9a6538', width: 12, type: 'hardtail', stability: 1, specialHistoryFrame: true })
+        part('f14', 'Laufmaschine Карла Дреза', 'special', 0, 0, 0, 0, 0, 0, { color: '#9a6538', width: 12, type: 'hardtail', stability: 1, specialHistoryFrame: true, rearRadius: 14, frontRadius: 11, rimColor: '#704522', hubColor: '#c4965d' })
     ],
 
     // =====================================
