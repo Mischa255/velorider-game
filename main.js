@@ -1,4 +1,4 @@
-import { ITEMS_DB, TRACKS_DB, HISTORY_TRACKS_DB, CONTAINERS_DB } from './db.js?v=101';
+import { ITEMS_DB, TRACKS_DB, HISTORY_TRACKS_DB, CONTAINERS_DB } from './db.js?v=106';
 import {
     player,
     loadPlayerState,
@@ -6,21 +6,21 @@ import {
     clearSavedProgress,
     forceSavePlayerState,
     getServerTime
-} from './state.js?v=101';
+} from './state.js?v=106';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
     triggerJump
-} from './race.js?v=101';
+} from './race.js?v=106';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=101';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=101';
+} from './audio.js?v=106';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=106';
 
 function renderGameVersionBadge() {
     const build = document.body?.dataset.gameBuild || '100';
@@ -1258,9 +1258,10 @@ function updateGarageUI() {
         const isFullSuspension = frame?.visuals?.type === 'dh';
         const wheelVisuals = wheels?.visuals || {};
         const frameVisuals = frame?.visuals || {};
-        const baseWheelSize = Number(wheelVisuals.radius) || Number(frameVisuals.radius) || 9.5;
-        const rearWheelSize = Number(wheelVisuals.rearRadius) || Number(frameVisuals.rearRadius) || baseWheelSize;
-        const frontWheelSize = Number(wheelVisuals.frontRadius) || Number(frameVisuals.frontRadius) || baseWheelSize;
+        const isDraisineFrame = Boolean(frameVisuals.specialHistoryFrame);
+        const baseWheelSize = Number(wheelVisuals.radius) || 9.5;
+        const rearWheelSize = Number(wheelVisuals.rearRadius) || baseWheelSize;
+        const frontWheelSize = Number(wheelVisuals.frontRadius) || baseWheelSize;
         const largestWheelSize = Math.max(rearWheelSize, frontWheelSize, 1);
         const rearWheelScale = clamp(rearWheelSize / largestWheelSize, 0.65, 1.15);
         const frontWheelScale = clamp(frontWheelSize / largestWheelSize, 0.65, 1.15);
@@ -1286,6 +1287,7 @@ function updateGarageUI() {
         
         bikeSvg.dataset.frameId = frame?.id || 'none';
         bikeSvg.dataset.wheelId = wheels?.id || 'none';
+        bikeSvg.dataset.draisineFrame = String(isDraisineFrame);
         
         bikeSvg.classList.toggle('has-motor', Boolean(electronics && electronics.id !== 'e1'));
         bikeSvg.classList.toggle('has-suspension', Boolean(fork && fork.id !== 'fk1'));
@@ -1296,7 +1298,9 @@ function updateGarageUI() {
         const frameGroup = bikeSvg.querySelector('.bike-frame');
         if (frameGroup) {
             let geometry;
-            if (frame?.visuals?.type === 'dh') {
+            if (isDraisineFrame) {
+                geometry = { seat: [250, 80], head: [435, 88], lower: [447, 145] };
+            } else if (frame?.visuals?.type === 'dh') {
                 geometry = { seat: [250, 80], head: [435, 88], lower: [447, 135] };
             } else if (frame?.visuals?.type === 'hardtail') {
                 geometry = { seat: [235, 88], head: [445, 96], lower: [457, 145] };
@@ -1311,14 +1315,21 @@ function updateGarageUI() {
             const xy = pair => pair.join(' ');
             const fWidth = frame?.visuals?.width || (frame?.rarity === 'legendary' ? '15' : frame?.rarity === 'rare' ? '13' : '11');
             const paths = frameGroup.querySelectorAll('path');
-            const values = [
-                isFullSuspension
-                    ? `M300 185 L${xy(points.seat)}`
-                    : `M${rearWheelCenter.x} ${rearWheelCenter.y} L300 185 L${xy(points.seat)} L${rearWheelCenter.x} ${rearWheelCenter.y}`,
-                `M${xy(points.seat)} L${xy(points.head)} L300 185`,
-                `M${xy(points.head)} L${xy(points.lower)} L${frontWheelCenter.x} ${frontWheelCenter.y}`,
-                `M${xy(points.seat)} L${xy(points.lower)}`
-            ];
+            const values = isDraisineFrame
+                ? [
+                    `M${rearWheelCenter.x} ${rearWheelCenter.y} Q205 72 ${xy(points.seat)} Q340 55 ${xy(points.head)} L${frontWheelCenter.x} ${frontWheelCenter.y}`,
+                    `M${rearWheelCenter.x} ${rearWheelCenter.y} L300 185 L${xy(points.seat)}`,
+                    `M${xy(points.head)} L${xy(points.lower)} L${frontWheelCenter.x} ${frontWheelCenter.y}`,
+                    `M235 136 L${xy(points.seat)}`
+                ]
+                : [
+                    isFullSuspension
+                        ? `M300 185 L${xy(points.seat)}`
+                        : `M${rearWheelCenter.x} ${rearWheelCenter.y} L300 185 L${xy(points.seat)} L${rearWheelCenter.x} ${rearWheelCenter.y}`,
+                    `M${xy(points.seat)} L${xy(points.head)} L300 185`,
+                    `M${xy(points.head)} L${xy(points.lower)} L${frontWheelCenter.x} ${frontWheelCenter.y}`,
+                    `M${xy(points.seat)} L${xy(points.lower)}`
+                ];
             paths.forEach((path, index) => { if (values[index]) path.setAttribute('d', values[index]); });
             if (paths[3]) paths[3].setAttribute('display', isFullSuspension ? 'none' : 'inline');
 
@@ -1345,7 +1356,9 @@ function updateGarageUI() {
         
         // --- КООРДИНАТЫ ПОДСЕДЕЛА ---
         let seatCoordinates;
-        if (frame?.visuals?.type === 'dh') {
+        if (isDraisineFrame) {
+            seatCoordinates = { x: 250, y: 80 };
+        } else if (frame?.visuals?.type === 'dh') {
             seatCoordinates = { x: 250, y: 80 };
         } else if (frame?.visuals?.type === 'hardtail') {
             seatCoordinates = { x: 235, y: 88 };

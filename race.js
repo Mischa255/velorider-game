@@ -1,7 +1,7 @@
-import { player } from './state.js?v=101';
-import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=101';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=101';
-import { playCoinSound, playBoostSound } from './audio.js?v=101';
+import { player } from './state.js?v=106';
+import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=106';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=106';
+import { playCoinSound, playBoostSound } from './audio.js?v=106';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -30,6 +30,54 @@ function getCameraZoom() {
     if (w <= 920 && h <= 540) return RACE_ZOOM_MOBILE_LANDSCAPE;
     if (w <= 768) return 0.68;
     return RACE_ZOOM_DESKTOP;
+}
+
+function updateRaceCameraZoom() {
+    if (!ctx || !canvas || !canvasCssWidth || !canvasCssHeight) return;
+
+    const baseZoom = getCameraZoom();
+    const mobileViewport = window.matchMedia('(pointer: coarse)').matches ||
+        ((window.innerWidth || 800) <= 920 && (window.innerHeight || 600) <= 700);
+    let targetZoom = baseZoom;
+
+    if (mobileViewport && playerBike) {
+        const verticalSpeed = Math.max(0, Number(playerBike.jumpVelocity) || 0);
+        const gravity = Math.max(0.1, Number(playerBike.jumpGravity) || GRAVITY);
+        const currentHeight = Math.max(
+            Number(playerBike.jumpHeight) || 0,
+            Number(playerBike.rampLift) || 0
+        );
+        const predictedApex = currentHeight + verticalSpeed * verticalSpeed / (2 * gravity);
+        const bikeAndRiderHeight = 68;
+        const safeScreenHeight = canvasCssHeight * 0.56;
+        const projectedHeight = predictedApex + bikeAndRiderHeight;
+
+        if (projectedHeight * baseZoom > safeScreenHeight) {
+            targetZoom = clamp(
+                safeScreenHeight / projectedHeight,
+                baseZoom * 0.55,
+                baseZoom
+            );
+        }
+    }
+
+    // Быстро отдаляемся перед высоким прыжком, чтобы байк не успел уйти за
+    // верхнюю границу экрана; возвращаем исходный масштаб плавно после посадки.
+    cameraZoom = targetZoom < cameraZoom
+        ? targetZoom
+        : cameraZoom + (targetZoom - cameraZoom) * 0.1;
+    if (Math.abs(targetZoom - cameraZoom) < 0.001) cameraZoom = targetZoom;
+
+    viewWidth = canvasCssWidth / cameraZoom;
+    viewHeight = canvasCssHeight / cameraZoom;
+    ctx.setTransform(
+        canvasDpr * cameraZoom,
+        0,
+        0,
+        canvasDpr * cameraZoom,
+        0,
+        0
+    );
 }
 
 const TRACK_BALANCE = {
@@ -97,6 +145,10 @@ let canvas = null;
 let ctx = null;
 let viewWidth = 0;
 let viewHeight = 0;
+let canvasCssWidth = 0;
+let canvasCssHeight = 0;
+let canvasDpr = 1;
+let cameraZoom = 1;
 let animationId = null;
 let lastFrameTime = 0;
 let frameAccumulator = 0;
@@ -553,11 +605,11 @@ function getBikeVisualProfile() {
         handlebarWidth: handlebar?.visuals?.width || (handlebar?.rarity === 'legendary' ? 2.4 : handlebar?.rarity === 'rare' ? 2.1 : 1.8),
         
         // --- КОЛЕСА ---
-        rimColor: wheel?.visuals?.rimColor || frame?.visuals?.rimColor || (wheel?.rarity === 'legendary' ? '#fbbf24' : wheel?.rarity === 'rare' ? '#38bdf8' : '#64748b'),
-        hubColor: wheel?.visuals?.hubColor || frame?.visuals?.hubColor || '#e2e8f0',
+        rimColor: wheel?.visuals?.rimColor || (wheel?.rarity === 'legendary' ? '#fbbf24' : wheel?.rarity === 'rare' ? '#38bdf8' : '#64748b'),
+        hubColor: wheel?.visuals?.hubColor || '#e2e8f0',
         wheelRadius: wheel?.visuals?.radius || (9.5 + Math.min(1.2, Math.max(0, Number(wheel?.speed) || 0) * 0.08)),
-        rearWheelRadius: wheel?.visuals?.rearRadius || frame?.visuals?.rearRadius || 0,
-        frontWheelRadius: wheel?.visuals?.frontRadius || frame?.visuals?.frontRadius || 0,
+        rearWheelRadius: wheel?.visuals?.rearRadius || 0,
+        frontWheelRadius: wheel?.visuals?.frontRadius || 0,
         tireWidth: tire?.visuals?.width || (tire?.rarity === 'legendary' ? 4.2 : tire?.rarity === 'rare' ? 3.7 : 3.2),
         
         // --- МОДИФИКАТОРЫ ---
@@ -671,19 +723,38 @@ function createBike(isBot = false, botIndex = 1) {
 // ФИЗИКА ПРЫЖКА
 // =========================================
 
+function hasNoAirFlipProtection(bike) {
+    return Boolean(bike?.abilities?.noAirFlip || bike?.visuals?.draisine);
+}
+
+function applyNoAirFlipProtection(bike, candidatePitch = bike?.pitchAngle) {
+    if (!bike || bike.grounded || !hasNoAirFlipProtection(bike)) return;
+
+    const groundPitch = Math.atan2(
+        getGroundY(bike.x + 25, 0) - getGroundY(bike.x - 25, 0),
+        50
+    );
+    const relativePitch = Math.atan2(
+        Math.sin((Number(candidatePitch) || 0) - groundPitch),
+        Math.cos((Number(candidatePitch) || 0) - groundPitch)
+    );
+    // Ограничение относительно склона сохраняет естественную посадку, а
+    // абсолютный предел не даёт раме оказаться вверх колёсами в воздухе.
+    bike.pitchAngle = clamp(
+        groundPitch + clamp(relativePitch, -0.9, 0.9),
+        -1.2,
+        1.2
+    );
+    if (Math.abs(bike.pitchAngle) >= 1.19 && bike.pitchAngle * bike.pitchVelocity > 0) {
+        bike.pitchVelocity = 0;
+    }
+}
+
 function startBikeFlip(bike, direction = 1, message = 'ПЕРЕВОРОТ! Низкая стабильность') {
     if (!bike || bike.flippedTimer > 0) return false;
-    if (bike.abilities?.noAirFlip && !bike.grounded) {
+    if (hasNoAirFlipProtection(bike) && !bike.grounded) {
         bike.pitchVelocity = clamp(Number(bike.pitchVelocity) || 0, -0.012, 0.012);
-        const groundPitch = Math.atan2(
-            getGroundY(bike.x + 25, 0) - getGroundY(bike.x - 25, 0),
-            50
-        );
-        const relativePitch = Math.atan2(
-            Math.sin((Number(bike.pitchAngle) || 0) - groundPitch),
-            Math.cos((Number(bike.pitchAngle) || 0) - groundPitch)
-        );
-        bike.pitchAngle = groundPitch + clamp(relativePitch, -1.1, 1.1);
+        applyNoAirFlipProtection(bike);
         return false;
     }
     bike.flippedTimer = 74;
@@ -773,6 +844,13 @@ function applyImpactPitchImpulse(bike, impactForce, direction = 1) {
 
 function updateBikeFlipRecovery(bike) {
     if (bike.bumpCooldown > 0) bike.bumpCooldown--;
+    // Если нестабильность начала вращение на кочке перед прыжком, способность
+    // останавливает его с отрывом колёс. Само поражение от удара сохраняется.
+    if (hasNoAirFlipProtection(bike) && !bike.grounded && bike.flippedTimer > 0) {
+        bike.flippedTimer = 0;
+        bike.pitchVelocity = clamp(Number(bike.pitchVelocity) || 0, -0.012, 0.012);
+        applyNoAirFlipProtection(bike);
+    }
     if (!(bike.flippedTimer > 0)) return false;
 
     bike.flippedTimer--;
@@ -952,18 +1030,8 @@ function updateJumpPhysics(bike) {
         bike.pitchVelocity = clamp(bike.pitchVelocity, -0.045, 0.045);
     }
     const nextPitch = bike.pitchAngle + bike.pitchVelocity;
-    if (bike.abilities?.noAirFlip && !bike.grounded) {
-        // Защищаем наклон относительно поверхности под велосипедом, а не
-        // горизонта: иначе на крутом склоне посадка могла считаться переворотом.
-        const groundPitch = Math.atan2(
-            getGroundY(bike.x + 25, 0) - getGroundY(bike.x - 25, 0),
-            50
-        );
-        const relativePitch = Math.atan2(
-            Math.sin(nextPitch - groundPitch),
-            Math.cos(nextPitch - groundPitch)
-        );
-        bike.pitchAngle = groundPitch + clamp(relativePitch, -1.1, 1.1);
+    if (hasNoAirFlipProtection(bike) && !bike.grounded) {
+        applyNoAirFlipProtection(bike, nextPitch);
     } else {
         bike.pitchAngle = clamp(nextPitch, -2.35, 2.35);
     }
@@ -1028,7 +1096,7 @@ function updateJumpPhysics(bike) {
             bike.bumpCooldown = Math.max(bike.bumpCooldown || 0, 75);
         }
         if (failedLanding && !shieldSavedLanding) {
-            if (bike.abilities?.noAirFlip) {
+            if (hasNoAirFlipProtection(bike)) {
                 // Можно проиграть из-за слишком жёсткого удара, но способность
                 // не должна запускать переворот после того, как байк коснулся земли.
                 bike.pitchAngle = groundPitch + clamp(
@@ -2081,10 +2149,17 @@ function startHistoryVictoryOutro() {
     }
     if (historyVictoryOutro) return true;
 
-    const stopDistance = Math.max(90, Math.min(150, viewWidth * 0.15));
-    const approachStartX = playerBike.x - Math.max(260, Math.min(viewWidth * 0.65, 650));
-    if (botBike.x < approachStartX) botBike.x = approachStartX;
-    const targetX = Math.max(0, playerBike.x - stopDistance, botBike.x);
+    const finishCliff = obstacles.find(obstacle => obstacle.id === `${currentTrack.id}-finish-cliff`);
+    const targetX = finishCliff
+        ? Math.max(0, finishCliff.x - 82)
+        : Math.max(0, playerBike.x - Math.max(90, Math.min(150, viewWidth * 0.15)));
+    const approachStartX = Math.max(
+        0,
+        targetX - Math.max(260, Math.min(viewWidth * 0.65, 650))
+    );
+    // Соперник должен подъехать к обрыву с безопасной стороны, даже если
+    // обычная гонка уже успела провести его дальше точки финальной сцены.
+    botBike.x = Math.max(approachStartX, Math.min(targetX, botBike.x));
     botBike.previousX = botBike.x;
     botBike.velocityX = 0;
     botBike.grounded = true;
@@ -2150,12 +2225,22 @@ function updateHistoryVictoryOutro() {
     } else if (outro.phase === 'wave') {
         botBike.velocityX = 0;
         outro.runnerX = botBike.x - 27;
-        if (outro.phaseFrame >= 78) enterPhase('run');
+        if (outro.phaseFrame >= 78) enterPhase('mount');
         else outro.phaseFrame++;
-    } else if (outro.phase === 'run') {
+    } else if (outro.phase === 'mount') {
         botBike.velocityX = 0;
-        outro.runnerX -= 5.5;
-        if (outro.runnerX < cameraX - 70) {
+        const mountProgress = clamp(outro.phaseFrame / 24, 0, 1);
+        outro.runnerX = botBike.x - 27 + mountProgress * 20;
+        if (outro.phaseFrame >= 24) enterPhase('turn');
+        else outro.phaseFrame++;
+    } else if (outro.phase === 'turn') {
+        botBike.velocityX = 0;
+        if (outro.phaseFrame >= 20) enterPhase('rideAway');
+        else outro.phaseFrame++;
+    } else if (outro.phase === 'rideAway') {
+        botBike.x -= 5.5;
+        botBike.velocityX = botBike.x - oldX;
+        if (botBike.x < cameraX - 65) {
             historyVictoryOutro = null;
             finishRace(true, 'finish');
             return;
@@ -3066,12 +3151,18 @@ function drawHistoryVictoryRider(x, groundY, phase, phaseFrame, riseProgress = 1
         ctx.moveTo(-3, -37);
         ctx.lineTo(-10 + stride * 0.35, -31);
         ctx.lineTo(-5 + stride * 0.6, -27);
-    } else {
+    } else if (phase === 'wave') {
         ctx.lineTo(10, -34);
         ctx.lineTo(13 + wave, -48);
         ctx.moveTo(-3, -37);
         ctx.lineTo(-10, -29);
         ctx.lineTo(-13, -27);
+    } else {
+        ctx.lineTo(10, -30);
+        ctx.lineTo(12, -25);
+        ctx.moveTo(-3, -37);
+        ctx.lineTo(-10, -30);
+        ctx.lineTo(-12, -25);
     }
     ctx.stroke();
 
@@ -3092,6 +3183,14 @@ function drawDraisineBike(bike, label) {
     const x = bike.x - cameraX;
     const groundY = getGroundY(bike.x, 0);
     const bodyY = groundY - (Number(bike.jumpHeight) || 0) - (Number(bike.rampLift) || 0);
+    const outroPhase = bike.historyVictoryPhase;
+    const outroPhaseFrame = Number(bike.historyVictoryPhaseFrame) || 0;
+    const turnProgress = outroPhase === 'turn'
+        ? clamp(outroPhaseFrame / 20, 0, 1)
+        : 0;
+    const facingScale = outroPhase === 'turn'
+        ? Math.cos(Math.PI * turnProgress)
+        : outroPhase === 'rideAway' ? -1 : 1;
     const rearRadius = 17;
     const frontRadius = 12.5;
     const rear = { x: x - 31, y: bodyY - rearRadius + 1 };
@@ -3107,6 +3206,7 @@ function drawDraisineBike(bike, label) {
 
     ctx.save();
     ctx.translate(x, bodyY - 19);
+    ctx.scale(facingScale, 1);
     ctx.rotate(Number(bike.pitchAngle) || 0);
     ctx.translate(-x, -(bodyY - 19));
 
@@ -3191,11 +3291,11 @@ function drawDraisineBike(bike, label) {
     ctx.quadraticCurveTo(x - 8, bodyY - 77, x + 7, bodyY - 70);
     ctx.stroke();
 
-    const outroPhase = bike.historyVictoryPhase;
-    const outroPhaseFrame = Number(bike.historyVictoryPhaseFrame) || 0;
     const seatedOpacity = outroPhase === 'dismount'
         ? 1 - clamp((outroPhaseFrame - 2) / 12, 0, 1)
-        : ['wave', 'run'].includes(outroPhase) ? 0 : 1;
+        : outroPhase === 'wave' ? 0
+            : outroPhase === 'mount' ? clamp(outroPhaseFrame / 24, 0, 1)
+                : 1;
     if (seatedOpacity > 0.01) {
         ctx.save();
         ctx.globalAlpha *= seatedOpacity;
@@ -3256,7 +3356,7 @@ function drawDraisineBike(bike, label) {
     }
 
     ctx.restore();
-    if (['dismount', 'wave', 'run'].includes(outroPhase)) {
+    if (['dismount', 'wave', 'mount'].includes(outroPhase)) {
         const riderX = Number.isFinite(Number(bike.historyVictoryRunnerX))
             ? Number(bike.historyVictoryRunnerX) - cameraX
             : x - 10;
@@ -3266,11 +3366,13 @@ function drawDraisineBike(bike, label) {
         const riderGroundY = getGroundY(riderWorldX, 0);
         const riseProgress = outroPhase === 'dismount'
             ? clamp((outroPhaseFrame - 3) / 15, 0, 1)
-            : 1;
+            : outroPhase === 'mount'
+                ? 1 - clamp(outroPhaseFrame / 24, 0, 1)
+                : 1;
         drawHistoryVictoryRider(riderX, riderGroundY, outroPhase, outroPhaseFrame, riseProgress);
     }
 
-    if (!['wave', 'run'].includes(outroPhase)) {
+    if (!['wave', 'mount', 'turn', 'rideAway'].includes(outroPhase)) {
         ctx.font = 'bold 12px Arial';
         ctx.textAlign = 'center';
         ctx.fillStyle = '#fff7e8';
@@ -3280,7 +3382,7 @@ function drawDraisineBike(bike, label) {
 }
 
 function drawBike(bike, label, color) {
-    if (bike.visuals?.draisine) {
+    if (bike.visuals?.draisine && bike.isBot) {
         drawDraisineBike(bike, label);
         return;
     }
@@ -3462,7 +3564,18 @@ function drawBike(bike, label, color) {
         ctx.restore();
     };
 
-    if (visuals.fullSuspension) {
+    if (visuals.draisine) {
+        // Историческая деревянная рама остаётся отдельной деталью. Колёса,
+        // вилка, привод, руль и экипировка дальше рисуются из своей сборки.
+        const beamRear = { x: x - 12, y: wheelY - 40 };
+        const beamFront = { x: x + 14, y: wheelY - 37 };
+        drawTube(rearWheelX, rearWheelY, beamRear.x, beamRear.y, frameColor, frameWidth * 1.35);
+        drawTube(beamRear.x, beamRear.y, beamFront.x, beamFront.y, frameColor, frameWidth * 1.35);
+        drawTube(beamFront.x, beamFront.y, frontWheelX, frontWheelY, frameColor, frameWidth * 1.35);
+        drawTube(rearWheelX, rearWheelY, bottomX, bottomY, frameColor, frameWidth * 1.2);
+        drawTube(bottomX, bottomY, beamRear.x, beamRear.y, frameColor, frameWidth * 1.2);
+        drawTube(bottomX, bottomY, beamFront.x, beamFront.y, frameColor, frameWidth * 1.2);
+    } else if (visuals.fullSuspension) {
         drawTube(bottomX, bottomY, seatX, wheelY - 27);
         drawTube(seatX, wheelY - 27, headX, wheelY - 19);
         drawTube(headX, wheelY - 19, bottomX, bottomY);
@@ -3964,7 +4077,7 @@ function drawRaceHUD() {
     // landscape phones. Scale its complete layout while still cancelling the
     // camera zoom so the HUD remains fixed-size relative to the screen.
     const hudScale = landscapePhone ? 0.72 : 1;
-    const uiScale = mobileLayout ? hudScale / getCameraZoom() : 1;
+    const uiScale = mobileLayout ? hudScale / cameraZoom : 1;
     const panelWidth = mobileLayout
         ? Math.min((landscapePhone ? 360 : 390) * uiScale, viewWidth - 20 * uiScale)
         : Math.min(390, viewWidth - 28);
@@ -4117,6 +4230,7 @@ function render() {
         return;
     }
 
+    updateRaceCameraZoom();
     drawBackground();
     drawTrack();
     drawObstacles();
@@ -4319,12 +4433,14 @@ function resizeCanvas() {
         Math.min(2, window.devicePixelRatio || 1)
     );
 
-    const zoom = getCameraZoom();
-
     const canvasWidth = Math.max(320, rect.width || canvas.clientWidth || 800);
     const canvasHeight = Math.max(220, rect.height || canvas.clientHeight || 420);
-    viewWidth = canvasWidth / zoom;
-    viewHeight = canvasHeight / zoom;
+    canvasCssWidth = canvasWidth;
+    canvasCssHeight = canvasHeight;
+    canvasDpr = dpr;
+    cameraZoom = getCameraZoom();
+    viewWidth = canvasWidth / cameraZoom;
+    viewHeight = canvasHeight / cameraZoom;
 
     canvas.width = Math.round(canvasWidth * dpr);
     canvas.height = Math.round(canvasHeight * dpr);
@@ -4333,10 +4449,10 @@ function resizeCanvas() {
 
     if (ctx) {
         ctx.setTransform(
-            dpr * zoom,
+            dpr * cameraZoom,
             0,
             0,
-            dpr * zoom,
+            dpr * cameraZoom,
             0,
             0
         );
