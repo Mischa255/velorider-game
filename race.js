@@ -1,7 +1,7 @@
-import { player } from './state.js?v=105';
-import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=105';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=105';
-import { playCoinSound, playBoostSound } from './audio.js?v=105';
+import { player } from './state.js?v=106';
+import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=106';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=106';
+import { playCoinSound, playBoostSound } from './audio.js?v=106';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -1299,6 +1299,9 @@ function updatePlayerPhysics() {
 
     const brakeApplied = input.braking && playerBike.hasBrakes;
     const driveInput = Number(input.accelerating) - Number(input.reversing);
+    const draisinePush = playerBike.visuals?.draisine && playerBike.grounded
+        ? 0.55 + (Math.sin(frameCounter * 0.13) + 1) * 0.38
+        : 1;
 
     const jumpForce =
         8.5 + jump * 0.12;
@@ -1310,7 +1313,7 @@ function updatePlayerPhysics() {
     );
 
     if (driveInput > 0 && playerBike.grounded) {
-        playerBike.velocityX += acceleration;
+        playerBike.velocityX += acceleration * draisinePush;
     }
 
     if (driveInput < 0 && playerBike.grounded && !brakeApplied) {
@@ -3464,14 +3467,19 @@ function drawBike(bike, label, color) {
     const frontWheelY = y - frontRadius + 1;
     const bottomX = x - 3;
     const bottomY = wheelY - radius * 0.42;
+    const draisineFrame = Boolean(visuals.draisine);
     const seatX = x - 10;
+    const seatBaseY = draisineFrame ? wheelY - 43 : wheelY - 27;
+    const saddleY = draisineFrame ? wheelY - 58 : wheelY - 33;
     const headX = x + 11;
     const travel = Number.isFinite(bike.previousX)
         ? bike.x - bike.previousX
         : 0;
 
     bike.wheelRotation = (bike.wheelRotation || 0) + travel / radius;
-    bike.pedalPhase = (bike.pedalPhase || 0) + travel / radius * 0.42;
+    bike.pedalPhase = draisineFrame
+        ? 0
+        : (bike.pedalPhase || 0) + travel / radius * 0.42;
     const wheelAngle = bike.wheelRotation;
     const pedalAngle = bike.pedalPhase;
 
@@ -3620,17 +3628,31 @@ function drawBike(bike, label, color) {
         ctx.restore();
     };
 
-    if (visuals.draisine) {
-        // Особая деревянная рама, при этом все установленные детали
-        // продолжают отрисовываться своими цветами и геометрией.
-        const beamRear = { x: x - 12, y: wheelY - 40 };
-        const beamFront = { x: x + 14, y: wheelY - 37 };
-        drawTube(rearWheelX, rearWheelY, beamRear.x, beamRear.y, frameColor, frameWidth * 1.35);
-        drawTube(beamRear.x, beamRear.y, beamFront.x, beamFront.y, frameColor, frameWidth * 1.35);
-        drawTube(beamFront.x, beamFront.y, frontWheelX, frontWheelY, frameColor, frameWidth * 1.35);
-        drawTube(rearWheelX, rearWheelY, bottomX, bottomY, frameColor, frameWidth * 1.2);
-        drawTube(bottomX, bottomY, beamRear.x, beamRear.y, frameColor, frameWidth * 1.2);
-        drawTube(bottomX, bottomY, beamFront.x, beamFront.y, frameColor, frameWidth * 1.2);
+    if (draisineFrame) {
+        // Длинная изогнутая деревянная балка узнаваемой Laufmaschine,
+        // а цвет и толщина по-прежнему берутся только у выбранной рамы.
+        const drawDraisineBeam = (stroke, width) => {
+            ctx.strokeStyle = stroke;
+            ctx.lineWidth = width;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            ctx.moveTo(rearWheelX, rearWheelY);
+            ctx.quadraticCurveTo(x - 18, wheelY - 50, x - 10, wheelY - 49);
+            ctx.quadraticCurveTo(x + 3, wheelY - 51, x + 14, wheelY - 42);
+            ctx.lineTo(frontWheelX, frontWheelY);
+            ctx.stroke();
+        };
+        drawDraisineBeam('#3d2818', 12);
+        drawDraisineBeam(frameColor, 8);
+        drawDraisineBeam('rgba(245,205,145,.65)', 1.25);
+
+        const beamRear = { x: x - 12, y: wheelY - 43 };
+        const beamFront = { x: x + 13, y: wheelY - 41 };
+        drawTube(rearWheelX, rearWheelY, x - 15, wheelY - 17, '#3d2818', 6);
+        drawTube(x - 15, wheelY - 17, beamRear.x, beamRear.y, frameColor, frameWidth * 1.25);
+        drawTube(x - 15, wheelY - 17, x + 7, wheelY - 18, frameColor, frameWidth * 1.25);
+        drawTube(x + 7, wheelY - 18, beamFront.x, beamFront.y, frameColor, frameWidth * 1.25);
     } else if (visuals.fullSuspension) {
         drawTube(bottomX, bottomY, seatX, wheelY - 27);
         drawTube(seatX, wheelY - 27, headX, wheelY - 19);
@@ -3689,10 +3711,20 @@ function drawBike(bike, label, color) {
 
     // Вилка начинается у рулевого стакана и доходит до оси переднего колеса.
     // Раньше верхняя точка была сдвинута вправо, из-за чего вилка выглядела отдельной деталью.
-    drawTube(headX + 1, wheelY - 19, frontWheelX - 1, frontWheelY, visuals.forkColor || '#cbd5e1', 4);
+    const forkTop = draisineFrame
+        ? { x: x + 14, y: wheelY - 42 }
+        : { x: headX + 1, y: wheelY - 19 };
+    drawTube(forkTop.x, forkTop.y, frontWheelX - 1, frontWheelY, visuals.forkColor || '#cbd5e1', 4);
     if (visuals.suspension) {
         const forkCompression = bike.frontCompression || 0;
-        drawTube(headX + 3, wheelY - 17, frontWheelX - 3, frontWheelY - 5 + forkCompression * 0.35, '#fbbf24', 1.5);
+        drawTube(
+            forkTop.x + 2,
+            forkTop.y + (draisineFrame ? 3 : 2),
+            frontWheelX - 3,
+            frontWheelY - 5 + forkCompression * 0.35,
+            '#fbbf24',
+            1.5
+        );
     }
 
     ctx.strokeStyle = visuals.gearColor || '#94a3b8';
@@ -3755,19 +3787,25 @@ function drawBike(bike, label, color) {
     ctx.strokeStyle = visuals.seatpostColor || '#cbd5e1';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(seatX, wheelY - 27);
-    ctx.lineTo(seatX - 1, wheelY - 33);
+    ctx.moveTo(seatX, seatBaseY);
+    ctx.lineTo(seatX - 1, saddleY);
     ctx.stroke();
     ctx.strokeStyle = visuals.saddleColor || '#f8fafc';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(seatX - 8, wheelY - 33);
-    ctx.lineTo(seatX + 6, wheelY - 33);
+    ctx.moveTo(seatX - 8, saddleY);
+    ctx.lineTo(seatX + 6, saddleY);
     ctx.stroke();
 
-    const hip = { x: seatX + 1, y: wheelY - 35 };
-    const shoulder = { x: x + 1, y: wheelY - 46 };
-    const head = { x: x + 4, y: wheelY - 53 };
+    const hip = draisineFrame
+        ? { x: seatX + 1, y: wheelY - 57 }
+        : { x: seatX + 1, y: wheelY - 35 };
+    const shoulder = draisineFrame
+        ? { x: x + 1, y: wheelY - 73 }
+        : { x: x + 1, y: wheelY - 46 };
+    const head = draisineFrame
+        ? { x: x + 4, y: wheelY - 84 }
+        : { x: x + 4, y: wheelY - 53 };
     const kneeA = { x: (hip.x + leftPedal.x) / 2 + 3, y: (hip.y + leftPedal.y) / 2 - 3 };
     const kneeB = { x: (hip.x + rightPedal.x) / 2 - 3, y: (hip.y + rightPedal.y) / 2 - 3 };
 
@@ -3835,29 +3873,64 @@ function drawBike(bike, label, color) {
     }
 
     ctx.lineCap = 'round';
-    ctx.strokeStyle = pantsColor;
-    ctx.lineWidth = 3.4;
-    ctx.beginPath();
-    ctx.moveTo(hip.x, hip.y);
-    ctx.lineTo(kneeB.x, kneeB.y);
-    ctx.lineTo(rightPedal.x, rightPedal.y);
-    ctx.stroke();
-    ctx.strokeStyle = pantsColor;
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(hip.x, hip.y);
-    ctx.lineTo(kneeA.x, kneeA.y);
-    ctx.lineTo(leftPedal.x, leftPedal.y);
-    ctx.stroke();
-    ctx.fillStyle = '#334155';
-    ctx.beginPath();
-    ctx.arc(kneeA.x, kneeA.y, 1.8, 0, Math.PI * 2);
-    ctx.arc(kneeB.x, kneeB.y, 1.6, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#f8fafc';
-    ctx.fillRect(leftPedal.x - 2, leftPedal.y - 1.2, 5, 2.4);
-    ctx.fillStyle = '#cbd5e1';
-    ctx.fillRect(rightPedal.x - 2, rightPedal.y - 1.2, 5, 2.4);
+    if (draisineFrame) {
+        const pushing = bike.grounded && !bike.isBot && input.accelerating;
+        const step = pushing ? Math.sin(frameCounter * 0.13) * 9 : 0;
+        const footY = bike.grounded ? groundY - 1 : y - 6;
+        const nearKnee = {
+            x: x - 14 + step * 0.52,
+            y: bike.grounded ? groundY - 20 - Math.max(0, step) * 0.22 : y - 20
+        };
+        const farKnee = {
+            x: x - 2 - step * 0.46,
+            y: bike.grounded ? groundY - 24 - Math.max(0, -step) * 0.2 : y - 23
+        };
+        const nearFootX = x - 17 + step;
+        const farFootX = x - 4 - step * 0.9;
+
+        ctx.strokeStyle = pantsColor;
+        ctx.lineWidth = 3.8;
+        ctx.beginPath();
+        ctx.moveTo(hip.x, hip.y);
+        ctx.lineTo(farKnee.x, farKnee.y);
+        ctx.lineTo(farFootX, footY);
+        ctx.moveTo(hip.x, hip.y);
+        ctx.lineTo(nearKnee.x, nearKnee.y);
+        ctx.lineTo(nearFootX, footY);
+        ctx.stroke();
+        ctx.fillStyle = '#334155';
+        ctx.beginPath();
+        ctx.arc(nearKnee.x, nearKnee.y, 1.8, 0, Math.PI * 2);
+        ctx.arc(farKnee.x, farKnee.y, 1.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#211a14';
+        ctx.fillRect(nearFootX - 3, footY - 1, 7, 2.5);
+        ctx.fillRect(farFootX - 3, footY - 1, 7, 2.5);
+    } else {
+        ctx.strokeStyle = pantsColor;
+        ctx.lineWidth = 3.4;
+        ctx.beginPath();
+        ctx.moveTo(hip.x, hip.y);
+        ctx.lineTo(kneeB.x, kneeB.y);
+        ctx.lineTo(rightPedal.x, rightPedal.y);
+        ctx.stroke();
+        ctx.strokeStyle = pantsColor;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(hip.x, hip.y);
+        ctx.lineTo(kneeA.x, kneeA.y);
+        ctx.lineTo(leftPedal.x, leftPedal.y);
+        ctx.stroke();
+        ctx.fillStyle = '#334155';
+        ctx.beginPath();
+        ctx.arc(kneeA.x, kneeA.y, 1.8, 0, Math.PI * 2);
+        ctx.arc(kneeB.x, kneeB.y, 1.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(leftPedal.x - 2, leftPedal.y - 1.2, 5, 2.4);
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillRect(rightPedal.x - 2, rightPedal.y - 1.2, 5, 2.4);
+    }
 
     // Торс / Джерси
     ctx.fillStyle = jersey;
@@ -3923,8 +3996,12 @@ function drawBike(bike, label, color) {
         }
     }
 
-    const elbow = { x: x + 10, y: wheelY - 42 };
-    const hand = { x: headX + 13, y: wheelY - 37 };
+    const elbow = draisineFrame
+        ? { x: x + 9, y: wheelY - 72 }
+        : { x: x + 10, y: wheelY - 42 };
+    const hand = draisineFrame
+        ? { x: x + 25, y: wheelY - 73 }
+        : { x: headX + 13, y: wheelY - 37 };
     ctx.strokeStyle = jersey;
     ctx.lineWidth = 3.2;
     ctx.beginPath();
@@ -3997,17 +4074,29 @@ function drawBike(bike, label, color) {
     ctx.strokeStyle = visuals.stemColor || visuals.handlebarColor || '#f8fafc';
     ctx.lineWidth = Math.max(2.2, (visuals.handlebarWidth || 2) + 0.4);
     ctx.beginPath();
-    ctx.moveTo(headX, wheelY - 19);
-    ctx.lineTo(headX + 2, wheelY - 35);
+    if (draisineFrame) {
+        ctx.moveTo(x + 14, wheelY - 42);
+        ctx.lineTo(x + 19, wheelY - 73);
+    } else {
+        ctx.moveTo(headX, wheelY - 19);
+        ctx.lineTo(headX + 2, wheelY - 35);
+    }
     ctx.stroke();
 
     ctx.strokeStyle = visuals.handlebarColor || '#f8fafc';
     ctx.lineWidth = visuals.handlebarWidth || 2;
     ctx.beginPath();
-    ctx.moveTo(headX + 2, wheelY - 35);
-    ctx.lineTo(headX + 14, wheelY - 35);
-    ctx.moveTo(headX - 3, wheelY - 37);
-    ctx.lineTo(headX + 19, wheelY - 37);
+    if (draisineFrame) {
+        ctx.moveTo(x + 13, wheelY - 76);
+        ctx.lineTo(x + 34, wheelY - 76);
+        ctx.moveTo(x + 19, wheelY - 73);
+        ctx.lineTo(x + 21, wheelY - 76);
+    } else {
+        ctx.moveTo(headX + 2, wheelY - 35);
+        ctx.lineTo(headX + 14, wheelY - 35);
+        ctx.moveTo(headX - 3, wheelY - 37);
+        ctx.lineTo(headX + 19, wheelY - 37);
+    }
     ctx.stroke();
 
     if (visuals.motor) {
@@ -4077,7 +4166,7 @@ function drawBike(bike, label, color) {
     ctx.font = 'bold 12px Arial';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#f8fafc';
-    ctx.fillText(label, x, wheelY - 63);
+    ctx.fillText(label, x, wheelY - (draisineFrame ? 108 : 63));
     ctx.restore();
 }
 
