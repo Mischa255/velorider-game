@@ -1,7 +1,7 @@
-import { player } from './state.js?v=118';
-import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=118';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=118';
-import { playCoinSound, playBoostSound } from './audio.js?v=118';
+import { player } from './state.js?v=120';
+import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=120';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=120';
+import { playCoinSound, playBoostSound } from './audio.js?v=120';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -1612,17 +1612,21 @@ function updatePlayerPhysics() {
 // ИИ БОТА: ПОИСК БЛИЖАЙШЕГО ПРЕПЯТСТВИЯ
 // =========================================
 
-function findBotJumpTarget(bike) {
-    const jumpableTypes = new Set([
-        'pit',
-        'log', 'barrier', 'cone', 'fallen_branch', 'bridge_gap', 'pulse_gate',
-        'rolling_boulder', 'loose_planks', 'smith_hammer', 'mill_paddle', 'crank_rack'
-    ]);
+// Боты сами перепрыгивают только опасные разрывы трассы. Обычные препятствия
+// должны задевать велосипед и вызывать замедление, иначе ИИ без риска объезжает
+// всю механику трассы и игрок видит нечестное поведение соперников.
+const BOT_JUMP_OBSTACLE_TYPES = new Set([
+    'pit',
+    'bridge_gap',
+    'cliff',
+    'loose_planks'
+]);
 
+function findBotJumpTarget(bike) {
     const front = bike.x + BIKE_WIDTH * 0.35;
 
     return obstacles.find(obstacle => {
-        if (!jumpableTypes.has(obstacle.type)) return false;
+        if (!BOT_JUMP_OBSTACLE_TYPES.has(obstacle.type)) return false;
 
         if (obstacle.x + obstacle.width < front - 8) {
             return false;
@@ -1655,7 +1659,8 @@ function updateBotAI(bike) {
         bike.velocityX
     );
 
-    const reactionDistance = obstacle.type === 'pit'
+    const isDangerousGap = BOT_JUMP_OBSTACLE_TYPES.has(obstacle.type);
+    const reactionDistance = isDangerousGap
         ? clamp(
             speed * 12 + obstacle.width * 0.22 + 12,
             50,
@@ -1681,7 +1686,7 @@ function updateBotAI(bike) {
                 : 0;
 
         const force =
-            (obstacle.type === 'pit'
+            (isDangerousGap
                 ? baseForce + 0.8
                 : baseForce) + superJumpBonus;
 
@@ -2056,6 +2061,13 @@ function updatePlayerCollisions() {
             ) {
                 applyPlayerImpact(obstacle, 0.85);
             }
+            continue;
+        }
+
+        // Резервное столкновение для новых декораций-препятствий: новый тип
+        // из OBSTACLE_TYPES не останется чисто визуальным до добавления особых правил.
+        if (OBSTACLE_TYPES[obstacle.type] && playerBike.grounded) {
+            applyPlayerImpact(obstacle, Math.max(0.65, playerBike.velocityX * 0.68));
         }
     }
 }
@@ -2206,7 +2218,6 @@ function updateBotCollisions(bike) {
             continue;
         }
 
-        // Стало (убран obstacle.type === 'pulse_gate'):
         if (
             obstacle.type === 'log' ||
             obstacle.type === 'barrier' || obstacle.type === 'wooden_gate' || obstacle.type === 'cone' || obstacle.type === 'fallen_branch'
@@ -2222,6 +2233,13 @@ function updateBotCollisions(bike) {
                     38
                 );
             }
+            continue;
+        }
+
+        // Новые добавленные в OBSTACLE_TYPES объекты тоже должны иметь эффект,
+        // даже если для их типа ещё не задана отдельная настройка столкновения.
+        if (OBSTACLE_TYPES[obstacle.type] && bike.grounded) {
+            applyBotImpact(bike, obstacle, 0.62, 36);
         }
     }
 }
@@ -5573,7 +5591,11 @@ export function initRace(onRaceEnd) {
     } else {
         botBike = createBike(true, 1);
         if (currentTrack.isHistory) {
-            botBike.displayName = currentTrack.opponent || 'Макс';
+            const isChapterTwoQualifier = Number(currentTrack.historyChapter) === 2
+                && Number(currentTrack.historyStage) <= 4;
+            botBike.displayName = isChapterTwoQualifier
+                ? 'Макс'
+                : currentTrack.opponent || 'Макс';
             const macmillanFinal = Number(currentTrack.historyChapter) === 2 && Number(currentTrack.historyStage) === 5;
             botBike.abilities = { nitroUnlocked: false, superJumpUnlocked: false, shieldCharges: 0, macmillanBurst: macmillanFinal };
             botBike.macmillanBurstCharges = macmillanFinal ? 3 : 0;
