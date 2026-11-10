@@ -1,7 +1,7 @@
-import { player } from './state.js?v=116';
-import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=116';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=116';
-import { playCoinSound, playBoostSound } from './audio.js?v=116';
+import { player } from './state.js?v=118';
+import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=118';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=118';
+import { playCoinSound, playBoostSound } from './audio.js?v=118';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -70,6 +70,11 @@ const TRACK_TERRAIN = {
     h3:  { amplitude: 10, longFrequency: 0.0038, shortFrequency: 0.009, micro: 1.2, phase: 0.8, ridge: 0.05, chop: 0.025 },
     h4:  { amplitude: 12, longFrequency: 0.004, shortFrequency: 0.0095, micro: 1.4, phase: 1.1, ridge: 0.06, chop: 0.03 },
     h5:  { amplitude: 15, longFrequency: 0.0042, shortFrequency: 0.01, micro: 1.5, phase: 1.4, ridge: 0.07, chop: 0.035 },
+    m1:  { amplitude: 10, longFrequency: 0.0034, shortFrequency: 0.008, micro: 1.1, phase: 0.25, ridge: 0.045, chop: 0.02 },
+    m2:  { amplitude: 17, longFrequency: 0.0038, shortFrequency: 0.009, micro: 1.5, phase: 1.1, ridge: 0.08, chop: 0.035 },
+    m3:  { amplitude: 22, longFrequency: 0.0041, shortFrequency: 0.011, micro: 2.4, phase: 2.2, ridge: 0.14, chop: 0.07 },
+    m4:  { amplitude: 25, longFrequency: 0.0043, shortFrequency: 0.012, micro: 2.3, phase: 0.85, ridge: 0.18, chop: 0.08 },
+    m5:  { amplitude: 31, longFrequency: 0.0045, shortFrequency: 0.013, micro: 2.8, phase: 2.75, ridge: 0.22, chop: 0.09 },
     t1:  { amplitude: 8,  longFrequency: 0.0034, shortFrequency: 0.0080, micro: 1.0, phase: 0.2, ridge: 0.04, chop: 0.02 },
     t2:  { amplitude: 15, longFrequency: 0.0038, shortFrequency: 0.0095, micro: 1.5, phase: 0.5, ridge: 0.07, chop: 0.035 },
     t3:  { amplitude: 21, longFrequency: 0.0042, shortFrequency: 0.0110, micro: 2.0, phase: 0.8, ridge: 0.11, chop: 0.05 },
@@ -92,6 +97,11 @@ const TRACK_PALETTES = {
     h3:  { skyTop: '#273643', skyMid: '#8d8870', skyBottom: '#d8c99a', far: '#796b4f', near: '#534b37', road: '#655b47', edge: '#d7bd88', accent: '#eed5a1' },
     h4:  { skyTop: '#3c3441', skyMid: '#a7756a', skyBottom: '#e1c19a', far: '#84695b', near: '#59453d', road: '#665447', edge: '#dfbf95', accent: '#f1d5aa' },
     h5:  { skyTop: '#292c3b', skyMid: '#9a7061', skyBottom: '#e0bd8c', far: '#765e53', near: '#4c4038', road: '#60534a', edge: '#d6b37e', accent: '#f1d4a1' },
+    m1:  { skyTop: '#382b2a', skyMid: '#bd7951', skyBottom: '#f1c47e', far: '#86634c', near: '#594239', road: '#695243', edge: '#e2b978', accent: '#ffd38a' },
+    m2:  { skyTop: '#183440', skyMid: '#4b8a88', skyBottom: '#c6d8b2', far: '#4d7770', near: '#34554e', road: '#536256', edge: '#b6d1b1', accent: '#b9eee5' },
+    m3:  { skyTop: '#303b45', skyMid: '#9c9883', skyBottom: '#dfd0a9', far: '#77786a', near: '#514f45', road: '#62594b', edge: '#c5b697', accent: '#eee0b6' },
+    m4:  { skyTop: '#33404a', skyMid: '#b18b72', skyBottom: '#e5c99d', far: '#736c5b', near: '#4d493f', road: '#665747', edge: '#c6a77f', accent: '#ead1a6' },
+    m5:  { skyTop: '#302c3c', skyMid: '#aa6448', skyBottom: '#f0bd75', far: '#745348', near: '#4e3933', road: '#625044', edge: '#d5a76e', accent: '#ffe0a1' },
     t1:  { skyTop: '#102b3d', skyMid: '#397b88', skyBottom: '#b8d4bc', far: '#345b59', near: '#1d3938', road: '#475569', edge: '#a8b7bd', accent: '#bbf7d0' },
     t2:  { skyTop: '#392b43', skyMid: '#bd7952', skyBottom: '#f2c78b', far: '#8e5b4c', near: '#583b3c', road: '#51434a', edge: '#e8b98a', accent: '#fed7aa' },
     t3:  { skyTop: '#112d36', skyMid: '#39756a', skyBottom: '#b5c98d', far: '#456b50', near: '#294b39', road: '#46564b', edge: '#a3b18a', accent: '#bbf7d0' },
@@ -369,6 +379,20 @@ function isTouchingObstacle(bike, obstacle) {
         bikeLeft <= obstacle.x + obstacle.width;
 }
 
+function getTimedObstaclePulse(obstacle) {
+    const speed = obstacle.type === 'crank_rack'
+        ? 0.105
+        : obstacle.type === 'mill_paddle'
+            ? 0.062
+            : 0.052;
+    return Math.sin(frameCounter * speed + (Number(obstacle.phase) || 0));
+}
+
+function isTimedObstacleActive(obstacle) {
+    const threshold = obstacle.type === 'crank_rack' ? 0.68 : 0.42;
+    return getTimedObstaclePulse(obstacle) > threshold;
+}
+
 function createObstacles() {
     if (!currentTrack || currentTrack.id === 'sprint') return [];
 
@@ -401,9 +425,13 @@ function createObstacles() {
         pitIndices.add(index);
     }
 
-    // Исторические этапы главы II всегда получают свои ключевые элементы
-    // маршрута: мостки, рампы и тематические участки не зависят от удачи.
-    const signatureTypes = currentTrack.historyChapter === 2 && Array.isArray(currentTrack.signatureObstacleTypes)
+    // Глава II использует собственный чередующийся сценарий препятствий,
+    // чтобы у каждого испытания был узнаваемый ритм, а ключевые элементы
+    // не зависели от случайной выборки.
+    const historyPattern = currentTrack.historyChapter === 2 && Array.isArray(currentTrack.historyObstaclePattern)
+        ? currentTrack.historyObstaclePattern.filter(type => typePool.includes(type))
+        : [];
+    const signatureTypes = currentTrack.historyChapter === 2 && !historyPattern.length && Array.isArray(currentTrack.signatureObstacleTypes)
         ? currentTrack.signatureObstacleTypes.filter(type => typePool.includes(type) && type !== 'pit')
         : [];
     const signatureAssignments = new Map();
@@ -429,7 +457,12 @@ function createObstacles() {
     let previousRight = firstObstacleX - 120;
 
     for (let index = 0; index < obstacleCount; index++) {
-        const type = pitIndices.has(index) ? 'pit' : signatureAssignments.get(index) || randomItem(randomTypePool);
+        const patternType = historyPattern.length
+            ? historyPattern[index % historyPattern.length]
+            : null;
+        const type = pitIndices.has(index)
+            ? 'pit'
+            : signatureAssignments.get(index) || patternType || randomItem(randomTypePool);
         const definition = OBSTACLE_TYPES[type];
         if (!definition) continue;
 
@@ -449,6 +482,7 @@ function createObstacles() {
             width: definition.width,
             height: definition.height,
             color: definition.color,
+            phase: Math.random() * Math.PI * 2,
             playerHit: false,
             botHitBy: new Set(),
             botJumpAttemptedBy: new Set(),
@@ -1581,8 +1615,8 @@ function updatePlayerPhysics() {
 function findBotJumpTarget(bike) {
     const jumpableTypes = new Set([
         'pit',
-        'log',
-        'barrier', 'cone', 'fallen_branch', 'bridge_gap', 'pulse_gate', 'rolling_boulder'
+        'log', 'barrier', 'cone', 'fallen_branch', 'bridge_gap', 'pulse_gate',
+        'rolling_boulder', 'loose_planks', 'smith_hammer', 'mill_paddle', 'crank_rack'
     ]);
 
     const front = bike.x + BIKE_WIDTH * 0.35;
@@ -1892,7 +1926,7 @@ function applyPlayerImpact(obstacle, speedLimit = 1.0) {
         speedLimit = Math.max(speedLimit, Math.min(playerBike.velocityX, speedLimit * 1.15));
     }
 
-    const roughObstacle = ['rock', 'rolling_boulder', 'log', 'fallen_branch'].includes(obstacle.type);
+    const roughObstacle = ['rock', 'rolling_boulder', 'log', 'fallen_branch', 'crank_rack'].includes(obstacle.type);
     const stability = clamp(Number(playerBike.stability) || 0, 0, 100);
     if (roughObstacle) {
         const retainedSpeed = (playerBike.velocityX - speedLimit) * stability * 0.0018;
@@ -1949,7 +1983,7 @@ function updatePlayerCollisions() {
             continue;
         }
 
-        if (obstacle.type === 'pit' || obstacle.type === 'bridge_gap' || obstacle.type === 'cliff') {
+        if (obstacle.type === 'pit' || obstacle.type === 'bridge_gap' || obstacle.type === 'cliff' || obstacle.type === 'loose_planks') {
             if (
                 playerBike.grounded &&
                 playerBike.jumpHeight < 8
@@ -1966,7 +2000,14 @@ function updatePlayerCollisions() {
             if (playerBike.jumpHeight < obstacle.height + 8) applyPlayerImpact(obstacle, 0.9);
             continue;
         }
-        if (obstacle.type === 'mud' || obstacle.type === 'water_splash' || obstacle.type === 'ice_patch' || obstacle.type === 'wind_fan') {
+        if (['smith_hammer', 'mill_paddle', 'crank_rack'].includes(obstacle.type)) {
+            const clearHeight = obstacle.type === 'smith_hammer' ? 28 : obstacle.type === 'mill_paddle' ? 32 : 23;
+            if (isTimedObstacleActive(obstacle) && playerBike.jumpHeight < clearHeight) {
+                applyPlayerImpact(obstacle, Math.max(0.65, playerBike.velocityX * 0.48));
+            }
+            continue;
+        }
+        if (obstacle.type === 'mud' || obstacle.type === 'water_splash' || obstacle.type === 'ice_patch' || obstacle.type === 'wind_fan' || obstacle.type === 'forge_slag' || obstacle.type === 'ford_stones') {
             if (playerBike.grounded) {
                 if (playerBike.abilities?.mudGrip && ['mud', 'water_splash'].includes(obstacle.type)) {
                     applyPlayerImpact(obstacle, Math.max(0.8, playerBike.velocityX * 0.82));
@@ -1974,6 +2015,10 @@ function updatePlayerCollisions() {
                     applyPlayerImpact(obstacle, Math.max(0.8, playerBike.velocityX * 0.58));
                 } else if (obstacle.type === 'wind_fan') {
                     applyPlayerImpact(obstacle, Math.max(0.6, playerBike.velocityX * 0.42));
+                } else if (obstacle.type === 'forge_slag') {
+                    applyPlayerImpact(obstacle, Math.max(0.65, playerBike.velocityX * 0.68));
+                } else if (obstacle.type === 'ford_stones') {
+                    applyPlayerImpact(obstacle, Math.max(0.8, playerBike.velocityX * 0.84));
                 } else {
                     applyPlayerImpact(obstacle, obstacle.type === 'water_splash' ? 0.8 : 1.05);
                 }
@@ -2055,7 +2100,7 @@ function applyBotImpact(
         bike.impactSlowTimer = duration;
     }
 
-    const roughObstacle = ['rock', 'rolling_boulder', 'log', 'fallen_branch'].includes(obstacle.type);
+    const roughObstacle = ['rock', 'rolling_boulder', 'log', 'fallen_branch', 'crank_rack'].includes(obstacle.type);
     if (roughObstacle) {
         const stability = clamp(Number(bike.stability) || 0, 0, 100);
         speedFactor = Math.min(0.94, speedFactor + stability * 0.0018);
@@ -2101,7 +2146,7 @@ function updateBotCollisions(bike) {
             continue;
         }
 
-        if (obstacle.type === 'pit' || obstacle.type === 'bridge_gap' || obstacle.type === 'cliff') {
+        if (obstacle.type === 'pit' || obstacle.type === 'bridge_gap' || obstacle.type === 'cliff' || obstacle.type === 'loose_planks') {
             if (
                 bike.jumpHeight <
                 Math.max(22, obstacle.height * 0.75)
@@ -2122,9 +2167,16 @@ function updateBotCollisions(bike) {
             if (bike.jumpHeight < obstacle.height + 8) applyBotImpact(bike, obstacle, 0.5, 38);
             continue;
         }
-        if (obstacle.type === 'mud' || obstacle.type === 'water_splash' || obstacle.type === 'ice_patch' || obstacle.type === 'wind_fan') {
+        if (['smith_hammer', 'mill_paddle', 'crank_rack'].includes(obstacle.type)) {
+            const clearHeight = obstacle.type === 'smith_hammer' ? 28 : obstacle.type === 'mill_paddle' ? 32 : 23;
+            if (isTimedObstacleActive(obstacle) && bike.jumpHeight < clearHeight) {
+                applyBotImpact(bike, obstacle, 0.48, 40);
+            }
+            continue;
+        }
+        if (obstacle.type === 'mud' || obstacle.type === 'water_splash' || obstacle.type === 'ice_patch' || obstacle.type === 'wind_fan' || obstacle.type === 'forge_slag' || obstacle.type === 'ford_stones') {
             if (bike.grounded) {
-                const factor = obstacle.type === 'wind_fan' ? 0.28 : obstacle.type === 'ice_patch' ? 0.52 : obstacle.type === 'water_splash' ? 0.42 : 0.58;
+                const factor = obstacle.type === 'wind_fan' ? 0.28 : obstacle.type === 'ice_patch' ? 0.52 : obstacle.type === 'water_splash' ? 0.42 : obstacle.type === 'forge_slag' ? 0.65 : obstacle.type === 'ford_stones' ? 0.82 : 0.58;
                 applyBotImpact(bike, obstacle, factor, obstacle.type === 'ice_patch' ? 24 : 48);
             }
             continue;
@@ -2478,6 +2530,139 @@ function getSprintGhostProgress(elapsedMs, bestTimeMs) {
 // ОТРИСОВКА ФОНА
 // =========================================
 
+function drawMacmillanHistoryLandmarks() {
+    if (!currentTrack?.isHistory || Number(currentTrack.historyChapter) !== 2) return;
+
+    const stage = Number(currentTrack.historyStage) || 1;
+    const scale = clamp(viewHeight / 420, 0.72, 1.15);
+    const spacing = 390 * scale;
+    const cycle = viewWidth + spacing;
+    const baseY = viewHeight * 0.645;
+    const buildingColor = ['#574234', '#4c5b4e', '#6d6658', '#625044', '#4d3a35'][stage - 1] || '#574234';
+
+    for (let i = -1; i < Math.ceil(viewWidth / spacing) + 2; i++) {
+        const rawX = i * spacing - cameraX * 0.14;
+        const x = ((rawX % cycle) + cycle) % cycle - spacing * 0.35;
+        ctx.save();
+        ctx.globalAlpha = 0.7;
+        ctx.fillStyle = buildingColor;
+        ctx.strokeStyle = 'rgba(35, 29, 25, .7)';
+        ctx.lineWidth = 3 * scale;
+
+        if (stage === 1 || stage === 5) {
+            const width = 88 * scale;
+            const height = (stage === 5 ? 62 : 54) * scale;
+            ctx.fillRect(x, baseY - height, width, height);
+            ctx.beginPath();
+            ctx.moveTo(x - 8 * scale, baseY - height);
+            ctx.lineTo(x + width * 0.5, baseY - height - 28 * scale);
+            ctx.lineTo(x + width + 8 * scale, baseY - height);
+            ctx.closePath();
+            ctx.fillStyle = stage === 5 ? '#3d302c' : '#46332b';
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = '#2b2726';
+            ctx.fillRect(x + width * 0.72, baseY - height - 35 * scale, 11 * scale, 34 * scale);
+            const glow = 0.55 + Math.sin(frameCounter * 0.045 + i) * 0.18;
+            ctx.fillStyle = `rgba(251, 146, 60, ${glow})`;
+            ctx.fillRect(x + width * 0.17, baseY - height * 0.48, 17 * scale, 14 * scale);
+            ctx.fillStyle = '#352922';
+            ctx.fillRect(x + width * 0.52, baseY - 27 * scale, 13 * scale, 27 * scale);
+
+            if (stage === 5) {
+                for (let flag = 0; flag < 2; flag++) {
+                    const flagX = x + (flag ? width + 18 * scale : -15 * scale);
+                    ctx.strokeStyle = '#5a4434';
+                    ctx.lineWidth = 2 * scale;
+                    ctx.beginPath();
+                    ctx.moveTo(flagX, baseY - 58 * scale);
+                    ctx.lineTo(flagX, baseY + 3 * scale);
+                    ctx.stroke();
+                    ctx.fillStyle = flag ? '#d6a85f' : '#8e6245';
+                    ctx.beginPath();
+                    ctx.moveTo(flagX, baseY - 56 * scale);
+                    ctx.lineTo(flagX + 25 * scale, baseY - 49 * scale);
+                    ctx.lineTo(flagX, baseY - 41 * scale);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            }
+        } else if (stage === 2) {
+            const cx = x + 48 * scale;
+            const cy = baseY - 30 * scale;
+            const radius = 30 * scale;
+            ctx.fillStyle = 'rgba(42, 91, 91, .48)';
+            ctx.fillRect(x - 18 * scale, baseY - 9 * scale, 132 * scale, 18 * scale);
+            ctx.strokeStyle = '#493b2c';
+            ctx.lineWidth = 5 * scale;
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(frameCounter * 0.008 + i * 0.4);
+            for (let spoke = 0; spoke < 8; spoke++) {
+                ctx.rotate(Math.PI / 4);
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(0, -radius);
+                ctx.stroke();
+                ctx.fillStyle = '#8b5a2b';
+                ctx.fillRect(-4 * scale, -radius - 7 * scale, 8 * scale, 14 * scale);
+            }
+            ctx.restore();
+            ctx.fillStyle = '#d8c39a';
+            ctx.beginPath();
+            ctx.arc(cx, cy, 5 * scale, 0, Math.PI * 2);
+            ctx.fill();
+        } else if (stage === 3) {
+            const wallY = baseY - 22 * scale;
+            for (let stone = 0; stone < 5; stone++) {
+                const stoneX = x + stone * 21 * scale;
+                ctx.fillStyle = stone % 2 ? '#77766a' : '#8a8170';
+                ctx.fillRect(stoneX, wallY - (stone % 2) * 7 * scale, 20 * scale, 19 * scale);
+                ctx.strokeRect(stoneX, wallY - (stone % 2) * 7 * scale, 20 * scale, 19 * scale);
+            }
+            ctx.fillStyle = '#6b5238';
+            ctx.fillRect(x + 112 * scale, baseY - 62 * scale, 5 * scale, 62 * scale);
+            ctx.fillStyle = '#bca77f';
+            ctx.beginPath();
+            ctx.moveTo(x + 96 * scale, baseY - 58 * scale);
+            ctx.lineTo(x + 115 * scale, baseY - 75 * scale);
+            ctx.lineTo(x + 134 * scale, baseY - 58 * scale);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillRect(x + 98 * scale, baseY - 58 * scale, 34 * scale, 21 * scale);
+            ctx.fillStyle = '#4b4034';
+            ctx.font = `bold ${9 * scale}px serif`;
+            ctx.textAlign = 'center';
+            ctx.fillText('1840', x + 115 * scale, baseY - 44 * scale);
+        } else {
+            const postX = x + 20 * scale;
+            const postTop = baseY - 76 * scale;
+            ctx.strokeStyle = '#5a3a27';
+            ctx.lineWidth = 7 * scale;
+            for (let post = 0; post < 4; post++) {
+                const px = postX + post * 34 * scale;
+                ctx.beginPath();
+                ctx.moveTo(px, postTop + (post % 2) * 8 * scale);
+                ctx.lineTo(px, baseY + 4 * scale);
+                ctx.stroke();
+            }
+            ctx.lineWidth = 4 * scale;
+            ctx.beginPath();
+            ctx.moveTo(postX, postTop + 11 * scale);
+            ctx.quadraticCurveTo(postX + 50 * scale, postTop + 28 * scale, postX + 102 * scale, postTop + 11 * scale);
+            ctx.moveTo(postX, postTop + 32 * scale);
+            ctx.quadraticCurveTo(postX + 50 * scale, postTop + 48 * scale, postX + 102 * scale, postTop + 32 * scale);
+            ctx.stroke();
+            ctx.fillStyle = '#8d6745';
+            ctx.fillRect(postX + 4 * scale, baseY - 13 * scale, 100 * scale, 10 * scale);
+        }
+        ctx.restore();
+    }
+}
+
 function drawBackground() {
     const palette = getTrackPalette();
 
@@ -2575,7 +2760,9 @@ function drawBackground() {
         true
     );
 
-    if ([5, 8, 10].includes(currentTrackLevel)) {
+    drawMacmillanHistoryLandmarks();
+
+    if (!currentTrack?.isHistory && [5, 8, 10].includes(currentTrackLevel)) {
         ctx.fillStyle = currentTrackLevel === 5
             ? 'rgba(235,248,255,0.48)'
             : currentTrackLevel === 8
@@ -3005,6 +3192,170 @@ function drawObstacle(obstacle) {
         ctx.moveTo(screenX, groundY - height);
         ctx.lineTo(screenX + width, groundY - height);
         ctx.stroke();
+        return;
+    }
+
+    if (obstacle.type === 'forge_slag') {
+        ctx.fillStyle = 'rgba(124, 45, 18, .9)';
+        ctx.beginPath();
+        ctx.ellipse(screenX + width / 2, groundY + 2, width / 2, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fb923c';
+        ctx.beginPath();
+        ctx.ellipse(screenX + width / 2, groundY - 1, width * 0.39, 4 + Math.sin(frameCounter * 0.12 + obstacle.phase) * 1.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        for (let spark = 0; spark < 4; spark++) {
+            const sparkX = screenX + 8 + ((spark * 23 + frameCounter * (0.4 + spark * 0.08)) % Math.max(12, width - 16));
+            const sparkY = groundY - 5 - ((frameCounter * 0.9 + spark * 11) % 18);
+            ctx.fillStyle = spark % 2 ? '#fde047' : '#fdba74';
+            ctx.fillRect(sparkX, sparkY, 2, 4);
+        }
+        return;
+    }
+
+    if (obstacle.type === 'smith_hammer') {
+        const pulse = (getTimedObstaclePulse(obstacle) + 1) * 0.5;
+        const striking = isTimedObstacleActive(obstacle);
+        const postX = screenX + 8;
+        const topY = groundY - height;
+        const headY = groundY - (18 + (1 - pulse) * 31);
+        ctx.fillStyle = '#60452f';
+        ctx.fillRect(postX, topY + 4, 6, height - 4);
+        ctx.fillRect(screenX + width - 14, topY + 4, 6, height - 4);
+        ctx.fillRect(postX, topY + 2, width - 16, 7);
+        ctx.strokeStyle = '#47382c';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(screenX + width / 2, topY + 8);
+        ctx.lineTo(screenX + width / 2, headY);
+        ctx.stroke();
+        ctx.fillStyle = striking ? '#f97316' : '#64748b';
+        ctx.fillRect(screenX + width / 2 - 14, headY - 5, 28, 12);
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillRect(screenX + width / 2 - 9, headY - 8, 18, 5);
+        if (striking) {
+            ctx.fillStyle = '#fde047';
+            for (let spark = 0; spark < 3; spark++) {
+                ctx.fillRect(screenX + width / 2 - 17 + spark * 16, groundY - 5 - (spark % 2) * 4, 3, 3);
+            }
+        }
+        return;
+    }
+
+    if (obstacle.type === 'ford_stones') {
+        ctx.fillStyle = 'rgba(14, 116, 144, .78)';
+        ctx.beginPath();
+        ctx.ellipse(screenX + width / 2, groundY + 5, width / 2, 12, 0, 0, Math.PI * 2);
+        ctx.fill();
+        for (let stone = 0; stone < 5; stone++) {
+            const stoneX = screenX + 9 + stone * (width - 30) / 4;
+            const stoneY = groundY - 3 - (stone % 2) * 3;
+            ctx.fillStyle = stone % 2 ? '#a8a29e' : '#78716c';
+            ctx.beginPath();
+            ctx.ellipse(stoneX + 9, stoneY, 10, 5, 0, Math.PI, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(226, 232, 240, .7)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(stoneX + 2, stoneY - 1);
+            ctx.lineTo(stoneX + 8, stoneY - 3);
+            ctx.stroke();
+        }
+        ctx.strokeStyle = 'rgba(186, 230, 253, .8)';
+        ctx.lineWidth = 2;
+        const rippleX = screenX + ((frameCounter * 1.7) % width);
+        ctx.beginPath();
+        ctx.ellipse(rippleX, groundY + 2, 9, 3, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        return;
+    }
+
+    if (obstacle.type === 'mill_paddle') {
+        const cx = screenX + width / 2;
+        const cy = groundY - height * 0.48;
+        const radius = Math.min(width, height) * 0.38;
+        const active = isTimedObstacleActive(obstacle);
+        ctx.strokeStyle = '#56391f';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(screenX + 8, groundY);
+        ctx.lineTo(cx, cy);
+        ctx.lineTo(screenX + width - 8, groundY);
+        ctx.stroke();
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(frameCounter * 0.045 + obstacle.phase);
+        ctx.strokeStyle = active ? '#f97316' : '#8b5a2b';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        for (let spoke = 0; spoke < 6; spoke++) {
+            ctx.rotate(Math.PI / 3);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(0, -radius);
+            ctx.stroke();
+            ctx.fillStyle = active ? '#fb923c' : '#a87949';
+            ctx.fillRect(-4, -radius - 7, 8, 13);
+        }
+        ctx.fillStyle = '#d6c29b';
+        ctx.beginPath();
+        ctx.arc(0, 0, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        return;
+    }
+
+    if (obstacle.type === 'crank_rack') {
+        const active = isTimedObstacleActive(obstacle);
+        ctx.fillStyle = '#5b3b26';
+        ctx.fillRect(screenX + 4, groundY - 8, width - 8, 8);
+        ctx.strokeStyle = active ? '#f59e0b' : '#8b5a2b';
+        ctx.lineWidth = 5;
+        ctx.save();
+        ctx.translate(screenX + width / 2, groundY - height * 0.48);
+        ctx.rotate(frameCounter * 0.075 + obstacle.phase);
+        ctx.beginPath();
+        ctx.arc(0, 0, 12, 0, Math.PI * 2);
+        ctx.moveTo(-27, 0);
+        ctx.lineTo(27, 0);
+        ctx.moveTo(0, -27);
+        ctx.lineTo(0, 27);
+        ctx.stroke();
+        ctx.fillStyle = active ? '#fbbf24' : '#a87949';
+        ctx.fillRect(-3, -31, 6, 11);
+        ctx.fillRect(-3, 20, 6, 11);
+        ctx.fillRect(-31, -3, 11, 6);
+        ctx.fillRect(20, -3, 11, 6);
+        ctx.restore();
+        return;
+    }
+
+    if (obstacle.type === 'loose_planks') {
+        ctx.fillStyle = 'rgba(2, 6, 23, .9)';
+        ctx.fillRect(screenX, groundY - 5, width, 18);
+        ctx.fillStyle = '#704522';
+        ctx.fillRect(screenX, groundY - 8, 20, 5);
+        ctx.fillRect(screenX + width - 20, groundY - 8, 20, 5);
+        const plankWidth = width / 7;
+        for (let plank = 0; plank < 7; plank++) {
+            if (plank === 3 || plank === 4) continue;
+            const plankY = groundY - 9 + (plank % 2 ? 3 : 0);
+            ctx.save();
+            ctx.translate(screenX + plank * plankWidth + plankWidth / 2, plankY);
+            ctx.rotate(plank % 2 ? -0.08 : 0.06);
+            ctx.fillStyle = plank % 2 ? '#a97843' : '#80532f';
+            ctx.fillRect(-plankWidth * 0.46, -4, plankWidth * 0.92, 7);
+            ctx.strokeStyle = '#4b3020';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(-plankWidth * 0.46, -4, plankWidth * 0.92, 7);
+            ctx.restore();
+        }
+        ctx.fillStyle = '#c4b5a5';
+        ctx.font = 'bold 15px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('ПРЫЖОК', screenX + width / 2, groundY - 16);
         return;
     }
 

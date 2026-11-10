@@ -1,4 +1,4 @@
-import { ITEMS_DB, TRACKS_DB, HISTORY_TRACKS_DB, CONTAINERS_DB } from './db.js?v=116';
+import { ITEMS_DB, TRACKS_DB, HISTORY_TRACKS_DB, CONTAINERS_DB } from './db.js?v=118';
 import {
     player,
     loadPlayerState,
@@ -6,7 +6,7 @@ import {
     clearSavedProgress,
     forceSavePlayerState,
     getServerTime
-} from './state.js?v=116';
+} from './state.js?v=118';
 import {
     initRace,
     setAccelerating,
@@ -15,14 +15,14 @@ import {
     triggerJump,
     activateNitroBoost,
     activateMacmillanBurst
-} from './race.js?v=116';
+} from './race.js?v=118';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=116';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=116';
+} from './audio.js?v=118';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=118';
 
 function renderGameVersionBadge() {
     const build = document.body?.dataset.gameBuild || '100';
@@ -563,12 +563,8 @@ function getCouponPurchasePrice(part) {
 function getUpgradePrice(part) {
     if (!part) return 0;
     if (isCouponPurchaseItem(part)) return getCouponPurchasePrice(part);
-    const basePrice = Math.max(0, Number(part?.price) || 0);
-    if (part.category === 'riders' || (part.id && part.id.startsWith('r'))) {
-        return basePrice;
-    }
-    const multiplier = part?.rarity === 'common' ? 1.3 : part?.rarity === 'rare' ? 1.5 : 1;
-    return Math.round(basePrice * multiplier / 10) * 10;
+    // Цены хранятся в ITEMS_DB уже в финальном виде, без скрытых надбавок.
+    return Math.max(0, Number(part?.price) || 0);
 }
 
 function getCategoryOrder() {
