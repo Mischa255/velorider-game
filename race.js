@@ -1,7 +1,18 @@
-import { player } from './state.js?v=124';
-import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=124';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=124';
-import { playCoinSound, playBoostSound } from './audio.js?v=124';
+import { player } from './state.js';
+import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js';
+import { playCoinSound, playBoostSound } from './audio.js';
+import {
+    createBotBrain,
+    getBotAbilities,
+    getBotAirLeanInput,
+    getBotDifficultyStats,
+    getTimedObstaclePulse,
+    isTimedObstacleActive,
+    shouldBotHoldRampForGap,
+    updateBotAbilities,
+    updateBotDrivingDecision
+} from './bot-ai.js';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -16,6 +27,7 @@ const SPRINT_GHOST_ACCELERATION_SECONDS = 1.2;
 const BIKE_WIDTH = 46;
 const BIKE_HEIGHT = 24;
 const TRACK_MULTIPLIER = 3;
+const GAME_WORLD_UNITS_PER_METER = 45;
 const OBSTACLE_MULTIPLIER = 3;
 const RACE_ZOOM_DESKTOP = 0.86;
 const RACE_ZOOM_MOBILE_PORTRAIT = 0.60;
@@ -215,43 +227,6 @@ function getBotDifficultyTrack(botIndex) {
     return storyTracks[currentIndex];
 }
 
-function getBotDifficultyStats(botIndex) {
-    const difficultyTrack = getBotDifficultyTrack(botIndex);
-
-    const balance = getTrackBalance(difficultyTrack?.id);
-
-    const fallbackSpeed =
-        Number(currentTrack?.botMaxSpeed) || 4;
-
-    const fallbackAccel =
-        Number(currentTrack?.botAccel) || 0.05;
-
-    const rawSpeed = Number(difficultyTrack?.botMaxSpeed) || fallbackSpeed;
-    const rawAcceleration = Number(difficultyTrack?.botAccel) || fallbackAccel;
-
-    // Случайный баланс формы гонщиков на каждый заезд (в пределах ±3% от скорости сложности трассы):
-    // В одном заезде активнее и быстрее Макс, в другом - Лера. Ни один бот не привязан к вечному лидерству.
-    const speedVariation = 0.97 + Math.random() * 0.06;
-    const accelVariation = 0.95 + Math.random() * 0.10;
-
-    return {
-        trackId: difficultyTrack?.id || currentTrack?.id,
-
-        maxSpeed: Math.max(
-            1.5,
-            rawSpeed * balance.speed * speedVariation
-        ),
-
-        acceleration: Math.max(
-            0.012,
-            rawAcceleration * balance.accel * accelVariation
-        ),
-
-        jumpForce: balance.jumpForce
-    };
-}
-
-
 function addFloatingText(x, y, text, color = '#facc15') {
     floatingTexts.push({
         x,
@@ -396,6 +371,15 @@ function getBikeObstacleHalfWidth(bike) {
     ));
 }
 
+export function getTrackDistanceMeters(track) {
+    if (track?.id === 'sprint') return 100;
+    const worldLength = Math.max(
+        6000,
+        (Number(track?.length) || 15000) * TRACK_MULTIPLIER - 1500
+    );
+    return Math.round(worldLength / GAME_WORLD_UNITS_PER_METER);
+}
+
 function isTouchingObstacle(bike, obstacle) {
     const halfWidth = getBikeObstacleHalfWidth(bike);
     const bikeLeft = bike.x - halfWidth;
@@ -405,18 +389,8 @@ function isTouchingObstacle(bike, obstacle) {
         bikeLeft <= obstacle.x + obstacle.width;
 }
 
-function getTimedObstaclePulse(obstacle) {
-    const speed = obstacle.type === 'crank_rack'
-        ? 0.105
-        : obstacle.type === 'mill_paddle'
-            ? 0.062
-            : 0.052;
-    return Math.sin(frameCounter * speed + (Number(obstacle.phase) || 0));
-}
-
-function isTimedObstacleActive(obstacle) {
-    const threshold = obstacle.type === 'crank_rack' ? 0.28 : 0.05;
-    return getTimedObstaclePulse(obstacle) > threshold;
+function getGapClearanceHeight(obstacle) {
+    return Math.max(22, Number(obstacle?.height) * 0.75 || 0);
 }
 
 function createObstacles() {
@@ -543,22 +517,6 @@ function createObstacles() {
 // =========================================
 // СПОСОБНОСТИ БОТОВ
 // =========================================
-
-function getBotAbilities(botIndex) {
-    const botLevel = currentTrack?.isHistory && Number(currentTrack.historyChapter) === 2
-        ? 3
-        : currentTrackLevel;
-    return {
-        // Оба бота умеют использовать нитро с 3-й трассы!
-        nitroUnlocked: botLevel >= 3,
-
-        // Суперпрыжок доступен любому боту с равной вероятностью с 5-й трассы
-        superJumpUnlocked: botLevel >= 5 && Math.random() < 0.6,
-
-        shieldCharges: botLevel >= 9 ? 1 : 0,
-        macmillanBurst: currentTrack?.isHistory && Number(currentTrack.historyChapter) === 2 && Number(currentTrack.historyStage) === 5 && botIndex === 1
-    };
-}
 
 function getEquippedPart(category) {
     const equippedId = player.equipped?.[category];
@@ -708,10 +666,15 @@ function getBotVisualProfile(botIndex) {
 }
 
 function createBike(isBot = false, botIndex = 1) {
-    const difficulty = isBot ? getBotDifficultyStats(botIndex) : null;
+    const botDifficultyTrack = isBot ? getBotDifficultyTrack(botIndex) : null;
+    const difficulty = isBot
+        ? getBotDifficultyStats(botIndex, botDifficultyTrack, currentTrack, getTrackBalance)
+        : null;
     const botColor = botIndex === 1 ? '#ef4444' : '#a855f7';
     const visuals = isBot ? getBotVisualProfile(botIndex) : getBikeVisualProfile();
-    const abilities = isBot ? getBotAbilities(botIndex) : getPlayerPartAbilities();
+    const abilities = isBot
+        ? getBotAbilities(botIndex, currentTrack, currentTrackLevel)
+        : getPlayerPartAbilities();
     // Оставляем место за задним колесом, чтобы стартовый велосипед не обрезался краем Canvas.
     const startX = 50;
 
@@ -753,6 +716,7 @@ function createBike(isBot = false, botIndex = 1) {
 
         isBot,
         botIndex: isBot ? botIndex : 0,
+        botBrain: isBot ? createBotBrain(botIndex, difficulty?.personality) : null,
         color: isBot ? botColor : (visuals?.frameColor || getRarityAccent()),
         abilities,
         macmillanBurstCharges: abilities.macmillanBurst ? 3 : 0,
@@ -1036,26 +1000,6 @@ function updateSuspensionResponse(bike) {
     }
 }
 
-function getBotAirLeanInput(bike) {
-    const gravity = Math.max(0.01, Number(bike.jumpGravity) || GRAVITY);
-    const height = Math.max(0, Number(bike.jumpHeight) || 0);
-    const verticalSpeed = Number(bike.jumpVelocity) || 0;
-    const landingTime = Math.max(0, Math.min(90,
-        (verticalSpeed + Math.sqrt(Math.max(0, verticalSpeed * verticalSpeed + 2 * gravity * height))) / gravity
-    ));
-    const landingX = bike.x + Math.max(0, Number(bike.velocityX) || 0) * landingTime;
-    const targetPitch = Math.atan2(
-        getGroundY(landingX + 25, 0) - getGroundY(landingX - 25, 0),
-        50
-    );
-    const pitchError = clamp(targetPitch - bike.pitchAngle, -2.2, 2.2);
-    const targetPitchVelocity = clamp(pitchError * 0.045, -0.012, 0.012);
-
-    // Бот немного подруливает велосипедом к углу поверхности в точке посадки,
-    // но использует ту же ограниченную силу воздушного контроля, что и игрок.
-    return clamp((targetPitchVelocity - bike.pitchVelocity) * 70, -1, 1);
-}
-
 function updateJumpPhysics(bike) {
     if (!bike.isBot && bike.landingBoostCooldown > 0) bike.landingBoostCooldown--;
 
@@ -1073,7 +1017,7 @@ function updateJumpPhysics(bike) {
         // Газ и «назад» наклоняют байк игрока. Бот рассчитывает такой же
         // ограниченный импульс по углу предполагаемой посадки.
         const leanInput = bike.isBot
-            ? getBotAirLeanInput(bike)
+            ? getBotAirLeanInput(bike, getGroundY)
             : (input.reversing ? 1 : 0) - (input.accelerating ? 1 : 0);
         bike.pitchVelocity += leanInput * 0.00065 * (0.85 + stabilityRatio * 0.15);
 
@@ -1221,7 +1165,7 @@ function updateRamp(bike, isBot) {
 
     // Не запускаем бота с трамплина прямо перед обязательным разрывом:
     // он должен остаться на земле и выполнить отдельный прыжок через яму.
-    if (isBot && hasUpcomingBotGap(bike, BOT_GAP_APPROACH_DISTANCE)) {
+    if (isBot && shouldBotHoldRampForGap(bike, obstacles, BIKE_WIDTH)) {
         bike.rampLift = 0;
         bike.currentRamp = null;
         return;
@@ -1315,9 +1259,7 @@ function updateRamp(bike, isBot) {
 
         bike.rampLift = 0;
         bike.grounded = false;
-        bike.jumpVelocity = !isBot && currentTrackLevel >= 8
-            ? 10.2 + Math.min(extraJump, 0.9)
-            : 12 + extraJump;
+        bike.jumpVelocity = 12 + extraJump;
 
         bike.jumpGravity = isBot && bike.abilities?.superJumpUnlocked
             ? 0.355
@@ -1327,13 +1269,11 @@ function updateRamp(bike, isBot) {
                     0.36,
                     0.38
                 )
-                : !isBot && currentTrackLevel >= 8
-                    ? 0.4
-                    : clamp(
-                        0.38 - jumpStat * 0.0007,
-                        0.36,
-                        0.38
-                    );
+                : clamp(
+                    0.38 - jumpStat * 0.0007,
+                    0.36,
+                    0.38
+                );
 
         bike.currentRamp = null;
     }
@@ -1643,267 +1583,12 @@ function updatePlayerPhysics() {
 }
 
 // =========================================
-// ИИ БОТА: ПОИСК БЛИЖАЙШЕГО ПРЕПЯТСТВИЯ
+// ФИЗИКА БОТА И ВЫПОЛНЕНИЕ РЕШЕНИЙ ИЗ bot-ai.js
 // =========================================
-
-// Разрывы боты обязаны перепрыгивать. Через высокие и движущиеся преграды
-// они иногда прыгают, а низкие и дорожные помехи чаще проходят с потерей скорости.
-const BOT_GAP_JUMP_TYPES = new Set([
-    'pit',
-    'bridge_gap',
-    'cliff',
-    'loose_planks'
-]);
-const BOT_GAP_APPROACH_DISTANCE = 560;
-const BOT_OPTIONAL_JUMP_CHANCES = {
-    log: 0.86,
-    barrier: 0.88,
-    cone: 0.74,
-    fallen_branch: 0.9,
-    wooden_gate: 0.88,
-    pulse_gate: 0.95,
-    rolling_boulder: 0.55,
-    smith_hammer: 0.95,
-    mill_paddle: 0.9,
-    crank_rack: 0.9
-};
-
-function shouldBotJumpObstacle(bike, obstacle) {
-    if (BOT_GAP_JUMP_TYPES.has(obstacle.type)) return true;
-
-    const chance = BOT_OPTIONAL_JUMP_CHANCES[obstacle.type];
-    if (!chance) return false;
-
-    // Не тратим прыжок на движущуюся преграду, пока она безопасна.
-    if (obstacle.type === 'pulse_gate' && Math.sin(frameCounter * 0.045 + obstacle.x) > 0.15) {
-        return false;
-    }
-    if (
-        ['smith_hammer', 'mill_paddle', 'crank_rack'].includes(obstacle.type) &&
-        !isTimedObstacleActive(obstacle)
-    ) {
-        return false;
-    }
-
-    // Фиксированный для данной пары «бот-препятствие» выбор не меняется
-    // каждый кадр: кто-то перепрыгнет, а кто-то получит удар и замедлится.
-    const roll = ((Math.floor(obstacle.x * 17) + bike.botIndex * 31) % 100) / 100;
-    const skillBonus = bike.botIndex === 2 ? 0.12 : 0;
-    return roll < Math.min(0.96, chance + skillBonus);
-}
-
-function hasUpcomingBotGap(bike, distanceLimit = Infinity) {
-    const front = bike.x + BIKE_WIDTH * 0.35;
-    return obstacles.some(obstacle =>
-        BOT_GAP_JUMP_TYPES.has(obstacle.type) &&
-        obstacle.x + obstacle.width >= front - 8 &&
-        obstacle.x - front <= distanceLimit &&
-        !obstacle.botJumpAttemptedBy.has(bike.botIndex)
-    );
-}
-
-function findBotJumpTarget(bike) {
-    const front = bike.x + BIKE_WIDTH * 0.35;
-
-    const imminentGap = obstacles.find(obstacle =>
-        BOT_GAP_JUMP_TYPES.has(obstacle.type) &&
-        obstacle.x + obstacle.width >= front - 8 &&
-        obstacle.x - front <= BOT_GAP_APPROACH_DISTANCE &&
-        !obstacle.botJumpAttemptedBy.has(bike.botIndex)
-    );
-    if (imminentGap) return imminentGap;
-
-    return obstacles.find(obstacle => {
-        if (!shouldBotJumpObstacle(bike, obstacle)) return false;
-
-        if (obstacle.x + obstacle.width < front - 8) {
-            return false;
-        }
-
-        if (
-            obstacle.botJumpAttemptedBy.has(
-                bike.botIndex
-            )
-        ) {
-            return false;
-        }
-
-        return true;
-    }) || null;
-}
-
-function updateBotAI(bike) {
-    if (!bike.grounded || bike.jumpHeight > 0) return;
-
-    const obstacle = findBotJumpTarget(bike);
-
-    if (!obstacle) return;
-
-    const front = bike.x + BIKE_WIDTH * 0.35;
-    const distance = obstacle.x - front;
-
-    const speed = Math.max(
-        1.2,
-        bike.velocityX
-    );
-
-    const isDangerousGap = BOT_GAP_JUMP_TYPES.has(obstacle.type);
-    const reactionDistance = isDangerousGap
-        ? clamp(
-            speed * 12 + obstacle.width * 0.22 + 12,
-            50,
-            100
-        )
-        : clamp(
-            speed * 12 + obstacle.width * 0.16 + 18,
-            60,
-            120
-        );
-
-    if (
-        distance <= reactionDistance &&
-        distance >= -BIKE_WIDTH * 0.2
-    ) {
-        const baseForce =
-            Number(bike.botJumpForce) ||
-            getTrackBalance(currentTrack.id).jumpForce;
-
-        const superJumpBonus =
-            bike.abilities?.superJumpUnlocked
-                ? 2.5
-                : 0;
-
-        const force =
-            (isDangerousGap
-                ? baseForce + 0.8
-                : baseForce) + superJumpBonus;
-
-        obstacle.botJumpAttemptedBy.add(
-            bike.botIndex
-        );
-
-        startJump(
-            bike,
-            force,
-            bike.abilities?.superJumpUnlocked
-                ? 0.355
-                : GRAVITY
-        );
-    }
-}
-
-// =========================================
-// ПОДХОД БОТА К КАМНЮ
-// =========================================
-
-function updateBotRockApproach(bike, maxSpeed) {
-    const front = bike.x + BIKE_WIDTH * 0.35;
-
-    const rock = obstacles.find(obstacle => {
-        if (obstacle.type !== 'rock') return false;
-
-        if (
-            obstacle.botHitBy.has(bike.botIndex)
-        ) {
-            return false;
-        }
-
-        return obstacle.x + obstacle.width >= front - 8;
-    });
-
-    if (!rock) return;
-
-    const distance = rock.x - front;
-
-    const speed = Math.max(
-        1,
-        bike.velocityX
-    );
-
-    const brakingDistance = clamp(
-        speed * 12 + rock.width * 0.25 + 15,
-        55,
-        110
-    );
-
-    if (
-        distance <= brakingDistance &&
-        distance >= -rock.width
-    ) {
-        const approachLimit = Math.max(
-            0.65,
-            maxSpeed * 0.62
-        );
-
-        bike.velocityX = Math.min(
-            bike.velocityX,
-            approachLimit
-        );
-    }
-}
-
-// =========================================
-// СПОСОБНОСТИ БОТА
-// =========================================
-
-function updateBotAbilities(bike) {
-    if (bike.macmillanBurstTimer > 0) bike.macmillanBurstTimer--;
-    if (bike.nitroTimer > 0) {
-        bike.nitroTimer--;
-    } else if (bike.nitroCooldown > 0) {
-        bike.nitroCooldown--;
-    }
-
-    if (bike.shieldActiveTimer > 0) {
-        bike.shieldActiveTimer--;
-    }
-
-    const burstTopSpeed = Math.max(1.5, Number(bike.botBaseMaxSpeed) || 3);
-    const burstObstacleAhead = obstacles.some(obstacle =>
-        obstacle.x >= bike.x + BIKE_WIDTH * 0.35 && obstacle.x - bike.x < 230
-    );
-    if (
-        bike.abilities?.macmillanBurst &&
-        bike.macmillanBurstCharges > 0 &&
-        bike.grounded &&
-        bike.impactSlowTimer <= 0 &&
-        bike.velocityX < burstTopSpeed * 0.86 &&
-        !burstObstacleAhead
-    ) {
-        bike.velocityX = burstTopSpeed;
-        bike.macmillanBurstCharges--;
-        bike.macmillanBurstTimer = 32;
-    }
-
-    if (
-        bike.abilities?.nitroUnlocked &&
-        bike.nitroTimer <= 0 &&
-        bike.nitroCooldown <= 0 &&
-        bike.grounded &&
-        bike.impactSlowTimer <= 0
-    ) {
-        const front = bike.x + BIKE_WIDTH * 0.35;
-
-        const obstacleAhead = obstacles.some(obstacle =>
-            obstacle.x >= front &&
-            obstacle.x - front < 230
-        );
-
-        if (!obstacleAhead) {
-            bike.nitroTimer = 48;
-            bike.nitroCooldown = 430;
-        }
-    }
-}
-
-// =========================================
-// ФИЗИКА БОТА
-// =========================================
-
 function updateBotPhysics(bike) {
     if (updateBikeFlipRecovery(bike)) return;
 
-    updateBotAbilities(bike);
+    updateBotAbilities(bike, obstacles, BIKE_WIDTH, [playerBike, ...activeBots]);
     if (bike.springBoostTimer > 0) bike.springBoostTimer--;
 
     const baseMaxSpeed = Math.max(
@@ -1974,12 +1659,17 @@ function updateBotPhysics(bike) {
         allowedSpeed
     );
 
-    updateBotRockApproach(
-        bike,
+    updateBotDrivingDecision(bike, {
+        obstacles,
+        frameCounter,
+        currentTrackId: currentTrack.id,
+        getTrackBalance,
+        startJump,
+        gravity: GRAVITY,
+        bikeWidth: BIKE_WIDTH,
+        competitors: [playerBike, ...activeBots],
         maxSpeed
-    );
-
-    updateBotAI(bike);
+    });
 
     bike.previousX = bike.x;
 
@@ -2078,10 +1768,7 @@ function updatePlayerCollisions() {
         }
 
         if (obstacle.type === 'pit' || obstacle.type === 'bridge_gap' || obstacle.type === 'cliff' || obstacle.type === 'loose_planks') {
-            if (
-                playerBike.grounded &&
-                playerBike.jumpHeight < 8
-            ) {
+            if (playerBike.jumpHeight < getGapClearanceHeight(obstacle)) {
                 finishRace(false, 'pit');
                 return;
             }
@@ -2096,7 +1783,7 @@ function updatePlayerCollisions() {
         }
         if (['smith_hammer', 'mill_paddle', 'crank_rack'].includes(obstacle.type)) {
             const clearHeight = obstacle.type === 'smith_hammer' ? 28 : obstacle.type === 'mill_paddle' ? 32 : 23;
-            if (isTimedObstacleActive(obstacle) && playerBike.jumpHeight < clearHeight) {
+            if (isTimedObstacleActive(obstacle, frameCounter) && playerBike.jumpHeight < clearHeight) {
                 applyPlayerImpact(obstacle, Math.max(0.65, playerBike.velocityX * 0.48));
             }
             continue;
@@ -2249,10 +1936,7 @@ function updateBotCollisions(bike) {
         }
 
         if (obstacle.type === 'pit' || obstacle.type === 'bridge_gap' || obstacle.type === 'cliff' || obstacle.type === 'loose_planks') {
-            if (
-                bike.jumpHeight <
-                Math.max(22, obstacle.height * 0.75)
-            ) {
+            if (bike.jumpHeight < getGapClearanceHeight(obstacle)) {
                 applyBotImpact(
                     bike,
                     obstacle,
@@ -2271,7 +1955,7 @@ function updateBotCollisions(bike) {
         }
         if (['smith_hammer', 'mill_paddle', 'crank_rack'].includes(obstacle.type)) {
             const clearHeight = obstacle.type === 'smith_hammer' ? 28 : obstacle.type === 'mill_paddle' ? 32 : 23;
-            if (isTimedObstacleActive(obstacle) && bike.jumpHeight < clearHeight) {
+            if (isTimedObstacleActive(obstacle, frameCounter) && bike.jumpHeight < clearHeight) {
                 applyBotImpact(bike, obstacle, 0.48, 40);
             }
             continue;
@@ -2378,6 +2062,25 @@ function finishRace(playerWon, reason = 'finish') {
     }
 }
 
+export function stopRace() {
+    if (animationId !== null) {
+        cancelAnimationFrame(animationId);
+    }
+    animationId = null;
+    raceRunning = false;
+    raceFinished = true;
+    raceStarted = false;
+    historyVictoryOutro = null;
+    setHistoryCinematicMode(false);
+    input = { accelerating: false, braking: false, reversing: false, jumpRequested: false };
+}
+
+function completeHistoryVictoryOutro() {
+    if (!historyVictoryOutro || raceFinished) return;
+    historyVictoryOutro = null;
+    finishRace(true, 'finish');
+}
+
 function startHistoryVictoryOutro() {
     if (
         !currentTrack?.isHistory ||
@@ -2444,10 +2147,20 @@ function startHistoryVictoryOutro() {
 
 function updateHistoryVictoryOutro() {
     const outro = historyVictoryOutro;
-    if (!outro || !botBike || !playerBike) return;
+    if (!outro) return;
+    if (!botBike || !playerBike) {
+        completeHistoryVictoryOutro();
+        return;
+    }
 
     frameCounter++;
     outro.elapsed++;
+    // Даже если камера или рендер сцены дали сбой, гонка завершится и
+    // обработчик выдаст награды за победу.
+    if (outro.elapsed >= 540) {
+        completeHistoryVictoryOutro();
+        return;
+    }
     const sceneCenter = ['rideAway', 'endFade'].includes(outro.phase)
         ? playerBike.x
         : (playerBike.x + botBike.x) * 0.5;
@@ -2526,7 +2239,7 @@ function updateHistoryVictoryOutro() {
         const rideSpeed = 0.35 + 5.15 * easeInOutCubic(rideProgress);
         botBike.x -= rideSpeed;
         botBike.velocityX = botBike.x - oldX;
-        if (botBike.x < cameraX - 65) {
+        if (botBike.x < cameraX - 65 || outro.phaseFrame >= 150) {
             enterPhase('endFade');
             botBike.velocityX = 0;
         } else {
@@ -2535,7 +2248,7 @@ function updateHistoryVictoryOutro() {
     } else if (outro.phase === 'endFade') {
         botBike.velocityX = 0;
         if (outro.phaseFrame >= 19) {
-            finishRace(true, 'finish');
+            completeHistoryVictoryOutro();
             return;
         }
         outro.phaseFrame++;
@@ -2600,11 +2313,15 @@ function checkFinish() {
         return;
     }
 
-    const furthestBot = Math.max(
-        ...finishedBots.map(bike => bike.x)
-    );
-
-    const playerWon = playerBike.x >= furthestBot;
+    // Сравниваем момент пересечения финиша, а не координату через кадр:
+    // бот мог ехать дальше после финиша и ошибочно считаться победителем.
+    const playerFinishFrame = Number.isFinite(playerBike.finishFrame)
+        ? playerBike.finishFrame
+        : frameCounter;
+    const earliestBotFinishFrame = Math.min(...finishedBots.map(bike =>
+        Number.isFinite(bike.finishFrame) ? bike.finishFrame : frameCounter
+    ));
+    const playerWon = playerFinishFrame <= earliestBotFinishFrame;
     if (playerWon && startHistoryVictoryOutro()) return;
     finishRace(playerWon, 'photo-finish');
 }
@@ -3322,8 +3039,8 @@ function drawObstacle(obstacle) {
     }
 
     if (obstacle.type === 'smith_hammer') {
-        const pulse = (getTimedObstaclePulse(obstacle) + 1) * 0.5;
-        const striking = isTimedObstacleActive(obstacle);
+        const pulse = (getTimedObstaclePulse(obstacle, frameCounter) + 1) * 0.5;
+        const striking = isTimedObstacleActive(obstacle, frameCounter);
         const postX = screenX + 8;
         const topY = groundY - height;
         const headY = groundY - (18 + (1 - pulse) * 31);
@@ -3382,7 +3099,7 @@ function drawObstacle(obstacle) {
         const cx = screenX + width / 2;
         const cy = groundY - height * 0.48;
         const radius = Math.min(width, height) * 0.38;
-        const active = isTimedObstacleActive(obstacle);
+        const active = isTimedObstacleActive(obstacle, frameCounter);
         ctx.strokeStyle = '#56391f';
         ctx.lineWidth = 5;
         ctx.beginPath();
@@ -3416,7 +3133,7 @@ function drawObstacle(obstacle) {
     }
 
     if (obstacle.type === 'crank_rack') {
-        const active = isTimedObstacleActive(obstacle);
+        const active = isTimedObstacleActive(obstacle, frameCounter);
         ctx.fillStyle = '#5b3b26';
         ctx.fillRect(screenX + 4, groundY - 8, width - 8, 8);
         ctx.strokeStyle = active ? '#f59e0b' : '#8b5a2b';
@@ -3898,7 +3615,7 @@ function drawHistoryVictoryRider(x, groundY, phase, phaseFrame, riseProgress = 1
     ctx.restore();
 }
 
-function drawPlayerHistoryObserver(x, groundY, phaseFrame, riseProgress, visuals = {}) {
+function drawPlayerHistoryObserver(x, groundY, phaseFrame, riseProgress, visuals = {}, historicalStyle = '') {
     if (riseProgress <= 0.02) return;
 
     const riderId = visuals.riderId || 'r1';
@@ -5063,7 +4780,8 @@ function drawBike(bike, label, color) {
             getGroundY(runnerWorldX, 0),
             historyPhaseFrame,
             riseProgress,
-            visuals
+            visuals,
+            visuals.macmillan ? 'macmillan' : ''
         );
     }
 
@@ -5722,7 +5440,7 @@ export function initRace(onRaceEnd) {
             }
         }
         const chapterTwoQualifiers = currentTrack.isHistory && Number(currentTrack.historyChapter) === 2 && Number(currentTrack.historyStage) <= 4;
-        additionalBots = (!currentTrack.isHistory && currentTrackLevel >= 2) || chapterTwoQualifiers
+        additionalBots = (!currentTrack.isHistory && currentTrackLevel >= 3) || chapterTwoQualifiers
             ? [createBike(true, 2)]
             : [];
         activeBots = [botBike, ...additionalBots];

@@ -1,4 +1,4 @@
-import { ITEMS_DB, TRACKS_DB, HISTORY_TRACKS_DB, CONTAINERS_DB } from './db.js?v=124';
+import { ITEMS_DB, TRACKS_DB, HISTORY_TRACKS_DB, CONTAINERS_DB } from './db.js';
 import {
     player,
     loadPlayerState,
@@ -6,7 +6,7 @@ import {
     clearSavedProgress,
     forceSavePlayerState,
     getServerTime
-} from './state.js?v=124';
+} from './state.js';
 import {
     initRace,
     setAccelerating,
@@ -14,15 +14,17 @@ import {
     setReversing,
     triggerJump,
     activateNitroBoost,
-    activateMacmillanBurst
-} from './race.js?v=124';
+    activateMacmillanBurst,
+    stopRace,
+    getTrackDistanceMeters
+} from './race.js';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=124';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=124';
+} from './audio.js';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js';
 
 function renderGameVersionBadge() {
     const build = document.body?.dataset.gameBuild || '100';
@@ -2135,7 +2137,7 @@ function updateTracksUI() {
                     <strong>${player.track4BonusClaimed ? '✓ Награда получена' : '2 редкие + 1 легендарный предмет'}</strong>
                </div>`
             : '';
-        const raceLength = isSprint ? 100 : Math.max(1000, Number(track.length) * 3 - 1500);
+        const raceLength = getTrackDistanceMeters(track);
         const obstaclesCount = isSprint
             ? 0
             : Math.floor((Number(track.obstacles) || 0) * (3 + storyIndex * 0.07));
@@ -2191,12 +2193,12 @@ function updateTracksUI() {
 
                 <div class="track-card__stats">
                     ${isSprint ? `
-                        <div class="track-stat"><span>Дистанция</span><strong>100 м</strong></div>
+                        <div class="track-stat"><span>Дистанция</span><strong>${raceLength} м</strong></div>
                         <div class="track-stat"><span>Препятствия</span><strong>Нет</strong></div>
                         <div class="track-stat"><span>Твой рекорд</span><strong class="text-yellow-400">${Number(player.bestSprintTime) > 0 ? (Number(player.bestSprintTime) / 1000).toFixed(2) + ' сек' : '—'}</strong></div>
                     ` : `
                         <div class="track-stat">
-                            <span>Длина</span>
+                            <span>Дистанция</span>
                             <strong>${raceLength.toLocaleString('ru-RU')} м</strong>
                         </div>
                         <div class="track-stat">
@@ -3056,6 +3058,7 @@ async function resetProgressRequest() {
 window.resetProgressRequest = resetProgressRequest;
 
 window.resetRace = function () {
+    stopRace();
     showScreen('garage');
 };
 
@@ -3169,15 +3172,6 @@ async function bootstrap() {
     updateUpgradeUI();
     showScreen('garage');
 
-    window.addEventListener('visibilitychange', () => {
-        if (document.hidden) {
-            void forceSavePlayerState();
-        }
-    });
-
-    window.addEventListener('pagehide', () => {
-        void forceSavePlayerState();
-    });
 }
 
 document.addEventListener('DOMContentLoaded', () => {

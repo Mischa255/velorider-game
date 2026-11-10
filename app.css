@@ -1,0 +1,14 @@
+@import "tailwindcss";
+@import "./style.css";
+@import "./garage.css";
+@import "./tracks-overrides.css";
+@import "./mobile-fix.css";
+
+@source "./index.html";
+@source "./main.js";
+@source "./race.js";
+@source "./db.js";
+@source "./state.js";
+@source "./audio.js";
+@source "./bot-ai.js";
+@source "./utils.js";

@@ -10,6 +10,7 @@ const SUPABASE_URL = 'https://qtyokehvvcoswkhdzscz.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_LcslQx_fXGEeRkR96jooDQ_tnf2V7rA';
 
 let supabaseClient = null;
+let supabaseSaveQueue = Promise.resolve();
 if (window.supabase) {
     supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
@@ -100,6 +101,15 @@ async function saveToSupabase(playerData) {
         console.error('Сбой Supabase:', e.message);
         return false;
     }
+}
+
+function enqueueSupabaseSave(playerData) {
+    const snapshot = JSON.parse(JSON.stringify(playerData));
+    const operation = supabaseSaveQueue
+        .catch(() => undefined)
+        .then(() => saveToSupabase(snapshot));
+    supabaseSaveQueue = operation.then(() => undefined, () => undefined);
+    return operation;
 }
 // ==========================
 
@@ -240,6 +250,16 @@ function cloudStorageSet(key, value) {
             resolve(false);
         }
     });
+}
+
+function withTimeout(promise, timeoutMs = 1500) {
+    let timeoutId;
+    return Promise.race([
+        Promise.resolve(promise).catch(() => false),
+        new Promise(resolve => {
+            timeoutId = setTimeout(() => resolve(false), timeoutMs);
+        })
+    ]).finally(() => clearTimeout(timeoutId));
 }
 
 function cloudStorageDelete(key) {
@@ -521,17 +541,15 @@ export async function savePlayerState() {
     const data = getPlayerSaveData();
     const payload = JSON.stringify(data);
 
-    writeLocalSave(data);
-    cloudStorageSet(SAVE_KEY, payload);
+    const localSaved = writeLocalSave(data);
+    const cloudSavedPromise = withTimeout(cloudStorageSet(SAVE_KEY, payload));
+    const [cloudSaved, dbSaved] = await Promise.all([
+        cloudSavedPromise,
+        enqueueSupabaseSave(JSON.parse(payload))
+    ]);
+    if (!dbSaved) autosaveDirty = true;
 
-    // Фоновое сохранение без блокировки интерфейса
-    saveToSupabase(data).then(dbSaved => {
-        if (!dbSaved) {
-            autosaveDirty = true;
-        }
-    });
-
-    return { localSaved: true, cloudSaved: true, dbSaved: true };
+    return { localSaved, cloudSaved, dbSaved };
 }
 
 export async function forceSavePlayerState() {
@@ -616,19 +634,27 @@ export function resetPlayerState() {
 export async function clearSavedProgress() {
     const defaults = createDefaultPlayer();
     const defaultSave = toPlayerSaveData(defaults);
-
-    const dbSaved = await saveToSupabase(defaultSave);
-    if (!dbSaved) {
-        throw new Error('Supabase не подтвердил сброс прогресса.');
-    }
-
     suppressAutoSave = true;
+    resetAutosaveTimer();
+    autosaveDirty = false;
     try {
+        const dbSaved = await enqueueSupabaseSave(defaultSave);
+        if (!dbSaved) {
+            throw new Error('Supabase не подтвердил сброс прогресса.');
+        }
+
         player = wrapReactiveState(defaults);
         writeLocalSave(defaultSave);
-        await cloudStorageSet(SAVE_KEY, JSON.stringify(defaultSave));
+        await withTimeout(cloudStorageSet(SAVE_KEY, JSON.stringify(defaultSave)));
         autosaveDirty = false;
         resetAutosaveTimer();
+    } catch (error) {
+        autosaveDirty = true;
+        resetAutosaveTimer();
+        autosaveTimer = setTimeout(() => {
+            void flushAutosave();
+        }, AUTOSAVE_RETRY_DELAY_MS);
+        throw error;
     } finally {
         suppressAutoSave = false;
     }
