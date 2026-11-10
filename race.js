@@ -1,7 +1,7 @@
-import { player } from './state.js?v=123';
-import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=123';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=123';
-import { playCoinSound, playBoostSound } from './audio.js?v=123';
+import { player } from './state.js?v=124';
+import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=124';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=124';
+import { playCoinSound, playBoostSound } from './audio.js?v=124';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -415,7 +415,7 @@ function getTimedObstaclePulse(obstacle) {
 }
 
 function isTimedObstacleActive(obstacle) {
-    const threshold = obstacle.type === 'crank_rack' ? 0.68 : 0.42;
+    const threshold = obstacle.type === 'crank_rack' ? 0.28 : 0.05;
     return getTimedObstaclePulse(obstacle) > threshold;
 }
 
@@ -1656,15 +1656,16 @@ const BOT_GAP_JUMP_TYPES = new Set([
 ]);
 const BOT_GAP_APPROACH_DISTANCE = 560;
 const BOT_OPTIONAL_JUMP_CHANCES = {
-    log: 0.58,
-    barrier: 0.62,
-    fallen_branch: 0.68,
-    wooden_gate: 0.62,
-    pulse_gate: 0.72,
-    rolling_boulder: 0.38,
-    smith_hammer: 0.72,
-    mill_paddle: 0.66,
-    crank_rack: 0.66
+    log: 0.86,
+    barrier: 0.88,
+    cone: 0.74,
+    fallen_branch: 0.9,
+    wooden_gate: 0.88,
+    pulse_gate: 0.95,
+    rolling_boulder: 0.55,
+    smith_hammer: 0.95,
+    mill_paddle: 0.9,
+    crank_rack: 0.9
 };
 
 function shouldBotJumpObstacle(bike, obstacle) {
@@ -1688,7 +1689,7 @@ function shouldBotJumpObstacle(bike, obstacle) {
     // каждый кадр: кто-то перепрыгнет, а кто-то получит удар и замедлится.
     const roll = ((Math.floor(obstacle.x * 17) + bike.botIndex * 31) % 100) / 100;
     const skillBonus = bike.botIndex === 2 ? 0.12 : 0;
-    return roll < Math.min(0.86, chance + skillBonus);
+    return roll < Math.min(0.96, chance + skillBonus);
 }
 
 function hasUpcomingBotGap(bike, distanceLimit = Infinity) {
@@ -2109,9 +2110,9 @@ function updatePlayerCollisions() {
                 } else if (obstacle.type === 'wind_fan') {
                     applyPlayerImpact(obstacle, Math.max(0.6, playerBike.velocityX * 0.42));
                 } else if (obstacle.type === 'forge_slag') {
-                    applyPlayerImpact(obstacle, Math.max(0.65, playerBike.velocityX * 0.68));
+                    applyPlayerImpact(obstacle, Math.max(0.55, playerBike.velocityX * 0.52));
                 } else if (obstacle.type === 'ford_stones') {
-                    applyPlayerImpact(obstacle, Math.max(0.8, playerBike.velocityX * 0.84));
+                    applyPlayerImpact(obstacle, Math.max(0.65, playerBike.velocityX * 0.62));
                 } else {
                     applyPlayerImpact(obstacle, obstacle.type === 'water_splash' ? 0.8 : 1.05);
                 }
@@ -2120,8 +2121,8 @@ function updatePlayerCollisions() {
         }
         if (obstacle.type === 'cobblestones' || obstacle.type === 'plank_bridge') {
             if (playerBike.grounded) {
-                const speedFactor = obstacle.type === 'cobblestones' ? 0.78 : 0.9;
-                applyPlayerImpact(obstacle, Math.max(0.7, playerBike.velocityX * speedFactor));
+                const speedFactor = obstacle.type === 'cobblestones' ? 0.64 : 0.76;
+                applyPlayerImpact(obstacle, Math.max(0.6, playerBike.velocityX * speedFactor));
             }
             continue;
         }
@@ -2277,14 +2278,14 @@ function updateBotCollisions(bike) {
         }
         if (obstacle.type === 'mud' || obstacle.type === 'water_splash' || obstacle.type === 'ice_patch' || obstacle.type === 'wind_fan' || obstacle.type === 'forge_slag' || obstacle.type === 'ford_stones') {
             if (bike.grounded) {
-                const factor = obstacle.type === 'wind_fan' ? 0.28 : obstacle.type === 'ice_patch' ? 0.52 : obstacle.type === 'water_splash' ? 0.42 : obstacle.type === 'forge_slag' ? 0.65 : obstacle.type === 'ford_stones' ? 0.82 : 0.58;
+                const factor = obstacle.type === 'wind_fan' ? 0.28 : obstacle.type === 'ice_patch' ? 0.52 : obstacle.type === 'water_splash' ? 0.42 : obstacle.type === 'forge_slag' ? 0.48 : obstacle.type === 'ford_stones' ? 0.62 : 0.58;
                 applyBotImpact(bike, obstacle, factor, obstacle.type === 'ice_patch' ? 24 : 48);
             }
             continue;
         }
         if (obstacle.type === 'cobblestones' || obstacle.type === 'plank_bridge') {
             if (bike.grounded) {
-                const factor = obstacle.type === 'cobblestones' ? 0.72 : 0.9;
+                const factor = obstacle.type === 'cobblestones' ? 0.6 : 0.74;
                 applyBotImpact(bike, obstacle, factor, 36);
             }
             continue;
