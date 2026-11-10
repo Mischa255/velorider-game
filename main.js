@@ -1308,8 +1308,10 @@ function updateGarageUI() {
         const isDraisineFrame = Boolean(frameVisuals.specialHistoryFrame);
         const isMacmillanFrame = Boolean(frameVisuals.specialMacmillanFrame);
         const baseWheelSize = Number(wheelVisuals.radius) || 9.5;
-        const rearWheelSize = Number(wheelVisuals.rearRadius) || (isMacmillanFrame ? baseWheelSize * 1.34 : baseWheelSize);
-        const frontWheelSize = Number(wheelVisuals.frontRadius) || (isMacmillanFrame ? baseWheelSize * 0.78 : baseWheelSize);
+        // Колёса всегда берутся из установленной детали. Историческая рама
+        // не должна сама подменять их разный размер.
+        const rearWheelSize = Number(wheelVisuals.rearRadius) || baseWheelSize;
+        const frontWheelSize = Number(wheelVisuals.frontRadius) || baseWheelSize;
         const largestWheelSize = Math.max(rearWheelSize, frontWheelSize, 1);
         const rearWheelScale = clamp(rearWheelSize / largestWheelSize, 0.65, 1.15);
         const frontWheelScale = clamp(frontWheelSize / largestWheelSize, 0.65, 1.15);
@@ -1392,8 +1394,10 @@ function updateGarageUI() {
             if (paths[3]) paths[3].setAttribute('display', isFullSuspension ? 'none' : 'inline');
             const macmillanDrive = bikeSvg.querySelector('#garage-bike-macmillan-drive');
             if (macmillanDrive) {
-                macmillanDrive.setAttribute('display', isMacmillanFrame && pedals?.id === 'pd6' ? 'inline' : 'none');
-                macmillanDrive.setAttribute('stroke', pedals?.visuals?.color || '#8b5a2b');
+                // Рычажный привод — часть особой рамы. Сами педали и их бонус
+                // по-прежнему берутся только из отдельно выбранной детали.
+                macmillanDrive.setAttribute('display', isMacmillanFrame ? 'inline' : 'none');
+                macmillanDrive.setAttribute('stroke', frameColor);
             }
 
             const rearTriangle = bikeSvg.querySelector('#garage-bike-rear-triangle');

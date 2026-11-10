@@ -349,7 +349,9 @@ function getGroundY(worldX, laneOffset = 0) {
 function getBikeObstacleHalfWidth(bike) {
     const visuals = bike.visuals || {};
     const draisine = Boolean(visuals.draisine);
-    const macmillan = Boolean(visuals.macmillan);
+    // Полный исторический велосипед нужен только сопернику главы II.
+    // У игрока рама Макмиллана остаётся частью обычной индивидуальной сборки.
+    const macmillan = Boolean(visuals.macmillan && bike.isBot);
     const renderScale = draisine || macmillan ? 1 : 1.16;
     const rearRadius = macmillan
         ? 19
@@ -589,7 +591,7 @@ function getBikeVisualProfile() {
         frameWidth: frameTubeSize ? clamp(frameTubeSize / 4, 2.5, 4) : (frame?.rarity === 'legendary' ? 3.5 : frame?.rarity === 'rare' ? 3 : 2.5),
         frameType: frame?.visuals?.type || 'normal',
         draisine: Boolean(frame?.visuals?.specialHistoryFrame),
-        macmillan: Boolean(frame?.visuals?.specialMacmillanFrame),
+        macmillanFrame: Boolean(frame?.visuals?.specialMacmillanFrame),
         macmillanTreadles: Boolean(pedals?.visuals?.macmillanTreadles),
         macmillanTreadleColor: pedals?.visuals?.color || '#8b5a2b',
         fullSuspension,
@@ -619,8 +621,8 @@ function getBikeVisualProfile() {
         rimColor: wheel?.visuals?.rimColor || (wheel?.rarity === 'legendary' ? '#fbbf24' : wheel?.rarity === 'rare' ? '#38bdf8' : '#64748b'),
         hubColor: wheel?.visuals?.hubColor || '#e2e8f0',
         wheelRadius: wheel?.visuals?.radius || (9.5 + Math.min(1.2, Math.max(0, Number(wheel?.speed) || 0) * 0.08)),
-        rearWheelRadius: wheel?.visuals?.rearRadius || (frame?.visuals?.specialMacmillanFrame ? 14 : 0),
-        frontWheelRadius: wheel?.visuals?.frontRadius || (frame?.visuals?.specialMacmillanFrame ? 8 : 0),
+        rearWheelRadius: wheel?.visuals?.rearRadius || 0,
+        frontWheelRadius: wheel?.visuals?.frontRadius || 0,
         tireWidth: tire?.visuals?.width || (tire?.rarity === 'legendary' ? 4.2 : tire?.rarity === 'rare' ? 3.7 : 3.2),
         
         // --- МОДИФИКАТОРЫ ---
@@ -4071,7 +4073,7 @@ function drawBike(bike, label, color) {
         drawDraisineBike(bike, label);
         return;
     }
-    if (bike.visuals?.macmillan) {
+    if (bike.visuals?.macmillan && bike.isBot) {
         drawDraisineBike(bike, label, 'macmillan');
         return;
     }
@@ -4085,6 +4087,7 @@ function drawBike(bike, label, color) {
     const groundY = getGroundY(bike.x, 0);
     const y = groundY - bike.jumpHeight - bike.rampLift;
     const visuals = bike.visuals || {};
+    const macmillanFrame = Boolean(visuals.macmillanFrame);
     // В каталоге радиус задан в игровых единицах; матчевую модель немного
     // увеличиваем, чтобы колёса и рама читались, а не слипались в тонкие линии.
     const rearRadius = clamp((Number(visuals.rearWheelRadius) || Number(visuals.wheelRadius) || 9.5) * 1.24, 11.5, 19.5);
@@ -4267,9 +4270,60 @@ function drawBike(bike, label, color) {
         ctx.restore();
     };
 
+    const drawMacmillanFrame = () => {
+        const upperRear = { x: rearWheelX + 2, y: wheelY - 43 };
+        const upperHead = { x: headX + 2, y: wheelY - 31 };
+        const rearJoint = { x: bottomX - 12, y: wheelY - 10 };
+        const lowerJoint = { x: bottomX + 12, y: bottomY + 2 };
+        const strokeWoodPath = drawPath => {
+            ctx.save();
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = 'rgba(31, 23, 16, .98)';
+            ctx.lineWidth = frameWidth + 2.2;
+            ctx.beginPath();
+            drawPath();
+            ctx.stroke();
+            ctx.strokeStyle = frameColor;
+            ctx.lineWidth = frameWidth;
+            ctx.beginPath();
+            drawPath();
+            ctx.stroke();
+            ctx.globalAlpha *= 0.42;
+            ctx.strokeStyle = '#f2d1a0';
+            ctx.lineWidth = Math.max(0.7, frameWidth * 0.2);
+            ctx.beginPath();
+            drawPath();
+            ctx.stroke();
+            ctx.restore();
+        };
+
+        // Сохраняем узнаваемую длинную деревянную геометрию именно рамы,
+        // используя оси колёс и размеры остальных деталей из текущей сборки.
+        strokeWoodPath(() => {
+            ctx.moveTo(rearWheelX, rearWheelY);
+            ctx.quadraticCurveTo(upperRear.x, upperRear.y, upperHead.x, upperHead.y);
+            ctx.quadraticCurveTo(headX + 16, wheelY - 26, frontWheelX, frontWheelY);
+        });
+        strokeWoodPath(() => {
+            ctx.moveTo(rearWheelX, rearWheelY);
+            ctx.lineTo(rearJoint.x, rearJoint.y);
+            ctx.lineTo(seatX, seatBaseY);
+            ctx.moveTo(rearJoint.x, rearJoint.y);
+            ctx.lineTo(lowerJoint.x, lowerJoint.y);
+            ctx.lineTo(frontWheelX, frontWheelY);
+            ctx.moveTo(upperRear.x, upperRear.y);
+            ctx.lineTo(seatX, seatBaseY);
+            ctx.moveTo(upperHead.x, upperHead.y);
+            ctx.lineTo(bottomX + 7, bottomY);
+        });
+    };
+
     if (draisineFrame) {
         // Наградная рама использует тот же контур, что и Laufmaschine Карла.
         drawDraisineFrame(framePoints, frameColor);
+    } else if (macmillanFrame) {
+        drawMacmillanFrame();
     } else if (visuals.fullSuspension) {
         drawTube(bottomX, bottomY, seatX, wheelY - 27);
         drawTube(seatX, wheelY - 27, headX, wheelY - 19);
@@ -4369,15 +4423,13 @@ function drawBike(bike, label, color) {
     ctx.arc(bottomX, bottomY, 4.5, 0, Math.PI * 2);
     ctx.stroke();
 
-    const pedalRadius = 7;
-    const leftPedal = {
-        x: bottomX + Math.cos(pedalAngle) * pedalRadius,
-        y: bottomY + Math.sin(pedalAngle) * pedalRadius
-    };
-    const rightPedal = {
-        x: bottomX + Math.cos(pedalAngle + Math.PI) * pedalRadius,
-        y: bottomY + Math.sin(pedalAngle + Math.PI) * pedalRadius
-    };
+    const pedalRadius = macmillanFrame ? 10 : 7;
+    const leftPedal = macmillanFrame
+        ? { x: bottomX + 2 + Math.cos(pedalAngle) * pedalRadius, y: bottomY - 4 + Math.sin(pedalAngle) * 5 }
+        : { x: bottomX + Math.cos(pedalAngle) * pedalRadius, y: bottomY + Math.sin(pedalAngle) * pedalRadius };
+    const rightPedal = macmillanFrame
+        ? { x: bottomX + 2 + Math.cos(pedalAngle + Math.PI) * pedalRadius, y: bottomY - 4 + Math.sin(pedalAngle + Math.PI) * 5 }
+        : { x: bottomX + Math.cos(pedalAngle + Math.PI) * pedalRadius, y: bottomY + Math.sin(pedalAngle + Math.PI) * pedalRadius };
     ctx.strokeStyle = visuals.crankColor || '#e2e8f0';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -4393,6 +4445,18 @@ function drawBike(bike, label, color) {
     ctx.moveTo(bottomX, bottomY);
     ctx.lineTo(rightPedal.x, rightPedal.y);
     ctx.stroke();
+    if (macmillanFrame) {
+        // Рычаги двигаются вместе с педалированием, но не меняют установленную
+        // модель райдера и не подменяют выбранные компоненты велосипеда.
+        ctx.strokeStyle = frameColor;
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.moveTo(rearWheelX + 3, rearWheelY + 1);
+        ctx.lineTo(leftPedal.x, leftPedal.y);
+        ctx.moveTo(rearWheelX + 3, rearWheelY + 1);
+        ctx.lineTo(rightPedal.x, rightPedal.y);
+        ctx.stroke();
+    }
     ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.moveTo(leftPedal.x - 3, leftPedal.y);
@@ -4527,6 +4591,24 @@ function drawBike(bike, label, color) {
         ctx.fillStyle = '#211a14';
         ctx.fillRect(nearFootX - 3, footY - 1, 7, 2.5);
         ctx.fillRect(farFootX - 3, footY - 1, 7, 2.5);
+    } else if (macmillanFrame) {
+        const phaseSin = Math.sin(pedalAngle);
+        const phaseCos = Math.cos(pedalAngle);
+        const nearKnee = { x: hip.x + 4 + phaseSin * 2.5, y: wheelY - 23 + phaseCos * 3.4 };
+        const farKnee = { x: hip.x - 4 - phaseSin * 2.5, y: wheelY - 24 - phaseCos * 3.0 };
+        ctx.strokeStyle = pantsColor;
+        ctx.lineWidth = 3.8;
+        ctx.beginPath();
+        ctx.moveTo(hip.x, hip.y);
+        ctx.lineTo(farKnee.x, farKnee.y);
+        ctx.lineTo(rightPedal.x, rightPedal.y);
+        ctx.moveTo(hip.x, hip.y);
+        ctx.lineTo(nearKnee.x, nearKnee.y);
+        ctx.lineTo(leftPedal.x, leftPedal.y);
+        ctx.stroke();
+        ctx.fillStyle = '#211a14';
+        ctx.fillRect(leftPedal.x - 3, leftPedal.y - 1, 7, 2.5);
+        ctx.fillRect(rightPedal.x - 3, rightPedal.y - 1, 7, 2.5);
     } else {
         ctx.strokeStyle = pantsColor;
         ctx.lineWidth = 3.4;
