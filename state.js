@@ -11,22 +11,21 @@ const SUPABASE_ANON_KEY = 'sb_publishable_LcslQx_fXGEeRkR96jooDQ_tnf2V7rA';
 
 let supabaseClient = null;
 let supabaseSaveQueue = Promise.resolve();
+let playerSaveNeedsMigration = false;
 if (window.supabase) {
     supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
 
-// Основной ключ — Telegram username: он совпадает с player_identifier
-// существующих записей в Supabase и позволяет обновлять их на месте.
 function getPlayerKey() {
     const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
 
-    if (tgUser && tgUser.username) {
-        return tgUser.username.trim().toLowerCase();
+    // Telegram ID не меняется при смене или удалении username.
+    if (tgUser && tgUser.id) {
+        return `tgid:${tgUser.id}`;
     }
 
-    // Если у аккаунта нет username, используем неизменяемый Telegram ID.
-    if (tgUser && tgUser.id) {
-        return `tg_${tgUser.id}`;
+    if (tgUser && tgUser.username) {
+        return tgUser.username.trim().toLowerCase();
     }
 
     // 3. Запасной вариант для обычного браузера (вне Telegram)
@@ -38,17 +37,36 @@ function getPlayerKey() {
     return devId;
 }
 
+function getLegacyTelegramPlayerKeys() {
+    const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+    if (!tgUser) return [];
+
+    const legacyKeys = [];
+    if (tgUser.username) legacyKeys.push(tgUser.username.trim().toLowerCase());
+    if (tgUser.id) legacyKeys.push(`tg_${tgUser.id}`);
+    return [...new Set(legacyKeys)].filter(key => key && key !== getPlayerKey());
+}
+
 async function loadFromSupabase() {
+    playerSaveNeedsMigration = false;
     if (!supabaseClient) return null;
     const identifier = getPlayerKey();
+    const identifiersToTry = [identifier, ...getLegacyTelegramPlayerKeys()];
+
     try {
-        const { data, error } = await supabaseClient
-            .from('player_saves')
-            .select('save_data')
-            .eq('player_identifier', identifier)
-            .maybeSingle();
-        if (error) throw error;
-        return data ? data.save_data : null;
+        for (const candidate of identifiersToTry) {
+            const { data, error } = await supabaseClient
+                .from('player_saves')
+                .select('save_data')
+                .eq('player_identifier', candidate)
+                .maybeSingle();
+            if (error) throw error;
+            if (!data) continue;
+
+            playerSaveNeedsMigration = candidate !== identifier;
+            return data.save_data;
+        }
+        return null;
     } catch (e) {
         console.warn('Ошибка загрузки из Supabase:', e);
         return null;
@@ -603,9 +621,9 @@ export async function loadPlayerState() {
     startAutosaveHeartbeat();
 
     // Принудительное создание пустого профиля для новых игроков
-    if (isNewPlayer) {
+    if (isNewPlayer || playerSaveNeedsMigration) {
         setTimeout(() => {
-            savePlayerState();
+            void forceSavePlayerState();
         }, 1000);
     }
 
