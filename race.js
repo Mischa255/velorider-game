@@ -1,7 +1,7 @@
-import { player } from './state.js?v=112';
-import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=112';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=112';
-import { playCoinSound, playBoostSound } from './audio.js?v=112';
+import { player } from './state.js?v=116';
+import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js?v=116';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=116';
+import { playCoinSound, playBoostSound } from './audio.js?v=116';
 
 // =========================================
 // VELOCITY RACE ENGINE
@@ -382,10 +382,13 @@ function createObstacles() {
         1,
         Math.floor(configuredCount * (3 + Math.max(0, currentTrackLevel - 1) * 0.07))
     );
-    // Обычные ямы гарантированы на каждой сюжетной трассе и растут по уровню:
-    // 3 на первой, затем +2 на каждой следующей. Генерация не зависит от удачи.
+    // На сюжетных трассах ямы размещаются гарантированно. Глава II использует
+    // плотность ям обычных трасс 2–3 уровня, остальные истории — мягкую прогрессию.
+    const historyDifficultyLevel = currentTrack.historyChapter === 2
+        ? (Number(currentTrack.historyStage) <= 2 ? 2 : 3)
+        : currentTrackLevel;
     const pitCount = currentTrack.isHistory
-        ? (typePool.includes('pit') ? Math.min(obstacleCount, Math.ceil(currentTrackLevel / 2)) : 0)
+        ? (typePool.includes('pit') ? Math.min(obstacleCount, currentTrack.historyChapter === 2 ? historyDifficultyLevel * 2 + 1 : Math.ceil(currentTrackLevel / 2)) : 0)
         : Math.min(obstacleCount, currentTrackLevel * 2 + 1);
     const pitIndices = new Set();
     for (let pitIndex = 0; pitIndex < pitCount; pitIndex++) {
@@ -397,6 +400,20 @@ function createObstacles() {
         while (pitIndices.has(index) && index > 0) index--;
         pitIndices.add(index);
     }
+
+    // Исторические этапы главы II всегда получают свои ключевые элементы
+    // маршрута: мостки, рампы и тематические участки не зависят от удачи.
+    const signatureTypes = currentTrack.historyChapter === 2 && Array.isArray(currentTrack.signatureObstacleTypes)
+        ? currentTrack.signatureObstacleTypes.filter(type => typePool.includes(type) && type !== 'pit')
+        : [];
+    const signatureAssignments = new Map();
+    signatureTypes.forEach((type, signatureIndex) => {
+        const target = Math.round(((signatureIndex + 1) / (signatureTypes.length + 1)) * Math.max(0, obstacleCount - 1));
+        let index = target;
+        while ((pitIndices.has(index) || signatureAssignments.has(index)) && index < obstacleCount - 1) index++;
+        while ((pitIndices.has(index) || signatureAssignments.has(index)) && index > 0) index--;
+        if (!pitIndices.has(index) && !signatureAssignments.has(index)) signatureAssignments.set(index, type);
+    });
 
     const nonPitTypePool = typePool.filter(type => type !== 'pit');
     const randomTypePool = nonPitTypePool.length
@@ -412,7 +429,7 @@ function createObstacles() {
     let previousRight = firstObstacleX - 120;
 
     for (let index = 0; index < obstacleCount; index++) {
-        const type = pitIndices.has(index) ? 'pit' : randomItem(randomTypePool);
+        const type = pitIndices.has(index) ? 'pit' : signatureAssignments.get(index) || randomItem(randomTypePool);
         const definition = OBSTACLE_TYPES[type];
         if (!definition) continue;
 
@@ -468,14 +485,18 @@ function createObstacles() {
 // =========================================
 
 function getBotAbilities(botIndex) {
+    const botLevel = currentTrack?.isHistory && Number(currentTrack.historyChapter) === 2
+        ? 3
+        : currentTrackLevel;
     return {
         // Оба бота умеют использовать нитро с 3-й трассы!
-        nitroUnlocked: currentTrackLevel >= 3,
+        nitroUnlocked: botLevel >= 3,
 
         // Суперпрыжок доступен любому боту с равной вероятностью с 5-й трассы
-        superJumpUnlocked: currentTrackLevel >= 5 && Math.random() < 0.6,
+        superJumpUnlocked: botLevel >= 5 && Math.random() < 0.6,
 
-        shieldCharges: currentTrackLevel >= 9 ? 1 : 0
+        shieldCharges: botLevel >= 9 ? 1 : 0,
+        macmillanBurst: currentTrack?.isHistory && Number(currentTrack.historyChapter) === 2 && Number(currentTrack.historyStage) === 5 && botIndex === 1
     };
 }
 
@@ -507,6 +528,7 @@ function getPlayerPartAbilities() {
         fallResistance: abilityIds.has('fallResistance'),
         mudGrip: abilityIds.has('mudGrip'),
         impactBrake: abilityIds.has('impactBrake'),
+        macmillanBurst: abilityIds.has('macmillanBurst'),
         shieldCharges: abilityIds.has('jekyllShield') ? 1 : 0
     };
 }
@@ -527,6 +549,7 @@ function getBikeVisualProfile() {
     const saddle = getEquippedPart('saddles');
     const handlebar = getEquippedPart('handlebars');
     const stem = getEquippedPart('stems');
+    const pedals = getEquippedPart('pedals');
     const electronics = getEquippedPart('electronics'); // Добавили электронику
     const fullSuspension = frame?.visuals?.type === 'dh';
     const stability = Math.min(100,
@@ -548,6 +571,9 @@ function getBikeVisualProfile() {
         frameWidth: frameTubeSize ? clamp(frameTubeSize / 4, 2.5, 4) : (frame?.rarity === 'legendary' ? 3.5 : frame?.rarity === 'rare' ? 3 : 2.5),
         frameType: frame?.visuals?.type || 'normal',
         draisine: Boolean(frame?.visuals?.specialHistoryFrame),
+        macmillan: Boolean(frame?.visuals?.specialMacmillanFrame),
+        macmillanTreadles: Boolean(pedals?.visuals?.macmillanTreadles),
+        macmillanTreadleColor: pedals?.visuals?.color || '#8b5a2b',
         fullSuspension,
         rearSuspension: Boolean(fullSuspension && shock),
         rearShockColor: shock?.visuals?.color || getRarityAccent(shock?.rarity),
@@ -575,8 +601,8 @@ function getBikeVisualProfile() {
         rimColor: wheel?.visuals?.rimColor || (wheel?.rarity === 'legendary' ? '#fbbf24' : wheel?.rarity === 'rare' ? '#38bdf8' : '#64748b'),
         hubColor: wheel?.visuals?.hubColor || '#e2e8f0',
         wheelRadius: wheel?.visuals?.radius || (9.5 + Math.min(1.2, Math.max(0, Number(wheel?.speed) || 0) * 0.08)),
-        rearWheelRadius: wheel?.visuals?.rearRadius || 0,
-        frontWheelRadius: wheel?.visuals?.frontRadius || 0,
+        rearWheelRadius: wheel?.visuals?.rearRadius || (frame?.visuals?.specialMacmillanFrame ? 14 : 0),
+        frontWheelRadius: wheel?.visuals?.frontRadius || (frame?.visuals?.specialMacmillanFrame ? 8 : 0),
         tireWidth: tire?.visuals?.width || (tire?.rarity === 'legendary' ? 4.2 : tire?.rarity === 'rare' ? 3.7 : 3.2),
         
         // --- МОДИФИКАТОРЫ ---
@@ -625,6 +651,7 @@ function createBike(isBot = false, botIndex = 1) {
     const difficulty = isBot ? getBotDifficultyStats(botIndex) : null;
     const botColor = botIndex === 1 ? '#ef4444' : '#a855f7';
     const visuals = isBot ? getBotVisualProfile(botIndex) : getBikeVisualProfile();
+    const abilities = isBot ? getBotAbilities(botIndex) : getPlayerPartAbilities();
     // Оставляем место за задним колесом, чтобы стартовый велосипед не обрезался краем Canvas.
     const startX = 50;
 
@@ -667,7 +694,10 @@ function createBike(isBot = false, botIndex = 1) {
         isBot,
         botIndex: isBot ? botIndex : 0,
         color: isBot ? botColor : (visuals?.frameColor || getRarityAccent()),
-        abilities: isBot ? getBotAbilities(botIndex) : getPlayerPartAbilities(),
+        abilities,
+        macmillanBurstCharges: abilities.macmillanBurst ? 3 : 0,
+        macmillanBurstRequested: false,
+        macmillanBurstTimer: 0,
 
         botDifficultyTrackId: difficulty?.trackId || null,
         botBaseMaxSpeed: difficulty?.maxSpeed || 0,
@@ -676,8 +706,7 @@ function createBike(isBot = false, botIndex = 1) {
 
         nitroTimer: 0,
         springBoostTimer: 0,
-        nitroCooldown: 120 + Math.floor(Math.random() * 100),
-        lastGasTap: 0,
+        nitroCooldown: isBot ? 120 + Math.floor(Math.random() * 100) : 0,
         landingBoostCooldown: 0,
         shieldActiveTimer: 0,
         finishFrame: null,
@@ -725,6 +754,7 @@ function startBikeFlip(bike, direction = 1, message = 'ПЕРЕВОРОТ! Ни�
         return false;
     }
     bike.flippedTimer = 74;
+    bike.macmillanBurstRequested = false;
     bike.flipDirection = direction < 0 ? -1 : 1;
     const instability = 1 - clamp(Number(bike.stability) || 0, 0, 100) / 100;
     bike.pitchVelocity = clamp(
@@ -747,6 +777,7 @@ function queuePlayerCrash(bike, reason) {
     if (hasFallResistance(bike)) return false;
 
     bike.crashPending = true;
+    bike.macmillanBurstRequested = false;
     bike.crashReason = reason;
     bike.crashFrames = 42;
     return true;
@@ -1269,6 +1300,48 @@ function updateReverseButtonLabel() {
     if (label.textContent.trim() !== nextLabel) label.textContent = nextLabel;
 }
 
+function syncAbilityButtons() {
+    const controls = document.getElementById('race-ability-controls');
+    const motorButton = document.getElementById('btn-motor-boost');
+    const pedalButton = document.getElementById('btn-pedal-burst');
+    if (!controls || !motorButton || !pedalButton) return;
+
+    const hasMotor = Boolean(playerBike?.abilities?.nitroUnlocked);
+    const hasPedalBurst = Boolean(playerBike?.abilities?.macmillanBurst);
+    const charges = Math.max(0, Number(playerBike?.macmillanBurstCharges) || 0);
+    const cooldown = Math.max(0, Number(playerBike?.nitroCooldown) || 0);
+    const motorReady = hasMotor && cooldown <= 0;
+
+    const hideControls = !hasMotor && !hasPedalBurst;
+    if (controls.hidden !== hideControls) controls.hidden = hideControls;
+    if (motorButton.hidden !== !hasMotor) motorButton.hidden = !hasMotor;
+    if (motorButton.disabled !== !motorReady) motorButton.disabled = !motorReady;
+    if (motorButton.getAttribute('aria-disabled') !== String(!motorReady)) {
+        motorButton.setAttribute('aria-disabled', String(!motorReady));
+    }
+    motorButton.classList.toggle('is-active', Number(playerBike?.nitroTimer) > 0);
+    const cooldownSeconds = Math.ceil(cooldown / 60);
+    const motorTitle = motorReady
+        ? 'Импульсный разгон готов. Клавиша G.'
+        : `Импульсный разгон перезаряжается: ${cooldownSeconds} сек.`;
+    if (motorButton.title !== motorTitle) motorButton.title = motorTitle;
+
+    if (pedalButton.hidden !== !hasPedalBurst) pedalButton.hidden = !hasPedalBurst;
+    const pedalDisabled = !hasPedalBurst || charges <= 0;
+    if (pedalButton.disabled !== pedalDisabled) pedalButton.disabled = pedalDisabled;
+    if (pedalButton.getAttribute('aria-disabled') !== String(pedalDisabled)) {
+        pedalButton.setAttribute('aria-disabled', String(pedalDisabled));
+    }
+    const pedalAriaLabel = `Рычажный рывок, зарядов: ${charges}. Клавиша E`;
+    if (pedalButton.getAttribute('aria-label') !== pedalAriaLabel) {
+        pedalButton.setAttribute('aria-label', pedalAriaLabel);
+    }
+    const pedalTitle = `Рычажный рывок: нажми на земле. Клавиша E. Зарядов: ${charges}`;
+    if (pedalButton.title !== pedalTitle) pedalButton.title = pedalTitle;
+    const pedalLabel = `E · ${charges}`;
+    if (pedalButton.textContent !== pedalLabel) pedalButton.textContent = pedalLabel;
+}
+
 // =========================================
 // ФИЗИКА ИГРОКА
 // =========================================
@@ -1280,6 +1353,7 @@ function updatePlayerPhysics() {
     }
 
     if (playerBike.shieldActiveTimer > 0) playerBike.shieldActiveTimer--;
+    if (playerBike.macmillanBurstTimer > 0) playerBike.macmillanBurstTimer--;
 
     const speed = Math.max(
         0,
@@ -1308,6 +1382,7 @@ function updatePlayerPhysics() {
 
     if (playerBike.nitroTimer > 0) playerBike.nitroTimer--;
     if (playerBike.nitroCooldown > 0) playerBike.nitroCooldown--;
+    syncAbilityButtons();
     const nitroMultiplier = playerBike.nitroTimer > 0 ? 1.32 : 1;
 
     const acceleration =
@@ -1446,6 +1521,27 @@ function updatePlayerPhysics() {
             allowedSpeed,
             playerBike.impactSpeedLimit
         );
+    }
+
+    if (playerBike.macmillanBurstRequested) {
+        // Рывок доводит скорость до предела, разрешённого текущим рельефом,
+        // но не отменяет штрафы за нехватку мощности или столкновение.
+        if (
+            playerBike.grounded && !brakeApplied && !input.reversing &&
+            playerBike.impactSlowTimer <= 0 && playerBike.velocityX < allowedSpeed - 0.05
+        ) {
+            playerBike.velocityX = Math.max(0, allowedSpeed);
+            playerBike.macmillanBurstCharges--;
+            playerBike.macmillanBurstTimer = 32;
+            syncAbilityButtons();
+            addFloatingText(
+                playerBike.x,
+                getGroundY(playerBike.x, 0) - 60,
+                `РЫЧАЖНЫЙ РЫВОК · ${playerBike.macmillanBurstCharges}`,
+                '#c084fc'
+            );
+        }
+        playerBike.macmillanBurstRequested = false;
     }
 
     playerBike.velocityX = clamp(
@@ -1624,6 +1720,7 @@ function updateBotRockApproach(bike, maxSpeed) {
 // =========================================
 
 function updateBotAbilities(bike) {
+    if (bike.macmillanBurstTimer > 0) bike.macmillanBurstTimer--;
     if (bike.nitroTimer > 0) {
         bike.nitroTimer--;
     } else if (bike.nitroCooldown > 0) {
@@ -1632,6 +1729,23 @@ function updateBotAbilities(bike) {
 
     if (bike.shieldActiveTimer > 0) {
         bike.shieldActiveTimer--;
+    }
+
+    const burstTopSpeed = Math.max(1.5, Number(bike.botBaseMaxSpeed) || 3);
+    const burstObstacleAhead = obstacles.some(obstacle =>
+        obstacle.x >= bike.x + BIKE_WIDTH * 0.35 && obstacle.x - bike.x < 230
+    );
+    if (
+        bike.abilities?.macmillanBurst &&
+        bike.macmillanBurstCharges > 0 &&
+        bike.grounded &&
+        bike.impactSlowTimer <= 0 &&
+        bike.velocityX < burstTopSpeed * 0.86 &&
+        !burstObstacleAhead
+    ) {
+        bike.velocityX = burstTopSpeed;
+        bike.macmillanBurstCharges--;
+        bike.macmillanBurstTimer = 32;
     }
 
     if (
@@ -2108,7 +2222,7 @@ function startHistoryVictoryOutro() {
     if (
         !currentTrack?.isHistory ||
         Number(currentTrack.historyStage) !== 5 ||
-        !botBike?.visuals?.draisine ||
+        !(botBike?.visuals?.draisine || botBike?.visuals?.macmillan) ||
         !playerBike
     ) {
         return false;
@@ -3141,7 +3255,7 @@ function drawObstacles() {
 // ОТРИСОВКА ВЕЛОСИПЕДА
 // =========================================
 
-function drawHistoryVictoryRider(x, groundY, phase, phaseFrame, riseProgress = 1) {
+function drawHistoryVictoryRider(x, groundY, phase, phaseFrame, riseProgress = 1, historicalStyle = '') {
     const transition = clamp(riseProgress, 0, 1);
     if (['dismount', 'mount'].includes(phase) && transition <= 0.02) return;
 
@@ -3337,9 +3451,9 @@ function drawPlayerHistoryObserver(x, groundY, phaseFrame, riseProgress, visuals
         r5: { shirt: '#18181b', pants: '#09090b', helmet: '#d97706' },
         r6: { shirt: '#6b4d31', pants: '#332c24', helmet: '#30251e' }
     }[riderId] || { shirt: '#2563eb', pants: '#1e293b', helmet: '#ef4444' };
-    const shirt = visuals.riderVisuals?.jerseyColor || palette.shirt;
-    const pants = visuals.riderVisuals?.pantsColor || palette.pants;
-    const helmet = visuals.riderVisuals?.hatColor || palette.helmet;
+    const shirt = historicalStyle === 'macmillan' ? '#67503a' : visuals.riderVisuals?.jerseyColor || palette.shirt;
+    const pants = historicalStyle === 'macmillan' ? '#352b22' : visuals.riderVisuals?.pantsColor || palette.pants;
+    const helmet = historicalStyle === 'macmillan' ? '#3a2b20' : visuals.riderVisuals?.hatColor || palette.helmet;
     const idle = Math.sin(phaseFrame * 0.08) * 0.8;
 
     ctx.save();
@@ -3505,7 +3619,8 @@ function drawDraisineSeatAndCockpit(points, visuals = {}) {
     ctx.stroke();
 }
 
-function drawDraisineBike(bike, label) {
+function drawDraisineBike(bike, label, variant = 'draisine') {
+    const macmillan = variant === 'macmillan';
     ctx.save();
     if (bike.isGhost) ctx.globalAlpha = 0.4;
 
@@ -3531,10 +3646,10 @@ function drawDraisineBike(bike, label) {
         : outroPhase === 'turn'
             ? Math.sin(Math.PI * turnProgress) * -0.07
             : settleJolt;
-    const rearRadius = 17;
-    const frontRadius = 12.5;
-    const rear = { x: x - 31, y: bodyY - rearRadius + 1 };
-    const front = { x: x + 34, y: bodyY - frontRadius + 1 };
+    const rearRadius = macmillan ? 19 : 17;
+    const frontRadius = macmillan ? 12 : 12.5;
+    const rear = { x: x - 34, y: bodyY - rearRadius + 1 };
+    const front = { x: x + 36, y: bodyY - frontRadius + 1 };
     const travel = Number(bike.x) - (Number(bike.previousX) || Number(bike.x));
     bike.wheelRotation = (Number(bike.wheelRotation) || 0) + travel / 17;
     const wheelAngle = Number(bike.wheelRotation) || 0;
@@ -3590,12 +3705,12 @@ function drawDraisineBike(bike, label) {
         ctx.beginPath();
         ctx.arc(0, 0, radius, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.strokeStyle = '#8a6742';
+        ctx.strokeStyle = bike.visuals?.rimColor || '#8a6742';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(0, 0, radius - 2, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.strokeStyle = '#5e4a35';
+        ctx.strokeStyle = bike.visuals?.rimColor || '#5e4a35';
         ctx.lineWidth = 1.2;
         for (let i = 0; i < 10; i++) {
             const angle = i * Math.PI / 5;
@@ -3604,7 +3719,7 @@ function drawDraisineBike(bike, label) {
             ctx.lineTo(Math.cos(angle) * (radius - 3), Math.sin(angle) * (radius - 3));
             ctx.stroke();
         }
-        ctx.fillStyle = '#ba8a53';
+        ctx.fillStyle = bike.visuals?.hubColor || '#ba8a53';
         ctx.beginPath();
         ctx.arc(0, 0, 3, 0, Math.PI * 2);
         ctx.fill();
@@ -3613,15 +3728,66 @@ function drawDraisineBike(bike, label) {
     drawWoodWheel(rear, rearRadius);
     drawWoodWheel(front, frontRadius);
 
-    const framePoints = getDraisineFramePoints(x, bodyY, rear, front);
-    drawDraisineFrame(framePoints, bike.visuals?.frameColor || '#9a6538');
+    if (bike.macmillanBurstTimer > 0) {
+        ctx.save();
+        ctx.globalAlpha *= clamp(bike.macmillanBurstTimer / 18, 0.25, 1);
+        ctx.fillStyle = '#c084fc';
+        ctx.beginPath();
+        ctx.moveTo(rear.x - rearRadius - 2, rear.y - 1);
+        ctx.lineTo(rear.x - rearRadius - 20, rear.y - 6);
+        ctx.lineTo(rear.x - rearRadius - 12, rear.y + 3);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+
+    const framePoints = macmillan
+        ? {
+            rearJoint: { x: x - 15, y: bodyY - 28 },
+            upperRear: { x: x - 24, y: bodyY - 65 },
+            upperHead: { x: x + 19, y: bodyY - 47 },
+            middleHead: { x: x + 10, y: bodyY - 35 },
+            lowerJoint: { x: x + 14, y: bodyY - 18 },
+            seat: { x: x - 5, y: bodyY - 58 },
+            seatBrace: { x: x - 15, y: bodyY - 28 },
+            rear,
+            front
+        }
+        : getDraisineFramePoints(x, bodyY, rear, front);
+    drawDraisineFrame(framePoints, bike.visuals?.frameColor || (macmillan ? '#8b5a2b' : '#9a6538'));
     drawDraisineSeatAndCockpit(framePoints, {
-        stemColor: '#704522',
-        handlebarColor: '#704522',
-        handlebarWidth: 4,
-        seatpostColor: '#704522',
-        saddleColor: '#342319'
+        stemColor: bike.visuals?.stemColor || '#704522',
+        handlebarColor: bike.visuals?.handlebarColor || '#704522',
+        handlebarWidth: bike.visuals?.handlebarWidth ? bike.visuals.handlebarWidth * 2 : 4,
+        seatpostColor: bike.visuals?.seatpostColor || '#704522',
+        saddleColor: bike.visuals?.saddleColor || '#342319'
     });
+
+    if (macmillan && bike.visuals?.macmillanTreadles) {
+        const crank = { x: x + 2, y: bodyY - 17 };
+        const phase = (Number(bike.pedalPhase) || 0) + frameCounter * 0.045;
+        const pedalNear = { x: crank.x + Math.cos(phase) * 10, y: crank.y + Math.sin(phase) * 10 };
+        const pedalFar = { x: crank.x + Math.cos(phase + Math.PI) * 10, y: crank.y + Math.sin(phase + Math.PI) * 10 };
+        ctx.strokeStyle = bike.visuals?.macmillanTreadleColor || '#57391f';
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.arc(crank.x, crank.y, 3.5, 0, Math.PI * 2);
+        ctx.moveTo(pedalNear.x, pedalNear.y);
+        ctx.lineTo(rear.x + 3, rear.y - 1);
+        ctx.moveTo(pedalFar.x, pedalFar.y);
+        ctx.lineTo(rear.x + 4, rear.y + 1);
+        ctx.moveTo(crank.x, crank.y);
+        ctx.lineTo(pedalNear.x, pedalNear.y);
+        ctx.moveTo(crank.x, crank.y);
+        ctx.lineTo(pedalFar.x, pedalFar.y);
+        ctx.stroke();
+        ctx.fillStyle = bike.visuals?.macmillanTreadleColor || '#d0a166';
+        [pedalNear, pedalFar].forEach(pedal => {
+            ctx.beginPath();
+            ctx.arc(pedal.x, pedal.y, 2.1, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    }
 
     const seatedOpacity = outroPhase === 'dismount'
         ? 1 - easeInOutCubic((outroPhaseFrame - 3) / 21)
@@ -3631,22 +3797,26 @@ function drawDraisineBike(bike, label) {
     if (seatedOpacity > 0.01) {
         ctx.save();
         ctx.globalAlpha *= seatedOpacity;
-        // Карл Дрез: сюртук, цилиндр и ноги, которые попеременно отталкиваются от земли.
-        const push = bike.grounded ? Math.sin(frameCounter * 0.13) : 0;
-        const hip = { x: x - 5, y: bodyY - 66 };
-        const shoulder = { x: x + 1, y: bodyY - 81 };
-        const head = { x: x + 3, y: bodyY - 91 };
-        const legNear = { knee: { x: x - 11 + push * 5, y: bodyY - 38 + Math.abs(push) * 5 }, foot: { x: x - 15 + push * 12, y: bodyY - 2 } };
-        const legFar = { knee: { x: x - 1 - push * 4, y: bodyY - 39 + Math.abs(push) * 4 }, foot: { x: x - 4 - push * 10, y: bodyY - 2 } };
+        // Дрез отталкивается ногами от земли; Макмиллан сидит и качает рычажные педали.
+        const push = bike.grounded ? Math.sin(frameCounter * (macmillan ? 0.22 : 0.13)) : 0;
+        const hip = { x: x - 5, y: bodyY - (macmillan ? 58 : 66) };
+        const shoulder = { x: x + 1, y: bodyY - (macmillan ? 76 : 81) };
+        const head = { x: x + 3, y: bodyY - (macmillan ? 86 : 91) };
+        const legNear = macmillan
+            ? { knee: { x: x - 1 + Math.cos(push) * 4, y: bodyY - 38 + Math.sin(push) * 5 }, foot: { x: x + 2 + Math.cos(push) * 10, y: bodyY - 17 + Math.sin(push) * 10 } }
+            : { knee: { x: x - 11 + push * 5, y: bodyY - 38 + Math.abs(push) * 5 }, foot: { x: x - 15 + push * 12, y: bodyY - 2 } };
+        const legFar = macmillan
+            ? { knee: { x: x + 6 - Math.cos(push) * 4, y: bodyY - 38 - Math.sin(push) * 5 }, foot: { x: x + 2 - Math.cos(push) * 10, y: bodyY - 17 - Math.sin(push) * 10 } }
+            : { knee: { x: x - 1 - push * 4, y: bodyY - 39 + Math.abs(push) * 4 }, foot: { x: x - 4 - push * 10, y: bodyY - 2 } };
 
-        ctx.strokeStyle = '#39342d';
+        ctx.strokeStyle = macmillan ? '#342a20' : '#39342d';
         ctx.lineWidth = 4.1;
         ctx.beginPath();
         ctx.moveTo(hip.x, hip.y);
         ctx.lineTo(legFar.knee.x, legFar.knee.y);
         ctx.lineTo(legFar.foot.x, legFar.foot.y);
         ctx.stroke();
-        ctx.strokeStyle = '#554c40';
+        ctx.strokeStyle = macmillan ? '#403329' : '#554c40';
         ctx.lineWidth = 4.4;
         ctx.beginPath();
         ctx.moveTo(hip.x, hip.y);
@@ -3674,16 +3844,23 @@ function drawDraisineBike(bike, label) {
         ctx.lineWidth = 2.5;
         ctx.beginPath();
         ctx.moveTo(shoulder.x + 2, shoulder.y + 1);
-        ctx.lineTo(x + 15, bodyY - 77);
-        ctx.lineTo(x + 34, bodyY - 75);
+        ctx.lineTo(x + 15, bodyY - (macmillan ? 71 : 77));
+        ctx.lineTo(x + 34, bodyY - (macmillan ? 69 : 75));
         ctx.stroke();
         ctx.fillStyle = '#d8b58b';
         ctx.beginPath();
         ctx.arc(head.x, head.y, 4.2, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = '#35271d';
-        ctx.fillRect(head.x - 5, head.y - 7, 10, 2.5);
-        ctx.fillRect(head.x - 3.5, head.y - 14, 7, 8);
+        if (macmillan) {
+            ctx.beginPath();
+            ctx.ellipse(head.x, head.y - 5, 5, 2.3, 0, Math.PI, Math.PI * 2);
+            ctx.fill();
+            ctx.fillRect(head.x - 4, head.y - 6.5, 8, 2);
+        } else {
+            ctx.fillRect(head.x - 5, head.y - 7, 10, 2.5);
+            ctx.fillRect(head.x - 3.5, head.y - 14, 7, 8);
+        }
         ctx.restore();
     }
 
@@ -3701,7 +3878,7 @@ function drawDraisineBike(bike, label) {
             : outroPhase === 'mount'
                 ? 1 - easeInOutCubic(outroPhaseFrame / 28)
                 : 1;
-        drawHistoryVictoryRider(riderX, riderGroundY, outroPhase, outroPhaseFrame, riseProgress);
+        drawHistoryVictoryRider(riderX, riderGroundY, outroPhase, outroPhaseFrame, riseProgress, macmillan ? 'macmillan' : '');
     }
 
     if (!outroPhase) {
@@ -3716,6 +3893,10 @@ function drawDraisineBike(bike, label) {
 function drawBike(bike, label, color) {
     if (bike.visuals?.draisine && bike.isBot) {
         drawDraisineBike(bike, label);
+        return;
+    }
+    if (bike.visuals?.macmillan) {
+        drawDraisineBike(bike, label, 'macmillan');
         return;
     }
 
@@ -4363,6 +4544,16 @@ function drawBike(bike, label, color) {
         ctx.stroke();
     }
 
+    if (bike.macmillanBurstTimer > 0) {
+        ctx.fillStyle = '#c084fc';
+        ctx.beginPath();
+        ctx.moveTo(rearWheelX - 4, wheelY - 2);
+        ctx.lineTo(rearWheelX - 20 - Math.random() * 3, wheelY - 6);
+        ctx.lineTo(rearWheelX - 11, wheelY + 2);
+        ctx.closePath();
+        ctx.fill();
+    }
+
     if (bike.springBoostTimer > 0) {
         ctx.fillStyle = '#4ade80';
         ctx.beginPath();
@@ -4440,7 +4631,7 @@ function drawRaceHUD() {
         ctx.textBaseline = 'middle';
         ctx.fillStyle = '#f2d5a5';
         ctx.font = '900 11px Arial';
-        ctx.fillText(`ИСТОРИЯ · ${currentTrack.historyStage}/5 · ${currentTrack.year}`, 22, 29);
+        ctx.fillText(`ИСТОРИЯ · ГЛАВА ${Number(currentTrack.historyChapter) || 1} · ${currentTrack.historyStage}/5 · ${currentTrack.year}`, 22, 29);
         ctx.restore();
     }
 
@@ -4466,7 +4657,7 @@ function drawRaceHUD() {
     const racers = [
         {
             bike: playerBike,
-            label: `🚴 ТЫ${playerBike.abilities?.shieldCharges > 0 || playerBike.shieldActiveTimer > 0 ? ' 🛡️' : ''}`,
+            label: `🚴 ТЫ${playerBike.abilities?.macmillanBurst ? ` ⏩${playerBike.macmillanBurstCharges}` : ''}${playerBike.abilities?.shieldCharges > 0 || playerBike.shieldActiveTimer > 0 ? ' 🛡️' : ''}`,
             color: '#22c55e'
         },
 
@@ -4484,7 +4675,7 @@ function drawRaceHUD() {
 
             return {
                 bike,
-                label: `${bike.displayName}${icon}`,
+                label: `${bike.displayName}${icon}${bike.abilities?.macmillanBurst ? ` ⏩${bike.macmillanBurstCharges}` : ''}`,
                 color: bike.color
             };
         })
@@ -5001,6 +5192,7 @@ export function initRace(onRaceEnd) {
         );
 
     playerBike = createBike(false);
+    syncAbilityButtons();
     const brakeButton = document.getElementById('btn-brake');
     if (brakeButton) {
         brakeButton.disabled = !playerBike.hasBrakes;
@@ -5031,8 +5223,10 @@ export function initRace(onRaceEnd) {
         botBike = createBike(true, 1);
         if (currentTrack.isHistory) {
             botBike.displayName = currentTrack.opponent || 'Макс';
-            botBike.abilities = { nitroUnlocked: false, superJumpUnlocked: false, shieldCharges: 0 };
-            if (currentTrack.historyStage === 5) {
+            const macmillanFinal = Number(currentTrack.historyChapter) === 2 && Number(currentTrack.historyStage) === 5;
+            botBike.abilities = { nitroUnlocked: false, superJumpUnlocked: false, shieldCharges: 0, macmillanBurst: macmillanFinal };
+            botBike.macmillanBurstCharges = macmillanFinal ? 3 : 0;
+            if (Number(currentTrack.historyChapter) === 1 && currentTrack.historyStage === 5) {
                 botBike.color = '#8b5a2b';
                 botBike.visuals = {
                     ...botBike.visuals,
@@ -5044,9 +5238,28 @@ export function initRace(onRaceEnd) {
                     rearWheelRadius: 15,
                     frontWheelRadius: 12
                 };
+            } else if (Number(currentTrack.historyChapter) === 2 && currentTrack.historyStage === 5) {
+                botBike.color = '#8b5a2b';
+                botBike.visuals = {
+                    ...botBike.visuals,
+                    macmillan: true,
+                    macmillanTreadles: true,
+                    macmillanTreadleColor: '#8b5a2b',
+                    frameColor: '#8b5a2b',
+                    rimColor: '#704522',
+                    hubColor: '#c4965d',
+                    wheelRadius: 13,
+                    rearWheelRadius: 15,
+                    frontWheelRadius: 9,
+                    handlebarColor: '#704522',
+                    stemColor: '#704522',
+                    saddleColor: '#342319',
+                    seatpostColor: '#704522'
+                };
             }
         }
-        additionalBots = !currentTrack.isHistory && currentTrackLevel >= 2
+        const chapterTwoQualifiers = currentTrack.isHistory && Number(currentTrack.historyChapter) === 2 && Number(currentTrack.historyStage) <= 4;
+        additionalBots = (!currentTrack.isHistory && currentTrackLevel >= 2) || chapterTwoQualifiers
             ? [createBike(true, 2)]
             : [];
         activeBots = [botBike, ...additionalBots];
@@ -5095,19 +5308,32 @@ export function initRace(onRaceEnd) {
 // УПРАВЛЕНИЕ ИГРОКОМ ИЗ MAIN.JS
 // =========================================
 
+export function activateNitroBoost() {
+    if (
+        !raceRunning || !raceStarted || raceFinished ||
+        !playerBike?.abilities?.nitroUnlocked || playerBike.nitroCooldown > 0
+    ) return false;
+
+    playerBike.nitroTimer = 120;
+    playerBike.nitroCooldown = 480;
+    syncAbilityButtons();
+    return true;
+}
+
+export function activateMacmillanBurst() {
+    if (
+        !raceRunning || !raceStarted || raceFinished ||
+        !playerBike?.abilities?.macmillanBurst || playerBike.macmillanBurstCharges <= 0 ||
+        !playerBike.grounded || playerBike.impactSlowTimer > 0 || playerBike.flippedTimer > 0 ||
+        playerBike.crashPending || input.braking || input.reversing || playerBike.macmillanBurstRequested
+    ) return false;
+
+    playerBike.macmillanBurstRequested = true;
+    return true;
+}
+
 export function setAccelerating(value) {
-    const nextValue = Boolean(value);
-    if (nextValue && !input.accelerating && raceRunning && !raceFinished && playerBike?.abilities?.nitroUnlocked) {
-        const now = performance.now();
-        if (now - playerBike.lastGasTap < 320 && playerBike.nitroCooldown <= 0) {
-            playerBike.nitroTimer = 120;
-            playerBike.nitroCooldown = 480;
-            playerBike.lastGasTap = 0;
-        } else {
-            playerBike.lastGasTap = now;
-        }
-    }
-    input.accelerating = nextValue;
+    input.accelerating = Boolean(value);
 }
 
 export function setBraking(value) {

@@ -1,4 +1,4 @@
-import { ITEMS_DB, TRACKS_DB, HISTORY_TRACKS_DB, CONTAINERS_DB } from './db.js?v=112';
+import { ITEMS_DB, TRACKS_DB, HISTORY_TRACKS_DB, CONTAINERS_DB } from './db.js?v=116';
 import {
     player,
     loadPlayerState,
@@ -6,21 +6,23 @@ import {
     clearSavedProgress,
     forceSavePlayerState,
     getServerTime
-} from './state.js?v=112';
+} from './state.js?v=116';
 import {
     initRace,
     setAccelerating,
     setBraking,
     setReversing,
-    triggerJump
-} from './race.js?v=112';
+    triggerJump,
+    activateNitroBoost,
+    activateMacmillanBurst
+} from './race.js?v=116';
 
 import {
     initAudioControls,
     setAudioScene,
     playRaceResult
-} from './audio.js?v=112';
-import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=112';
+} from './audio.js?v=116';
+import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js?v=116';
 
 function renderGameVersionBadge() {
     const build = document.body?.dataset.gameBuild || '100';
@@ -382,6 +384,12 @@ function ensureGarageLayout() {
                                     <path d="M445 96 L457 145 L520 185"/>
                                     <path d="M235 88 L457 145" opacity=".45"/>
                                 </g>
+                                <g id="garage-bike-macmillan-drive" display="none" fill="none" stroke="#8b5a2b" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M300 185 L258 179 L150 185"/>
+                                    <path d="M300 185 L358 185 L150 185"/>
+                                    <circle cx="258" cy="179" r="5" fill="#d0a166" stroke-width="2"/>
+                                    <circle cx="358" cy="185" r="5" fill="#d0a166" stroke-width="2"/>
+                                </g>
                                 <g class="bike-metal-parts" stroke="url(#garage-metal-gradient)" stroke-width="7">
                                     <path id="garage-bike-seatpost" d="M235 88 L228 53"/><path id="garage-bike-saddle" d="M215 51 Q230 45 255 51" stroke-width="10"/>
                                     <g id="garage-bike-cockpit"><path d="M452 99 L461 27 L478 27"/><path d="M440 23 L481 23" stroke-width="6"/></g>
@@ -586,7 +594,47 @@ function getRarityName(rarity) {
 }
 
 let selectedUpgradeCategory = getCategoryOrder()[0] || 'frames';
+let upgradeAvailabilityFilter = 'all';
+let upgradeRarityOrder = 'asc';
 let containerOpening = false;
+
+function ensureUpgradeSortControls(partsDiv) {
+    let controls = document.getElementById('upgrade-sort-controls');
+    if (!controls) {
+        controls = document.createElement('div');
+        controls.id = 'upgrade-sort-controls';
+        controls.className = 'grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4';
+        controls.innerHTML = `
+            <label class="flex flex-col gap-1 text-xs font-bold text-gray-300">
+                Показать
+                <select id="upgrade-availability-filter" class="rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-sm text-white">
+                    <option value="all">Все детали</option>
+                    <option value="owned">Только в наличии</option>
+                    <option value="missing">Нет в наличии</option>
+                </select>
+            </label>
+            <label class="flex flex-col gap-1 text-xs font-bold text-gray-300">
+                Сортировка по редкости
+                <select id="upgrade-rarity-order" class="rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-sm text-white">
+                    <option value="asc">От обычной к легендарной</option>
+                    <option value="desc">От легендарной к обычной</option>
+                </select>
+            </label>
+        `;
+        partsDiv.before(controls);
+        controls.querySelector('#upgrade-availability-filter').addEventListener('change', event => {
+            upgradeAvailabilityFilter = event.currentTarget.value;
+            updateUpgradeUI();
+        });
+        controls.querySelector('#upgrade-rarity-order').addEventListener('change', event => {
+            upgradeRarityOrder = event.currentTarget.value;
+            updateUpgradeUI();
+        });
+    }
+
+    controls.querySelector('#upgrade-availability-filter').value = upgradeAvailabilityFilter;
+    controls.querySelector('#upgrade-rarity-order').value = upgradeRarityOrder;
+}
 
 function hasFullSuspensionFrame(frameId = player.equipped?.frames) {
     const frame = ITEMS_DB.frames?.find(item => item.id === frameId);
@@ -1224,7 +1272,7 @@ function updateGarageUI() {
 
     if (frameCaption) {
         frameCaption.textContent = frame
-            ? `${frame.visuals?.specialHistoryFrame ? 'Лауфмашина Дреза · отталкивание ногами' : frame.visuals?.type === 'dh' ? 'Двухподвес · передняя вилка и задний амортизатор' : 'Хардтейл · передняя вилка'} · ${getRarityName(frame.rarity)}`
+            ? `${frame.visuals?.specialHistoryFrame ? 'Лауфмашина Дреза · отталкивание ногами' : frame.visuals?.specialMacmillanFrame ? 'Велоципед Макмиллана · рычажный привод' : frame.visuals?.type === 'dh' ? 'Двухподвес · передняя вилка и задний амортизатор' : 'Хардтейл · передняя вилка'} · ${getRarityName(frame.rarity)}`
             : 'Выбери раму во вкладке «Модернизация», чтобы завершить сборку.';
     }
 
@@ -1251,6 +1299,7 @@ function updateGarageUI() {
         const derailleur = getEquippedPart('derailleurs');
         const cassette = getEquippedPart('cassettes');
         const crank = getEquippedPart('cranks');
+        const pedals = getEquippedPart('pedals');
         const handlebar = getEquippedPart('handlebars');
         const saddle = getEquippedPart('saddles');
         const seatpost = getEquippedPart('seatposts');
@@ -1259,9 +1308,10 @@ function updateGarageUI() {
         const wheelVisuals = wheels?.visuals || {};
         const frameVisuals = frame?.visuals || {};
         const isDraisineFrame = Boolean(frameVisuals.specialHistoryFrame);
+        const isMacmillanFrame = Boolean(frameVisuals.specialMacmillanFrame);
         const baseWheelSize = Number(wheelVisuals.radius) || 9.5;
-        const rearWheelSize = Number(wheelVisuals.rearRadius) || baseWheelSize;
-        const frontWheelSize = Number(wheelVisuals.frontRadius) || baseWheelSize;
+        const rearWheelSize = Number(wheelVisuals.rearRadius) || (isMacmillanFrame ? baseWheelSize * 1.34 : baseWheelSize);
+        const frontWheelSize = Number(wheelVisuals.frontRadius) || (isMacmillanFrame ? baseWheelSize * 0.78 : baseWheelSize);
         const largestWheelSize = Math.max(rearWheelSize, frontWheelSize, 1);
         const rearWheelScale = clamp(rearWheelSize / largestWheelSize, 0.65, 1.15);
         const frontWheelScale = clamp(frontWheelSize / largestWheelSize, 0.65, 1.15);
@@ -1288,6 +1338,7 @@ function updateGarageUI() {
         bikeSvg.dataset.frameId = frame?.id || 'none';
         bikeSvg.dataset.wheelId = wheels?.id || 'none';
         bikeSvg.dataset.draisineFrame = String(isDraisineFrame);
+        bikeSvg.dataset.macmillanFrame = String(isMacmillanFrame);
         
         bikeSvg.classList.toggle('has-motor', Boolean(electronics && electronics.id !== 'e1'));
         bikeSvg.classList.toggle('has-suspension', Boolean(fork && fork.id !== 'fk1'));
@@ -1300,6 +1351,8 @@ function updateGarageUI() {
             let geometry;
             if (isDraisineFrame) {
                 geometry = { seat: [282, 86], head: [406, 88], lower: [447, 145] };
+            } else if (isMacmillanFrame) {
+                geometry = { seat: [277, 93], head: [410, 105], lower: [422, 151] };
             } else if (frame?.visuals?.type === 'dh') {
                 geometry = { seat: [250, 80], head: [435, 88], lower: [447, 135] };
             } else if (frame?.visuals?.type === 'hardtail') {
@@ -1322,6 +1375,13 @@ function updateGarageUI() {
                     `M${xy(points.head)} L${xy(points.lower)} L${frontWheelCenter.x} ${frontWheelCenter.y}`,
                     `M241 190 L366 187 L${frontWheelCenter.x} ${frontWheelCenter.y}`
                 ]
+                : isMacmillanFrame
+                    ? [
+                        `M${rearWheelCenter.x} ${rearWheelCenter.y} Q203 67 ${xy(points.seat)} Q350 70 ${xy(points.head)} L${frontWheelCenter.x} ${frontWheelCenter.y}`,
+                        `M${rearWheelCenter.x} ${rearWheelCenter.y} L258 179 L${xy(points.seat)}`,
+                        `M${xy(points.head)} L${xy(points.lower)} L${frontWheelCenter.x} ${frontWheelCenter.y}`,
+                        `M${rearWheelCenter.x} ${rearWheelCenter.y} L358 185 L${frontWheelCenter.x} ${frontWheelCenter.y}`
+                    ]
                 : [
                     isFullSuspension
                         ? `M300 185 L${xy(points.seat)}`
@@ -1332,6 +1392,11 @@ function updateGarageUI() {
                 ];
             paths.forEach((path, index) => { if (values[index]) path.setAttribute('d', values[index]); });
             if (paths[3]) paths[3].setAttribute('display', isFullSuspension ? 'none' : 'inline');
+            const macmillanDrive = bikeSvg.querySelector('#garage-bike-macmillan-drive');
+            if (macmillanDrive) {
+                macmillanDrive.setAttribute('display', isMacmillanFrame && pedals?.id === 'pd6' ? 'inline' : 'none');
+                macmillanDrive.setAttribute('stroke', pedals?.visuals?.color || '#8b5a2b');
+            }
 
             const rearTriangle = bikeSvg.querySelector('#garage-bike-rear-triangle');
             if (rearTriangle) {
@@ -1358,6 +1423,8 @@ function updateGarageUI() {
         let seatCoordinates;
         if (isDraisineFrame) {
             seatCoordinates = { x: 282, y: 86 };
+        } else if (isMacmillanFrame) {
+            seatCoordinates = { x: 277, y: 93 };
         } else if (frame?.visuals?.type === 'dh') {
             seatCoordinates = { x: 250, y: 80 };
         } else if (frame?.visuals?.type === 'hardtail') {
@@ -1367,11 +1434,11 @@ function updateGarageUI() {
         }
 
         const seatpostLine = bikeSvg.querySelector('#garage-bike-seatpost');
-        const saddleTopY = isDraisineFrame ? 59 : 53;
+        const saddleTopY = isDraisineFrame ? 59 : isMacmillanFrame ? 65 : 53;
         if (seatpostLine) seatpostLine.setAttribute('d', `M${seatCoordinates.x} ${seatCoordinates.y} L${seatCoordinates.x - 7} ${saddleTopY}`);
         const saddleLine = bikeSvg.querySelector('#garage-bike-saddle');
-        const saddleY = isDraisineFrame ? 57 : 51;
-        const saddleControlY = isDraisineFrame ? 51 : 45;
+        const saddleY = isDraisineFrame ? 57 : isMacmillanFrame ? 63 : 51;
+        const saddleControlY = isDraisineFrame ? 51 : isMacmillanFrame ? 57 : 45;
         if (saddleLine) saddleLine.setAttribute('d', `M${seatCoordinates.x - 20} ${saddleY} Q${seatCoordinates.x} ${saddleControlY} ${seatCoordinates.x + 25} ${saddleY}`);
         
         // --- КОЛЕСА И ТОРМОЗА ---
@@ -1589,6 +1656,7 @@ function updateUpgradeUI() {
 
     if (!categoriesDiv || !partsDiv || !titleDiv) return;
 
+    ensureUpgradeSortControls(partsDiv);
     syncProgression();
 
     const categories = getCategoryOrder();
@@ -1646,7 +1714,23 @@ function updateUpgradeUI() {
 
     const category = selectedUpgradeCategory;
     
-    const categoryItems = ITEMS_DB[category] || [];
+    const rarityRank = { common: 0, rare: 1, special: 2, legendary: 3 };
+    const categoryItems = (ITEMS_DB[category] || [])
+        .filter(part => {
+            const owned = hasPart(category, part.id);
+            return upgradeAvailabilityFilter === 'owned'
+                ? owned
+                : upgradeAvailabilityFilter === 'missing'
+                    ? !owned
+                    : true;
+        })
+        .map((part, originalIndex) => ({ part, originalIndex }))
+        .sort((left, right) => {
+            const rankDifference = (rarityRank[left.part.rarity] ?? 99) - (rarityRank[right.part.rarity] ?? 99);
+            if (rankDifference !== 0) return upgradeRarityOrder === 'desc' ? -rankDifference : rankDifference;
+            return left.originalIndex - right.originalIndex;
+        })
+        .map(entry => entry.part);
     const chooseActionLabel = category === 'riders'
         ? 'Выбрать райдера'
         : 'Выбрать деталь';
@@ -1658,6 +1742,15 @@ function updateUpgradeUI() {
         compatibilityNote.className = 'col-span-full rounded-xl border border-cyan-700/50 bg-cyan-950/40 p-3 text-sm text-cyan-200';
         compatibilityNote.textContent = 'Амортизаторы можно получать заранее. Чтобы установить и использовать задний амортизатор, выбери двухподвесную раму (DH).';
         partsDiv.appendChild(compatibilityNote);
+    }
+
+    if (!categoryItems.length) {
+        const emptyNote = document.createElement('div');
+        emptyNote.className = 'col-span-full rounded-xl border border-gray-700 bg-gray-900 p-4 text-sm text-gray-400';
+        emptyNote.textContent = upgradeAvailabilityFilter === 'owned'
+            ? 'В этой категории пока нет деталей в наличии.'
+            : 'Все детали этой категории уже есть в наличии.';
+        partsDiv.appendChild(emptyNote);
     }
 
     categoryItems.forEach(part => {
@@ -1673,7 +1766,7 @@ function updateUpgradeUI() {
             ? part.ability
             : part.ability?.name || 'Суперспособность';
         const abilityBadgeHTML = part.ability
-            ? `<span title="${escapeHTML(abilityName)}" aria-label="Суперспособность: ${escapeHTML(abilityName)}" class="rounded-md border border-violet-300/40 bg-violet-950 px-2 py-1 text-[11px] font-black text-violet-200 shadow">${part.ability?.id === 'jekyllShield' ? '🛡️' : '✦'}</span>`
+            ? `<span title="${escapeHTML(abilityName)}" aria-label="Суперспособность: ${escapeHTML(abilityName)}" class="rounded-md border border-violet-300/40 bg-violet-950 px-2 py-1 text-[11px] font-black text-violet-200 shadow">${part.ability?.id === 'jekyllShield' ? '🛡️' : part.ability?.id === 'macmillanBurst' ? '⏩' : '✦'}</span>`
             : '';
         const dhBadgeHTML = part.visuals?.type === 'dh'
             ? '<span class="rounded-md border border-cyan-300/40 bg-cyan-950 px-2 py-1 text-[10px] font-black tracking-wider text-cyan-200 shadow">DH</span>'
@@ -1681,6 +1774,7 @@ function updateUpgradeUI() {
         const frameBadgeHTML = category === 'frames' && (abilityBadgeHTML || dhBadgeHTML)
             ? `<div class="absolute top-3 right-3 z-10 flex items-center gap-1">${abilityBadgeHTML}${dhBadgeHTML}</div>`
             : '';
+        const inlineAbilityBadgeHTML = category === 'frames' ? '' : abilityBadgeHTML;
 
         const card = document.createElement('div');
         card.className =
@@ -1702,6 +1796,7 @@ function updateUpgradeUI() {
 
                 <div class="upgrade-part-title-row">
                     <div class="upgrade-part-title text-xl font-black rarity-${part.rarity}">${escapeHTML(part.name)}</div>
+                    ${inlineAbilityBadgeHTML}
                     ${getPartInfoHTML(category, part)}
                 </div>
 
@@ -1798,6 +1893,7 @@ function updateUpgradeUI() {
 
             <div class="upgrade-part-title-row">
                 <div class="upgrade-part-title text-xl font-black rarity-${part.rarity}">${escapeHTML(part.name)}</div>
+                ${inlineAbilityBadgeHTML}
                 ${getPartInfoHTML(category, part)}
             </div>
 
@@ -2257,8 +2353,11 @@ function getHistoryRewardMarkup(track) {
 }
 
 function updateHistoryUI() {
-    const list = document.getElementById('history-stage-list');
-    if (!list) return;
+    const lists = new Map([
+        [1, document.getElementById('history-stage-list')],
+        [2, document.getElementById('history-stage-list-2')]
+    ]);
+    if (![...lists.values()].some(Boolean)) return;
 
     if (!Array.isArray(player.historyUnlockedStages)) player.historyUnlockedStages = ['h1'];
     if (!Array.isArray(player.historyCompletedStages)) player.historyCompletedStages = [];
@@ -2266,14 +2365,35 @@ function updateHistoryUI() {
 
     const completed = new Set(player.historyCompletedStages);
     const unlocked = new Set(player.historyUnlockedStages);
-    const progress = document.getElementById('history-progress-label');
-    if (progress) progress.textContent = `${completed.size} / ${HISTORY_TRACKS_DB.length} этапов`;
+    const chapterOneTracks = HISTORY_TRACKS_DB.filter(track => Number(track.historyChapter) === 1);
+    const chapterTwoTracks = HISTORY_TRACKS_DB.filter(track => Number(track.historyChapter) === 2);
+    const chapterOneComplete = chapterOneTracks.length > 0 && chapterOneTracks.every(track => completed.has(track.id));
+    let addedChapterTwoUnlock = false;
+    if (chapterOneComplete && !unlocked.has('m1')) {
+        player.historyUnlockedStages.push('m1');
+        unlocked.add('m1');
+        addedChapterTwoUnlock = true;
+    }
+    const chapterTwoOpen = chapterOneComplete || unlocked.has('m1') || chapterTwoTracks.some(track => completed.has(track.id));
+    const chapterProgress = (chapter, tracks) => {
+        const progress = document.getElementById(chapter === 1 ? 'history-progress-label' : 'history-progress-label-2');
+        if (progress) {
+            const count = tracks.filter(track => completed.has(track.id)).length;
+            progress.textContent = `${count} / ${tracks.length} этапов`;
+        }
+    };
+    chapterProgress(1, chapterOneTracks);
+    chapterProgress(2, chapterTwoTracks);
 
-    list.innerHTML = '';
+    lists.forEach(list => { if (list) list.innerHTML = ''; });
     HISTORY_TRACKS_DB.forEach(track => {
+        const list = lists.get(Number(track.historyChapter) || 1);
+        if (!list) return;
         const isCompleted = completed.has(track.id);
-        const canPlay = unlocked.has(track.id) || isCompleted;
-        const isFinal = track.historyStage === HISTORY_TRACKS_DB.length;
+        const chapterUnlocked = Number(track.historyChapter) !== 2 || chapterTwoOpen;
+        const canPlay = chapterUnlocked && (unlocked.has(track.id) || isCompleted);
+        const chapterTracks = Number(track.historyChapter) === 2 ? chapterTwoTracks : chapterOneTracks;
+        const isFinal = Number(track.historyStage) === chapterTracks.length;
         const rewardMarkup = getHistoryRewardMarkup(track);
         const card = document.createElement('article');
         card.className = `history-stage-card${isCompleted ? ' is-completed' : ''}${canPlay ? ' is-open' : ' is-locked'}`;
@@ -2287,9 +2407,9 @@ function updateHistoryUI() {
             <p>${escapeHTML(track.historyFeature)}</p>
             <div class="history-stage-rewards">${rewardMarkup}</div>
             <button type="button" class="history-stage-play" ${canPlay ? '' : 'disabled'}>
-                ${canPlay ? (isCompleted ? 'Переиграть' : 'Начать этап') : 'Сначала пройди прошлый этап'}
+                ${canPlay ? (isCompleted ? 'Переиграть' : 'Начать этап') : !chapterUnlocked ? 'Сначала пройди главу I' : 'Сначала пройди прошлый этап'}
             </button>
-            ${isFinal ? '<span class="history-final-mark">ФИНАЛ · ДРЕЗ НА ДРЕЗИНЕ</span>' : ''}
+            ${isFinal ? `<span class="history-final-mark">ФИНАЛ · ${Number(track.historyChapter) === 2 ? 'ВЕЛОЦИПЕД МАКМИЛЛАНА' : 'ЛАУФМАШИНА ДРЕЗА'}</span>` : ''}
         `;
         card.querySelector('.history-stage-play')?.addEventListener('click', () => {
             if (!canPlay) return;
@@ -2299,6 +2419,9 @@ function updateHistoryUI() {
         });
         list.appendChild(card);
     });
+    const chapterTwoLock = document.getElementById('history-chapter-2-lock');
+    if (chapterTwoLock) chapterTwoLock.hidden = chapterTwoOpen;
+    if (addedChapterTwoUnlock) void forceSavePlayerState();
 }
 
 function grantGuaranteedPart(rarity) {
@@ -2639,7 +2762,12 @@ async function handleHistoryRaceEnd(win, reason = 'finish') {
         player.totalWins = (Number(player.totalWins) || 0) + 1;
         if (isFirstVictory) {
             player.historyCompletedStages.push(track.id);
-            const nextTrack = HISTORY_TRACKS_DB[track.historyStage];
+            const chapter = Number(track.historyChapter) || 1;
+            const nextTrack = HISTORY_TRACKS_DB.find(item =>
+                Number(item.historyChapter) === chapter && Number(item.historyStage) === Number(track.historyStage) + 1
+            ) || HISTORY_TRACKS_DB.find(item =>
+                Number(item.historyChapter) === chapter + 1 && Number(item.historyStage) === 1
+            );
             if (nextTrack && !player.historyUnlockedStages.includes(nextTrack.id)) {
                 player.historyUnlockedStages.push(nextTrack.id);
             }
@@ -2659,14 +2787,19 @@ async function handleHistoryRaceEnd(win, reason = 'finish') {
                 prizes.push(part.name);
             });
 
-            bonusText = `Победа! Первый проход этапа.<br>Получено: ${prizes.map(escapeHTML).join(', ') || 'награда уже была получена'}.`;
+            const chapterUnlockText = chapter === 1 && Number(track.historyStage) === 5
+                ? '<br><br>Открыта глава II: первые педали и рычажный велосипед Макмиллана.'
+                : chapter === 2 && Number(track.historyStage) === 5
+                    ? '<br><br>Глава о первых педалях завершена. В мастерской теперь доступны рама и рычажные педали Макмиллана.'
+                    : '';
+            bonusText = `Победа! Первый проход этапа.<br>Получено: ${prizes.map(escapeHTML).join(', ') || 'награда уже была получена'}.${chapterUnlockText}`;
         } else {
             bonusText = 'Победа! Награда за этот этап уже получена, но его можно проходить снова.';
         }
     } else if (reason === 'stability-flip') {
         bonusText = 'Поражение. Велосипед перевернулся после удара из-за низкой стабильности. Попробуй объехать препятствие или перепрыгнуть его.';
     } else if (reason === 'hard-landing') {
-        bonusText = 'Поражение. Дрез не удержал Laufmaschine после жёсткого приземления.';
+        bonusText = `Поражение. ${Number(track.historyChapter) === 2 ? 'Макмиллан' : 'Дрез'} не удержал велосипед после жёсткого приземления.`;
     } else if (reason === 'pit') {
         bonusText = 'Поражение. Ты провалился в яму или сорвался с обрыва. Перепрыгивай опасный участок.';
     } else {
@@ -2970,6 +3103,8 @@ setupButton('btn-accelerate', () => setAccelerating(true), () => setAccelerating
 setupButton('btn-brake', () => setBraking(true), () => setBraking(false));
 setupButton('btn-reverse', () => setReversing(true), () => setReversing(false));
 setupButton('btn-jump', () => triggerJump(), () => {});
+setupButton('btn-motor-boost', () => activateNitroBoost(), () => {});
+setupButton('btn-pedal-burst', () => activateMacmillanBurst(), () => {});
 
 window.addEventListener('keydown', event => {
     const raceScreen = document.getElementById('screen-race');
@@ -2996,6 +3131,16 @@ window.addEventListener('keydown', event => {
     ) {
         event.preventDefault();
         triggerJump();
+    }
+
+    if (event.code === 'KeyG' && !event.repeat) {
+        event.preventDefault();
+        activateNitroBoost();
+    }
+
+    if (event.code === 'KeyE' && !event.repeat) {
+        event.preventDefault();
+        activateMacmillanBurst();
     }
 });
 

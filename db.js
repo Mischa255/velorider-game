@@ -40,18 +40,19 @@ const part = (
         partData.stability = visuals.stability;
     }
     if (power) partData.power = power;
-    const legendaryAbilities = {
+    const partAbilities = {
         f3: { id: 'jekyllShield', name: 'Активная подвеска Jekyll', description: 'Раз за заезд смягчает первое столкновение с препятствием или спасает от жёсткого приземления.' },
         f9: { id: 'flowFrame', name: 'Трассовый баланс', description: 'На льду и сильном ветре теряется на 15% меньше скорости.' },
         f10: { id: 'landingFrame', name: 'Мягкая посадка', description: 'После успешного прыжка кратко ускоряет велосипед. Срабатывает не чаще раза в 5 секунд.' },
-        e4: { id: 'nitro', name: 'Импульсный разгон', description: 'Дважды нажми газ, чтобы включить нитро: скорость и разгон повышаются на 2 секунды. Перезарядка — 8 секунд.' },
-        e5: { id: 'nitro', name: 'Импульсный разгон', description: 'Дважды нажми газ, чтобы включить нитро: скорость и разгон повышаются на 2 секунды. Перезарядка — 8 секунд.' },
+        e4: { id: 'nitro', name: 'Импульсный разгон', description: 'Нажми кнопку G, чтобы включить нитро: скорость и разгон повышаются на 2 секунды. Перезарядка — 8 секунд.' },
+        e5: { id: 'nitro', name: 'Импульсный разгон', description: 'Нажми кнопку G, чтобы включить нитро: скорость и разгон повышаются на 2 секунды. Перезарядка — 8 секунд.' },
         fk8: { id: 'superJump', name: 'Пружинный прыжок', description: 'Прыжок становится на 35% выше и дольше держит велосипед в воздухе.' },
         f14: { id: 'fallResistance', name: 'Устойчивость к падениям', description: 'Не позволяет раме перевернуться и проиграть из-за удара, низкой стабильности или жёсткой посадки.' },
         ti5: { id: 'mudGrip', name: 'Грязевой протектор', description: 'В грязи и воде теряется на 20% меньше скорости.' },
-        b7: { id: 'impactBrake', name: 'Контроль торможения', description: 'После столкновения замедление длится на 15% меньше.' }
+        b7: { id: 'impactBrake', name: 'Контроль торможения', description: 'После столкновения замедление длится на 15% меньше.' },
+        pd6: { id: 'macmillanBurst', name: 'Рычажный рывок', description: 'Нажми кнопку E на земле: велосипед мгновенно разгонится до разрешённой максимальной скорости. Три заряда за гонку.' }
     };
-    if (legendaryAbilities[id]) partData.ability = legendaryAbilities[id];
+    if (partAbilities[id]) partData.ability = partAbilities[id];
     const couponPrice = WEAKER_LEGENDARY_COUPON_PRICES[id];
     if (rarity === 'legendary' && !partData.ability && Number.isFinite(couponPrice) && couponPrice >= 30) {
         partData.couponPrice = couponPrice;
@@ -88,7 +89,8 @@ export const ITEMS_DB = {
         // Легендарные двухподвесы используют тот же штраф с округлением вниз.
         part('f3', 'Cannondale Jekyll Carbon', 'legendary', 4, 3, 8, 4, 5600, 0, { color: '#22c55e', width: 15, type: 'dh', stability: 26 }),
         part('f13', 'Specialized Stumpjumper EVO Carbon', 'legendary', 6, 4, 11, 6, 7000, 0, { color: '#f97316', width: 16, type: 'dh', stability: 27 }),
-        part('f14', 'Laufmaschine Карла Дреза', 'special', 0, 0, 0, 0, 0, 0, { color: '#9a6538', width: 12, type: 'hardtail', stability: 1, specialHistoryFrame: true })
+        part('f14', 'Laufmaschine Карла Дреза', 'special', 0, 0, 0, 0, 0, 0, { color: '#9a6538', width: 12, type: 'hardtail', stability: 1, specialHistoryFrame: true }),
+        part('f15', 'Педальный велоципед Макмиллана', 'special', 4, 3, 3, 2, 0, 0, { color: '#8b5a2b', width: 12, type: 'hardtail', stability: 22, specialMacmillanFrame: true })
     ],
 
     // =====================================
@@ -194,6 +196,7 @@ export const ITEMS_DB = {
         part('b3', 'Shimano MT200 Hydraulic', 'rare', 0, 0, 0, 6, 600),
         part('b4', 'Shimano Deore M6100', 'rare', 0, 0, 0, 8, 1000),
         part('b5', 'Shimano SLX M7100', 'rare', 0, 0, 0, 9, 1300),
+        part('b9', 'Avid BB5', 'rare', 0, 0, 0, 6, 1700),
         part('b6', 'Shimano Deore XT M8120', 'legendary', 0, 0, 0, 12, 2000),
         part('b7', 'Shimano XTR M9120', 'legendary', 0, 0, 0, 15, 2800),
         part('b8', 'SRAM Code RSC', 'legendary', 0, 0, 0, 14, 2600)
@@ -258,7 +261,8 @@ export const ITEMS_DB = {
         part('hb3', 'Giant Connect Trail 780 мм', 'rare', 2, 3, 3, 2, 500, 0, { color: '#cbd5e1', width: 2.1 }),
         part('hb4', 'Race Face Chester', 'rare', 3, 4, 4, 2, 850, 0, { color: '#ef4444', width: 2.1 }),
         part('hb5', 'Renthal Fatbar Carbon', 'legendary', 5, 5, 6, 3, 1800, 0, { color: '#d97706', width: 2.5 }),
-        part('hb6', 'Деревянный руль Дреза', 'special', 0, 0, 0, 0, 0, 0, { color: '#9a6538', width: 1.6 })
+        part('hb6', 'Деревянный руль Дреза', 'special', 0, 0, 0, 0, 0, 0, { color: '#9a6538', width: 1.6 }),
+        part('hb7', 'Кованый руль Макмиллана', 'special', 2, 3, 2, 1, 0, 0, { color: '#8b5a2b', width: 1.7 })
     ],
 
     // =====================================
@@ -269,7 +273,8 @@ export const ITEMS_DB = {
         part('st2', 'Alloy Ahead 60 mm', 'common', 1, 2, 1, 0, 200),
         part('st3', 'Race Face Ride', 'rare', 2, 3, 2, 0, 450),
         part('st4', 'Race Face Turbine', 'legendary', 4, 5, 3, 0, 1000),
-        part('st5', 'Деревянный вынос Дреза', 'special', 0, 0, 0, 0, 0, 0, { color: '#9a6538' })
+        part('st5', 'Деревянный вынос Дреза', 'special', 0, 0, 0, 0, 0, 0, { color: '#9a6538' }),
+        part('st6', 'Короткий кованый вынос Макмиллана', 'special', 1, 2, 1, 0, 0, 0, { color: '#8b5a2b' })
     ],
 
     // =====================================
@@ -281,7 +286,8 @@ export const ITEMS_DB = {
         part('sa3', 'Specialized Bridge Sport', 'rare', 2, 2, 3, 0, 500, 0, { color: '#ef4444' }),
         part('sa4', 'WTB Volt', 'rare', 3, 3, 4, 0, 750, 0, { color: '#f8fafc' }),
         part('sa5', 'Fizik Terra Argo X3', 'legendary', 5, 4, 6, 0, 1400, 0, { color: '#f59e0b' }),
-        part('sa6', 'Кожаное седло Дреза', 'special', 0, 0, 0, 0, 0, 0, { color: '#5b3824' })
+        part('sa6', 'Кожаное седло Дреза', 'special', 0, 0, 0, 0, 0, 0, { color: '#5b3824' }),
+        part('sa7', 'Кожаное седло Макмиллана', 'special', 2, 2, 3, 0, 0, 0, { color: '#60452f' })
     ],
 
     // =====================================
@@ -302,7 +308,8 @@ export const ITEMS_DB = {
         part('pd2', 'Aluminium Platform', 'common', 1, 2, 2, 0, 250),
         part('pd3', 'Shimano PD-M520', 'rare', 2, 3, 3, 0, 450),
         part('pd4', 'Race Face Chester', 'rare', 3, 4, 4, 0, 650),
-        part('pd5', 'Crankbrothers Mallet E', 'legendary', 5, 6, 6, 0, 1300)
+        part('pd5', 'Crankbrothers Mallet E', 'legendary', 5, 6, 6, 0, 1300),
+        part('pd6', 'Рычажные педали Макмиллана', 'special', 2, 3, 3, 0, 0, 0, { color: '#8b5a2b', macmillanTreadles: true })
     ],
 
     // =====================================
@@ -690,7 +697,7 @@ export const TRACKS_DB = [
 
 export const HISTORY_TRACKS_DB = [
     {
-        id: 'h1', historyStage: 1, isHistory: true, musicTheme: '1h1',
+        id: 'h1', historyChapter: 1, historyStage: 1, isHistory: true, musicTheme: '1h1',
         name: 'Первые метры · Мангейм', year: '1817', opponent: 'Макс',
         historyFeature: 'Булыжная дорожка замедляет наезд; небольшой трамплин позволяет перепрыгнуть её.',
         length: 15000, hills: 12, botMaxSpeed: 4, botAccel: 0.05,
@@ -699,7 +706,7 @@ export const HISTORY_TRACKS_DB = [
         historyRewards: [{ type: 'coupons', amount: 5 }]
     },
     {
-        id: 'h2', historyStage: 2, isHistory: true, musicTheme: '1h2',
+        id: 'h2', historyChapter: 1, historyStage: 2, isHistory: true, musicTheme: '1h2',
         name: 'Дорога к Шветцингену', year: '1817', opponent: 'Макс',
         historyFeature: 'Корни и лужи сбивают темп; невысокие ветки можно перепрыгнуть.',
         length: 15000, hills: 15, botMaxSpeed: 4, botAccel: 0.05,
@@ -708,7 +715,7 @@ export const HISTORY_TRACKS_DB = [
         historyRewards: [{ category: 'handlebars', id: 'hb6' }]
     },
     {
-        id: 'h3', historyStage: 3, isHistory: true, musicTheme: '1h3',
+        id: 'h3', historyChapter: 1, historyStage: 3, isHistory: true, musicTheme: '1h3',
         name: 'Аллея и деревянный мост', year: '1817', opponent: 'Макс',
         historyFeature: 'Узкий деревянный настил проходится на скорости, а бревно лучше перепрыгнуть.',
         length: 15000, hills: 18, botMaxSpeed: 4, botAccel: 0.05,
@@ -717,7 +724,7 @@ export const HISTORY_TRACKS_DB = [
         historyRewards: [{ category: 'wheels', id: 'w7' }]
     },
     {
-        id: 'h4', historyStage: 4, isHistory: true, musicTheme: '1h4',
+        id: 'h4', historyChapter: 1, historyStage: 4, isHistory: true, musicTheme: '1h4',
         name: 'Парижский показ', year: '1818', opponent: 'Макс',
         historyFeature: 'Садовая калитка, короткие рампы, ямы и обрыв перед финишем напоминают о демонстрации в Люксембургском саду.',
         length: 15000, hills: 20, botMaxSpeed: 4, botAccel: 0.05,
@@ -729,7 +736,7 @@ export const HISTORY_TRACKS_DB = [
         ]
     },
     {
-        id: 'h5', historyStage: 5, isHistory: true, musicTheme: '1h5',
+        id: 'h5', historyChapter: 1, historyStage: 5, isHistory: true, musicTheme: '1h5',
         name: 'Заезд Карла Дреза', year: '1818', opponent: 'Карл Дрез',
         historyFeature: 'Финальный маршрут: ямы, лужи, камни, настил и обрыв у финиша. Соперник едет на Laufmaschine и отталкивается ногами.',
         length: 25000, hills: 30, botMaxSpeed: 6.5, botAccel: 0.08,
@@ -738,6 +745,64 @@ export const HISTORY_TRACKS_DB = [
         historyRewards: [
             { category: 'frames', id: 'f14' },
             { category: 'riders', id: 'r6' }
+        ]
+    },
+    {
+        id: 'm1', historyChapter: 2, historyStage: 1, isHistory: true, musicTheme: '2h1',
+        name: 'У кузницы Кейр-Милл', year: '1839', opponent: 'Макс и Лера',
+        historyFeature: 'Переход от ровной дорожки к булыжникам и деревянной переправе. Небольшой трамплин помогает перепрыгнуть бревно у кузницы.',
+        length: 25000, hills: 24, botMaxSpeed: 10, botAccel: 0.12,
+        botDifficultyTrackId: 't3', obstacles: 18,
+        obstacleTypes: ['cobblestones', 'plank_bridge', 'log', 'ramp', 'pit'],
+        signatureObstacleTypes: ['ramp', 'plank_bridge'],
+        winReward: 0, lossReward: 0, couponReward: 0,
+        historyRewards: [{ type: 'coupons', amount: 6 }]
+    },
+    {
+        id: 'm2', historyChapter: 2, historyStage: 2, isHistory: true, musicTheme: '2h2',
+        name: 'Крутой спуск к ручью', year: '1839', opponent: 'Макс и Лера',
+        historyFeature: 'Короткий крутой спуск сменяется ямой и узким мостом. Перед камнями лучше разогнаться и прыгнуть.',
+        length: 25000, hills: 30, botMaxSpeed: 10, botAccel: 0.12,
+        botDifficultyTrackId: 't3', obstacles: 18,
+        obstacleTypes: ['ramp', 'pit', 'rock', 'plank_bridge', 'water_splash', 'log'],
+        signatureObstacleTypes: ['ramp', 'water_splash'],
+        winReward: 0, lossReward: 0, couponReward: 0,
+        historyRewards: [{ category: 'stems', id: 'st6' }]
+    },
+    {
+        id: 'm3', historyChapter: 2, historyStage: 3, isHistory: true, musicTheme: '2h3',
+        name: 'Булыжная дорога в Дамфрис', year: '1840', opponent: 'Макс и Лера',
+        historyFeature: 'На длинных неровных участках чередуются булыжники, грязевые колеи и земляные трамплины. Прыжки помогают сохранить темп.',
+        length: 35000, hills: 42, botMaxSpeed: 10, botAccel: 0.12,
+        botDifficultyTrackId: 't3', obstacles: 30,
+        obstacleTypes: ['cobblestones', 'mud', 'ramp', 'pit', 'fallen_branch', 'rock'],
+        signatureObstacleTypes: ['cobblestones', 'ramp'],
+        winReward: 0, lossReward: 0, couponReward: 0,
+        historyRewards: [{ category: 'saddles', id: 'sa7' }]
+    },
+    {
+        id: 'm4', historyChapter: 2, historyStage: 4, isHistory: true, musicTheme: '2h4',
+        name: 'Деревянные мостки', year: '1840', opponent: 'Макс и Лера',
+        historyFeature: 'Маршрут ведёт с холма на скользкие доски, затем через каменную гряду. Два раздельных трамплина дают возможность выбрать момент для прыжка.',
+        length: 35000, hills: 48, botMaxSpeed: 10, botAccel: 0.12,
+        botDifficultyTrackId: 't3', obstacles: 30,
+        obstacleTypes: ['plank_bridge', 'pit', 'ramp', 'rock', 'cobblestones', 'log', 'wooden_gate'],
+        signatureObstacleTypes: ['plank_bridge', 'ramp', 'wooden_gate'],
+        winReward: 0, lossReward: 0, couponReward: 0,
+        historyRewards: [{ category: 'handlebars', id: 'hb7' }]
+    },
+    {
+        id: 'm5', historyChapter: 2, historyStage: 5, isHistory: true, musicTheme: '2h5',
+        name: 'Испытание Макмиллана', year: '1840', opponent: 'Киркпатрик Макмиллан',
+        historyFeature: 'Финальный путь соединяет кузницу, ручей и каменистый подъём. Макмиллан едет на деревянном велоципеде с задним приводом от рычажных педалей.',
+        length: 35000, hills: 55, botMaxSpeed: 10, botAccel: 0.12,
+        botDifficultyTrackId: 't3', obstacles: 30,
+        obstacleTypes: ['cobblestones', 'plank_bridge', 'pit', 'ramp', 'rock', 'water_splash', 'log', 'mud'],
+        signatureObstacleTypes: ['plank_bridge', 'ramp', 'mud'],
+        winReward: 0, lossReward: 0, couponReward: 0,
+        historyRewards: [
+            { category: 'frames', id: 'f15' },
+            { category: 'pedals', id: 'pd6' }
         ]
     }
 ];
