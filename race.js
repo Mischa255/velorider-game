@@ -448,6 +448,16 @@ function isTouchingObstacle(bike, obstacle) {
         bikeLeft <= obstacle.x + obstacle.width;
 }
 
+function ensureBotHitMap(obstacle) {
+    if (obstacle.botHitBy instanceof Map) return obstacle.botHitBy;
+
+    const previousHits = obstacle.botHitBy instanceof Set
+        ? [...obstacle.botHitBy]
+        : [];
+    obstacle.botHitBy = new Map(previousHits.map(botIndex => [botIndex, frameCounter]));
+    return obstacle.botHitBy;
+}
+
 function getGapClearanceHeight(obstacle) {
     return Math.max(22, Number(obstacle?.height) * 0.75 || 0);
 }
@@ -1186,10 +1196,14 @@ function startJump(bike, force, gravity = GRAVITY) {
     if (!bike || !bike.grounded) return false;
 
     const groundY = getGroundY(bike.x, 0);
-    const prevGroundY = getGroundY(bike.previousX ?? bike.x, 0);
+    const travelDirection = Math.abs(Number(bike.velocityX) || 0) > 0.1
+        ? Math.sign(bike.velocityX)
+        : (!bike.isBot && input.reversing ? -1 : 1);
+    const forwardGroundY = getGroundY(bike.x + travelDirection * 18, 0);
 
-    // Плавный учет уклона рельефа при отрыве, чтобы не втыкаться в крутой подъем
-    const terrainSlopeVy = clamp((prevGroundY - groundY) * 0.35, -1.5, 2.5);
+    // Оцениваем уклон прямо впереди, чтобы медленный разгон в подъём не
+    // обнулял помощь при отрыве. На спуске поправка остаётся ограниченной.
+    const terrainSlopeVy = clamp((groundY - forwardGroundY) * 0.22, -1.2, 3.2);
 
     bike.grounded = false;
 
@@ -1720,27 +1734,22 @@ function updateBotPhysics(bike) {
     const botFrontY = getGroundY(bike.x + botWheelBase, 0);
     const botBackY = getGroundY(bike.x - botWheelBase, 0);
     const botSlope = (botBackY - botFrontY) / (botWheelBase * 2);
-    if (bike.grounded && botSlope > 0.035) {
-        const hillLoad = clamp((botSlope - 0.035) / 0.2, 0, 1);
+    if (bike.grounded && botSlope > 0.04) {
         const requiredPower = botSlope * 165;
         const powerRatio = (Math.max(0, Number(bike.botBasePower) || 0) + 6) /
             Math.max(10, requiredPower);
-        const powerDeficit = clamp(1 - powerRatio, 0, 0.55);
-        const hillSpeedPenalty = hillLoad * (0.035 + powerDeficit * 0.16);
-        const hillDrag = Math.min(
-            baseAcceleration * 0.65,
-            botSlope * (0.018 + powerDeficit * 0.045)
-        );
+        const powerDeficit = clamp(1 - powerRatio, 0, 0.5);
+        const powerSpeedPenalty = powerDeficit * 0.035;
+        const hillDrag = botSlope * 0.08 + baseAcceleration * powerDeficit * 0.18;
 
-        // Мощность влияет на подъём, но ограниченный штраф не даёт боту
-        // остановиться или откатиться даже на крутых участках.
-        bike.velocityX = Math.max(0.35, bike.velocityX - hillDrag);
-        bike.velocityX -= Math.min(
-            baseAcceleration * 0.28,
-            baseAcceleration * powerDeficit * 0.42 * hillLoad
+        // Возвращаем базовое сопротивление склону; мощность добавляет лишь
+        // небольшой штраф при нехватке тяги, не меняя общий темп ботов резко.
+        bike.velocityX = Math.max(0.4, bike.velocityX - hillDrag);
+        const slopeSpeedLimit = Math.max(
+            0.6,
+            maxSpeed * (1 - botSlope * 1.5 - powerSpeedPenalty)
         );
-        bike.velocityX = Math.max(0.35, bike.velocityX);
-        allowedSpeed = Math.min(allowedSpeed, Math.max(0.6, maxSpeed * (1 - hillSpeedPenalty)));
+        allowedSpeed = Math.min(allowedSpeed, slopeSpeedLimit);
     } else if (bike.grounded && botSlope < -0.04) {
         bike.velocityX += Math.min(0.05, Math.abs(botSlope) * 0.04);
     }
@@ -1964,14 +1973,15 @@ function applyBotImpact(
     speedFactor = 0.5,
     duration = 34
 ) {
-    const previousHitFrame = obstacle.botHitBy.get(bike.botIndex);
+    const botHitBy = ensureBotHitMap(obstacle);
+    const previousHitFrame = botHitBy.get(bike.botIndex);
     if (REPEATING_GROUND_HAZARDS.has(obstacle.type)) {
         if (previousHitFrame !== undefined &&
             frameCounter - previousHitFrame < GROUND_HAZARD_REHIT_FRAMES) return;
-        obstacle.botHitBy.set(bike.botIndex, frameCounter);
+        botHitBy.set(bike.botIndex, frameCounter);
     } else {
         if (previousHitFrame !== undefined) return;
-        obstacle.botHitBy.set(bike.botIndex, frameCounter);
+        botHitBy.set(bike.botIndex, frameCounter);
     }
 
     bike.impactSlowTimer = duration;
@@ -2025,9 +2035,10 @@ function applyBotImpact(
 function updateBotCollisions(bike) {
     const collisionHalfWidth = getBikeObstacleHalfWidth(bike);
     for (const obstacle of obstacles) {
-        if (obstacle.botHitBy.has(bike.botIndex) &&
+        const botHitBy = ensureBotHitMap(obstacle);
+        if (botHitBy.has(bike.botIndex) &&
             !isTouchingObstacle(bike, obstacle)) {
-            obstacle.botHitBy.delete(bike.botIndex);
+            botHitBy.delete(bike.botIndex);
         }
         if (
             obstacle.x + obstacle.width <

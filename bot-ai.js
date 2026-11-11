@@ -173,8 +173,8 @@ function approachRock(bike, maxSpeed, obstacles, bikeWidth, racePressure) {
     const front = bike.x + bikeWidth * 0.35;
     const rock = obstacles.find(obstacle =>
         obstacle.type === 'rock' &&
-        !obstacle.botHitBy.has(bike.botIndex) &&
-        obstacle.x + obstacle.width >= front - 8
+        !obstacle.botHitBy?.has?.(bike.botIndex) &&
+        obstacle.x > front
     );
     if (!rock) return false;
 
@@ -184,7 +184,9 @@ function approachRock(bike, maxSpeed, obstacles, bikeWidth, racePressure) {
         55,
         110
     );
-    if (distance > brakingDistance || distance < -rock.width) return false;
+    // Это именно торможение перед камнем. После того как переднее колесо
+    // дошло до него, решение больше не должно замедлять бота после удара.
+    if (distance > brakingDistance) return false;
 
     const stabilityRatio = clamp(Number(bike.stability) || 0, 0, 100) / 100;
     const riskAdjustedLimit = clamp(
