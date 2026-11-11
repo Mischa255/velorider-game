@@ -135,6 +135,18 @@ export function isTimedObstacleActive(obstacle, frameCounter) {
     return getTimedObstaclePulse(obstacle, frameCounter) > threshold;
 }
 
+function getBotObstacleDecisionX(obstacle) {
+    const motionAmplitude = Math.abs(Number(obstacle?.motionAmplitude) || 0);
+    const stableX = Number(obstacle?.aiSeedX ?? obstacle?.baseX);
+    if (motionAmplitude > 0 && Number.isFinite(stableX)) {
+        // Реагируем по ближайшей точке полного хода. Колесо может откатиться
+        // назад, поэтому динамическая координата не должна отменять уже
+        // начатую подготовку бота к прыжку.
+        return stableX - motionAmplitude;
+    }
+    return Number(obstacle?.x) || 0;
+}
+
 function shouldBotJumpObstacle(bike, obstacle, frameCounter, racePressure = 0) {
     if (BOT_GAP_JUMP_TYPES.has(obstacle.type)) return true;
 
@@ -183,7 +195,7 @@ function findBotJumpTarget(bike, obstacles, frameCounter, bikeWidth, racePressur
 
     return obstacles.find(obstacle =>
         shouldBotJumpObstacle(bike, obstacle, frameCounter, racePressure) &&
-        obstacle.x + obstacle.width >= front - 8 &&
+        getBotObstacleDecisionX(obstacle) + obstacle.width >= front - 8 &&
         !obstacle.botJumpAttemptedBy.has(bike.botIndex)
     ) || null;
 }
@@ -250,7 +262,7 @@ export function updateBotDrivingDecision(bike, context) {
     if (!obstacle) return;
 
     const front = bike.x + bikeWidth * 0.35;
-    const distance = obstacle.x - front;
+    const distance = getBotObstacleDecisionX(obstacle) - front;
     const speed = Math.max(1.2, bike.velocityX);
     const mandatoryGap = BOT_GAP_JUMP_TYPES.has(obstacle.type);
     const reactionDistance = mandatoryGap
@@ -261,8 +273,13 @@ export function updateBotDrivingDecision(bike, context) {
     // Разрывы обязательны для прыжка. Если бот приземлился уже у самого края,
     // он всё равно делает поздний спасательный прыжок, пока препятствие ещё
     // не прошло передним колесом. Обычные препятствия сохраняют прежний порог.
-    if (distance > reactionDistance ||
-        (!mandatoryGap && distance < -bikeWidth * 0.2)) {
+    const gapRescueEnd = -Math.max(1, obstacle.width * 0.8);
+    const passedGapRescuePoint = mandatoryGap && distance < gapRescueEnd;
+    if (passedGapRescuePoint) {
+        brain.state = 'cruising';
+        return;
+    }
+    if (distance > reactionDistance || (!mandatoryGap && distance < -bikeWidth * 0.2)) {
         brain.state = distance <= reactionDistance * 1.5 ? 'preparing-jump' : brain.state;
         return;
     }

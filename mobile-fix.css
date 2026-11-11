@@ -1498,8 +1498,8 @@
 
     html.touch-device #race-exit-button {
         position: fixed !important;
-        top: auto !important;
-        bottom: calc(148px + env(safe-area-inset-bottom, 0px)) !important;
+        top: max(8px, env(safe-area-inset-top, 0px)) !important;
+        bottom: auto !important;
         left: max(12px, env(safe-area-inset-left, 0px)) !important;
         z-index: 10080 !important;
     }

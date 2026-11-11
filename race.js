@@ -1,6 +1,7 @@
 import { beginAutosaveBatch, endAutosaveBatch, player } from './state.js';
 import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js';
 import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js';
+import { buildTerrainRoute, sampleTerrainOffset } from './terrain.js';
 import { playCoinSound, playBoostSound } from './audio.js';
 import {
     createBotBrain,
@@ -41,6 +42,7 @@ const RACE_ZOOM_MOBILE_LANDSCAPE = 0.56;
 const LANDING_FLOW_DURATION_FRAMES = 22;
 const LANDING_FLOW_COOLDOWN_FRAMES = 105;
 const LANDING_FLOW_CHAIN_FRAMES = 240;
+const LANDING_FLOW_TIP_DURATION_FRAMES = 360;
 const LANDING_FLOW_MAX_STREAK = 3;
 const LANDING_FLOW_BASE_BONUS = 0.16;
 const LANDING_FLOW_STREAK_BONUS = 0.035;
@@ -219,6 +221,8 @@ let callbackOnRaceEnd = null;
 let currentTrack = null;
 let finishX = 0;
 let cameraX = 0;
+let terrainSegments = [];
+let terrainBigAirSetPieces = [];
 let obstacles = [];
 let trackSurfaceSamples = [];
 let frameCounter = 0;
@@ -402,36 +406,8 @@ function getTrackPalette() {
 
 function getGroundY(worldX, laneOffset = 0) {
     const base = viewHeight * 0.72 + laneOffset;
-    const profile = getTrackTerrain();
-    const amplitude = profile.amplitude;
-
-    const longWave =
-        Math.sin(worldX * profile.longFrequency + profile.phase) *
-        amplitude;
-
-    const shortWave =
-        Math.sin(worldX * profile.shortFrequency + profile.phase * 1.7) *
-        (amplitude * 0.28);
-
-    const ridgeWave =
-        Math.sin(worldX * profile.longFrequency * 2.3 + profile.phase);
-
-    const sharperRidges =
-        Math.sign(ridgeWave) *
-        Math.pow(Math.abs(ridgeWave), 2.2) *
-        amplitude *
-        profile.ridge;
-
-    const tinyWave =
-        Math.sin(worldX * 0.008 + profile.phase) *
-        profile.micro;
-
-    const trailChop =
-        Math.sin(worldX * profile.shortFrequency * 1.9 + profile.phase * 2.4) *
-        amplitude * (profile.chop || 0);
-
     return clamp(
-        base + longWave + shortWave + sharperRidges + tinyWave + trailChop,
+        base + sampleTerrainOffset(terrainSegments, worldX),
         viewHeight * 0.45,
         viewHeight * 0.88
     );
@@ -495,6 +471,96 @@ function ensureBotHitMap(obstacle) {
         : [];
     obstacle.botHitBy = new Map(previousHits.map(botIndex => [botIndex, frameCounter]));
     return obstacle.botHitBy;
+}
+
+function createRouteObstacle(type, x, id, overrides = {}) {
+    const definition = OBSTACLE_TYPES[type];
+    if (!definition) return null;
+    return {
+        id,
+        type,
+        x,
+        baseX: x,
+        aiSeedX: x,
+        width: definition.width,
+        height: definition.height,
+        color: definition.color,
+        phase: Math.random() * Math.PI * 2,
+        motionAmplitude: type === 'rolling_boulder' ? 22 : type === 'rolling_wheel' ? 30 : 0,
+        motionSpeed: type === 'rolling_boulder' ? 0.024 : 0.032,
+        playerHit: false,
+        botHitBy: new Map(),
+        botJumpAttemptedBy: new Set(),
+        playerRampUsed: false,
+        botRampUsedBy: new Set(),
+        ...overrides
+    };
+}
+
+function addBigAirSetPieces(generated) {
+    if (currentTrack?.isHistory || currentTrackLevel < 5 || !terrainBigAirSetPieces.length) return;
+
+    for (const piece of terrainBigAirSetPieces) {
+        const rampX = Math.round(piece.rampX);
+        const pitX = Math.round(piece.pitX);
+        if (rampX < 700 || pitX + piece.pitWidth > finishX - 700) continue;
+
+        const protectedStart = rampX - 75;
+        const protectedEnd = pitX + piece.pitWidth + 95;
+        for (let index = generated.length - 1; index >= 0; index--) {
+            const obstacle = generated[index];
+            if (obstacle.x + obstacle.width > protectedStart && obstacle.x < protectedEnd) {
+                generated.splice(index, 1);
+            }
+        }
+
+        const ramp = createRouteObstacle('ramp', rampX, piece.id + '-ramp');
+        const pit = createRouteObstacle('pit', pitX, piece.id + '-gap', {
+            width: piece.pitWidth,
+            height: Math.max(OBSTACLE_TYPES.pit.height, 22)
+        });
+        if (ramp) generated.push(ramp);
+        if (pit) generated.push(pit);
+    }
+}
+
+function addApproachRampsToHazards(generated) {
+    if (currentTrack?.isHistory) return;
+    const hazards = generated.filter(obstacle => ['pit', 'mud'].includes(obstacle.type));
+
+    for (const hazard of hazards) {
+        const alreadyLinked = generated.some(obstacle => {
+            if (obstacle.type !== 'ramp' || obstacle.x >= hazard.x) return false;
+            const gapAfterRamp = hazard.x - (obstacle.x + obstacle.width);
+            return gapAfterRamp >= 35 && gapAfterRamp <= 245;
+        });
+        if (alreadyLinked) continue;
+
+        const rampWidth = OBSTACLE_TYPES.ramp.width;
+        const candidateOffsets = [185, 225, 265, 305];
+        let rampX = null;
+        for (const offset of candidateOffsets) {
+            const candidate = hazard.x - offset;
+            if (candidate < 700) continue;
+            const hasConflict = generated.some(obstacle =>
+                obstacle.id !== hazard.id &&
+                candidate - 38 < obstacle.x + obstacle.width &&
+                candidate + rampWidth + 38 > obstacle.x
+            );
+            if (!hasConflict) {
+                rampX = candidate;
+                break;
+            }
+        }
+        if (rampX === null) continue;
+
+        const ramp = createRouteObstacle(
+            'ramp',
+            Math.round(rampX),
+            `${hazard.id}-approach-ramp`
+        );
+        if (ramp) generated.push(ramp);
+    }
 }
 
 function getGapClearanceHeight(obstacle) {
@@ -654,6 +720,9 @@ function createObstacles() {
         });
         previousRight = x + definition.width;
     }
+
+    addBigAirSetPieces(generated);
+    addApproachRampsToHazards(generated);
 
     // На последних двух исторических этапах обрыв стоит гарантированно
     // прямо перед финишем, отдельно от случайного набора препятствий.
@@ -877,6 +946,7 @@ function createBike(isBot = false, botIndex = 1) {
         jumpHeight: 0,
         jumpVelocity: 0,
         jumpGravity: GRAVITY,
+        airborneFrames: 0,
         airY: null,
         grounded: true,
         pitchAngle: 0,
@@ -921,6 +991,8 @@ function createBike(isBot = false, botIndex = 1) {
         landingFlowTimer: 0,
         landingFlowStreak: 0,
         landingFlowChainTimer: 0,
+        landingFlowTipTimer: 0,
+        landingFlowTipShown: false,
         jumpLaunchSpeed: 0,
         draftingStrength: 0,
         draftNoticeCooldown: 0,
@@ -1234,6 +1306,7 @@ function updateJumpPhysics(bike) {
     if (bike.landingFlowCooldown > 0) bike.landingFlowCooldown--;
     if (bike.landingFlowTimer > 0) bike.landingFlowTimer--;
     if (bike.landingFlowChainTimer > 0) bike.landingFlowChainTimer--;
+    if (bike.landingFlowTipTimer > 0) bike.landingFlowTipTimer--;
 
     const stabilityRatio = getBikeStabilityRatio(bike);
     bike.pitchAngle = Number(bike.pitchAngle) || 0;
@@ -1273,6 +1346,7 @@ function updateJumpPhysics(bike) {
     }
 
     if (bike.grounded) {
+        bike.airborneFrames = 0;
         bike.airY = null;
         return;
     }
@@ -1286,12 +1360,27 @@ function updateJumpPhysics(bike) {
     // Двигаем байк по честной баллистической параболе в мировых координатах
     bike.airY -= bike.jumpVelocity;
     bike.jumpVelocity -= bike.jumpGravity || GRAVITY;
+    bike.airborneFrames = (Number(bike.airborneFrames) || 0) + 1;
 
     // Высота над текущей точкой рельефа (используется для коллизий и отрисовки)
     bike.jumpHeight = groundY - bike.airY;
 
-    // Приземление, когда траектория пересекла линию рельефа
-    if (bike.jumpHeight <= 0) {
+    // На крутом подъёме земля может на один кадр пересечь траекторию,
+    // пока байк ещё поднимается. Такое касание не должно запускать новый
+    // прыжок из буфера: удерживаем байк над поверхностью и ждём спуска.
+    const hasSafeLandingVelocity = bike.jumpVelocity <= -1.0;
+    const hasMinimumAirTime = bike.airborneFrames >= 4;
+    const canLand = hasMinimumAirTime && hasSafeLandingVelocity;
+
+    if (bike.jumpHeight <= 0 && !canLand) {
+        bike.jumpHeight = 1;
+        bike.airY = groundY - bike.jumpHeight;
+        bike.jumpBufferFrames = 0;
+        return;
+    }
+
+    // Приземление только после короткого отрыва и при движении вниз.
+    if (bike.jumpHeight <= 0 && canLand) {
         const landingSpeed = Math.max(0, -bike.jumpVelocity);
         const launchSpeed = Math.max(4, Number(bike.jumpLaunchSpeed) || 9);
         const frontY = getGroundY(bike.x + 25, 0);
@@ -1359,11 +1448,16 @@ function updateJumpPhysics(bike) {
                 bike.landingFlowStreak = Math.min(LANDING_FLOW_MAX_STREAK, previousStreak + 1);
                 bike.landingFlowChainTimer = LANDING_FLOW_CHAIN_FRAMES;
                 if (!bike.isBot) {
-                    const streakLabel = bike.landingFlowCooldown > 0
-                        ? `СЕРИЯ ПОСАДОК ×${bike.landingFlowStreak}`
-                        : bike.landingFlowStreak > 1
-                            ? `ПОТОК ×${bike.landingFlowStreak} · ЧИСТАЯ ПОСАДКА`
-                            : 'ЧИСТАЯ ПОСАДКА · ПОТОК';
+                    if (!bike.landingFlowTipShown) {
+                        bike.landingFlowTipShown = true;
+                        bike.landingFlowTipTimer = LANDING_FLOW_TIP_DURATION_FRAMES;
+                    }
+                    const flowReady = bike.landingFlowCooldown <= 0;
+                    const flowBonus = LANDING_FLOW_BASE_BONUS +
+                        Math.max(0, bike.landingFlowStreak - 1) * LANDING_FLOW_STREAK_BONUS;
+                    const streakLabel = flowReady
+                        ? `ЧИСТАЯ ПОСАДКА ×${bike.landingFlowStreak} · ТОЛЧОК +${flowBonus.toFixed(2)}`
+                        : `СЕРИЯ ЧИСТЫХ ПОСАДОК ×${bike.landingFlowStreak}`;
                     addFloatingText(bike.x, getGroundY(bike.x, 0) - 43, streakLabel, '#86efac');
                 }
                 if (bike.landingFlowCooldown <= 0) {
@@ -1400,6 +1494,7 @@ function startJump(bike, force, gravity = GRAVITY) {
     const terrainSlopeVy = clamp((groundY - forwardGroundY) * 0.22, -1.2, 3.2);
 
     bike.grounded = false;
+    bike.airborneFrames = 0;
 
     bike.jumpVelocity = Math.max(
         4,
@@ -1512,6 +1607,7 @@ function updateRamp(bike, isBot) {
             : Math.max(0, Number(player.totalJump) || 0);
 
         const extraJump = jumpStat * 0.045 * JUMP_STAT_FACTOR;
+        const rampJumpMultiplier = !isBot && bike.abilities?.superJumpUnlocked ? 1.15 : 1;
 
         bike.jumpHeight = Math.max(
             bike.rampLift,
@@ -1527,7 +1623,8 @@ function updateRamp(bike, isBot) {
 
         bike.rampLift = 0;
         bike.grounded = false;
-        bike.jumpVelocity = 12 + extraJump;
+        bike.airborneFrames = 0;
+        bike.jumpVelocity = (12 + extraJump) * rampJumpMultiplier;
         bike.jumpLaunchSpeed = bike.jumpVelocity;
 
         bike.jumpGravity = isBot && bike.abilities?.superJumpUnlocked
@@ -1538,7 +1635,8 @@ function updateRamp(bike, isBot) {
                     0.36,
                     0.38
                 )
-                : 0.36 + 0.02 * Math.exp(-(jumpStat * JUMP_STAT_FACTOR) / 7);
+                : (0.36 + 0.02 * Math.exp(-(jumpStat * JUMP_STAT_FACTOR) / 7)) *
+                    (bike.abilities?.superJumpUnlocked ? 0.98 : 1);
 
         bike.currentRamp = null;
     }
@@ -5921,6 +6019,33 @@ function drawRaceHUD() {
             y + rowBarHeight
         );
     }
+
+    if (playerBike?.landingFlowTipTimer > 0) {
+        const hintScale = mobileLayout ? uiScale : 1;
+        const hintY = panelY + panelHeight + 6 * hintScale;
+        const hintHeight = 34 * hintScale;
+        ctx.save();
+        ctx.fillStyle = 'rgba(6, 32, 29, .94)';
+        ctx.strokeStyle = 'rgba(134, 239, 172, .72)';
+        ctx.lineWidth = Math.max(1, hintScale);
+        ctx.beginPath();
+        if (typeof ctx.roundRect === 'function') {
+            ctx.roundRect(panelX, hintY, panelWidth, hintHeight, 7 * hintScale);
+        } else {
+            ctx.rect(panelX, hintY, panelWidth, hintHeight);
+        }
+        ctx.fill();
+        ctx.stroke();
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#bbf7d0';
+        ctx.font = `900 ${8.5 * hintScale}px Arial`;
+        ctx.fillText('ЧИСТАЯ ПОСАДКА → ПОТОК · СЕРИЯ ДО ×3', panelX + pad, hintY + 11 * hintScale);
+        ctx.fillStyle = '#f0fdf4';
+        ctx.font = `bold ${8 * hintScale}px Arial`;
+        ctx.fillText('Толчок до +0,23 · 22 кадра: +8% ускорение, +4% лимит скорости', panelX + pad, hintY + 24 * hintScale);
+        ctx.restore();
+    }
 }
 
 // =========================================
@@ -6041,6 +6166,23 @@ function render() {
     }
 }
 
+function getPredictedLandingWorldX(bike) {
+    if (!bike || bike.grounded) return Number(bike?.x) || 0;
+    const gravity = Math.max(0.12, Number(bike.jumpGravity) || GRAVITY);
+    const height = Math.max(0, Number(bike.jumpHeight) || 0);
+    const verticalSpeed = Number(bike.jumpVelocity) || 0;
+    const landingFrames = clamp(
+        (verticalSpeed + Math.sqrt(verticalSpeed * verticalSpeed + 2 * gravity * height)) / gravity,
+        0,
+        100
+    );
+    return clamp(
+        bike.x + (Number(bike.velocityX) || 0) * landingFrames,
+        0,
+        finishX
+    );
+}
+
 function updateRaceViewportTransform() {
     if (!ctx || !canvas) return;
 
@@ -6063,15 +6205,45 @@ function updateRaceViewportTransform() {
         : 0;
     const riderTopY = groundY - jumpHeight - 124;
     const safeTopY = Math.max(34, canvasCssHeight * 0.18) / zoom;
-    const targetVerticalOffset = Math.max(0, safeTopY - riderTopY);
+    let targetVerticalOffset = 0;
+    if (playerBike && !playerBike.grounded && !historyVictoryOutro) {
+        const landingX = getPredictedLandingWorldX(playerBike);
+        const landingY = getGroundY(landingX, 0);
+        const landingBottomMargin = Math.max(42, viewHeight * 0.08);
+        const safeBottomY = viewHeight - landingBottomMargin;
+        const bikeBottomY = groundY - jumpHeight + 18;
+        const bikeOffsetMin = Math.max(0, safeTopY - riderTopY);
+        const bikeOffsetMax = safeBottomY - bikeBottomY;
+        const landingOffsetMin = Math.max(0, safeTopY - landingY);
+        const landingOffsetMax = safeBottomY - landingY;
+        const sharedMin = Math.max(bikeOffsetMin, landingOffsetMin);
+        const sharedMax = Math.min(bikeOffsetMax, landingOffsetMax);
+
+        if (sharedMin <= sharedMax) {
+            // Когда вьюпорт позволяет, держим и райдера, и место посадки
+            // внутри безопасных полей одним общим сдвигом камеры.
+            targetVerticalOffset = clamp(bikeOffsetMin, sharedMin, sharedMax);
+        } else {
+            // При очень высокой дуге места физически не хватает для обеих
+            // целей. Камера плавно распределяет ошибку между ними, сохраняя
+            // читаемость велосипеда и направление к точке приземления.
+            const bikeCenterOffset = (bikeOffsetMin + bikeOffsetMax) * 0.5;
+            const landingCenterOffset = (landingOffsetMin + landingOffsetMax) * 0.5;
+            targetVerticalOffset = clamp(
+                (bikeCenterOffset + landingCenterOffset) * 0.5,
+                0,
+                viewHeight * 0.75
+            );
+        }
+    }
     const followRate = targetVerticalOffset > cameraVerticalOffset ? 0.12 : 0.075;
     cameraVerticalOffset += (targetVerticalOffset - cameraVerticalOffset) * followRate;
     if (Math.abs(targetVerticalOffset - cameraVerticalOffset) < 0.15) {
         cameraVerticalOffset = targetVerticalOffset;
     }
 
-    const altitudeProgress = clamp(cameraVerticalOffset / Math.max(1, viewHeight * 0.72), 0, 1);
-    terrainVisibility = 1 - 0.94 * easeOutCubic(altitudeProgress);
+    const altitudeProgress = clamp(jumpHeight / Math.max(1, viewHeight * 0.82), 0, 1);
+    terrainVisibility = 1 - 0.42 * easeOutCubic(altitudeProgress);
 }
 
 function drawHistoryCinematicOverlay() {
@@ -6228,15 +6400,23 @@ function update() {
     }
 
     const isMobileScreen = (window.innerWidth || 800) <= 768;
-    const cameraLead = isMobileScreen ? 0.24 : 0.34;
+    const speedRatio = clamp((Math.max(0, playerBike.velocityX) - 1.5) / 6.5, 0, 1);
+    const cameraLead = Math.max(
+        isMobileScreen ? 0.14 : 0.22,
+        (isMobileScreen ? 0.24 : 0.34) - speedRatio * (isMobileScreen ? 0.1 : 0.12)
+    );
+    const predictedLandingX = getPredictedLandingWorldX(playerBike);
+    const maxLandingLookAhead = viewWidth * Math.min(0.09, cameraLead * 0.55);
+    const landingLookAhead = !playerBike.grounded
+        ? clamp((predictedLandingX - playerBike.x) * 0.12, 0, maxLandingLookAhead)
+        : 0;
 
     const targetCamera = Math.max(
         0,
-        playerBike.x - viewWidth * cameraLead
+        playerBike.x - viewWidth * cameraLead + landingLookAhead
     );
 
-    cameraX +=
-        (targetCamera - cameraX) * 0.12;
+    cameraX += (targetCamera - cameraX) * (0.1 + speedRatio * 0.035);
 
     checkFinish();
 }
@@ -6388,6 +6568,15 @@ export function initRace(onRaceEnd) {
             ((Number(currentTrack.length) || 15000) *
             TRACK_MULTIPLIER - 1500) * TRACK_DISTANCE_SCALE
         );
+
+    const terrainRoute = buildTerrainRoute(currentTrack, {
+        finishX,
+        viewHeight,
+        amplitude: getTrackTerrain().amplitude,
+        level: currentTrackLevel
+    });
+    terrainSegments = terrainRoute.segments;
+    terrainBigAirSetPieces = terrainRoute.setPieces;
 
     playerBike = createBike(false);
     syncAbilityButtons();
