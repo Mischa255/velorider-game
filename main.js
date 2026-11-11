@@ -2245,11 +2245,6 @@ function updateTracksUI() {
         const obstaclesCount = getTrackObstacleCount(track, storyIndex + 1);
         const recommended = track.recommendedStats || {};
         const recommendedBuild = `СКР ${Number(recommended.speed) || 0} / УСК ${Number(recommended.accel) || 0} / ПРЖ ${Number(recommended.jump) || 0} / ТОР ${Number(recommended.brake) || 0} / СТАБ ${Number(recommended.stability) || 0} / МОЩ ${Number(recommended.power) || 0}`;
-        const terrainHint = isSprint
-            ? ''
-            : storyIndex >= 4
-                ? 'Рельеф собран из плавных участков разгона, подъёмов и спусков. На маршруте есть связка трамплин → широкий разрыв → зона приземления.'
-                : 'Рельеф меняется участками: скоростные прямые, волны, подъёмы и спуски соединены плавно.';
         const difficultyMeta = track.historyDifficultyLevel
             ? `Сложность трассы ${track.historyDifficultyLevel} · соперник ${track.botDifficultyLevel || track.historyDifficultyLevel}`
             : '';
@@ -2329,12 +2324,6 @@ function updateTracksUI() {
                         <strong class="mr-1 text-cyan-200">Маршрут:</strong>${escapeHTML(track.routeFeature)}
                     </div>
                 ` : ''}
-                ${terrainHint ? `
-                    <div class="mt-2 rounded-lg border border-sky-500/20 bg-sky-950/25 px-3 py-2 text-xs leading-relaxed text-sky-100/85">
-                        <strong class="mr-1 text-sky-200">Рельеф:</strong>${escapeHTML(terrainHint)}
-                    </div>
-                ` : ''}
-
                 <div class="track-card__rewards">
                     <div class="track-card__section-label">НАГРАДЫ ЗА ЗАЕЗД</div>
                     <div class="track-card__reward-grid">
@@ -2530,13 +2519,6 @@ function updateHistoryUI() {
         const rewardMarkup = getHistoryRewardMarkup(track);
         const recommended = track.recommendedStats || {};
         const recommendedBuild = `СКР ${Number(recommended.speed) || 0} / УСК ${Number(recommended.accel) || 0} / ПРЖ ${Number(recommended.jump) || 0} / ТОР ${Number(recommended.brake) || 0} / СТАБ ${Number(recommended.stability) || 0} / МОЩ ${Number(recommended.power) || 0}`;
-        const terrainHint = track.id === 'l3'
-            ? 'Патентный ровный спринт: холмов и препятствий нет.'
-            : chapter === 1
-                ? 'Умеренные перепады, короткие волны и плавные подъёмы сохраняют темп старой Laufmaschine.'
-                : chapter === 2
-                    ? 'Шотландский грунт: волны, затяжные подъёмы, спуски и мягкие переходы между ними.'
-                    : 'Городская мостовая, металлические секции и плавные испытательные подъёмы для высокого велосипеда.';
         const difficultyMeta = chapter !== 3 && track.historyDifficultyLevel
             ? `Сложность трассы ${track.historyDifficultyLevel} · соперник ${track.botDifficultyLevel || track.historyDifficultyLevel}`
             : '';
@@ -2550,7 +2532,6 @@ function updateHistoryUI() {
             <h4>${escapeHTML(track.name)}</h4>
             <div class="history-stage-meta">${escapeHTML(track.year)} · Соперник: ${escapeHTML(track.opponent)}${difficultyMeta ? ` · ${escapeHTML(difficultyMeta)}` : ''}</div>
             <p>${escapeHTML(track.historyFeature)}</p>
-            <p class="mt-1 text-xs leading-relaxed text-sky-100/80"><strong class="text-sky-200">Рельеф:</strong> ${escapeHTML(terrainHint)}</p>
             <div class="history-stage-recommended">
                 <span>Рекомендуемые характеристики · СКР / УСК / ПРЖ / ТОР / СТАБ / МОЩ</span>
                 <strong>${recommendedBuild}</strong>
