@@ -28,6 +28,21 @@ const BOT_OPTIONAL_JUMP_CHANCES = {
     cobblestones: 0.48
 };
 
+// Исторические этапы имеют собственные дистанции и плотность препятствий,
+// поэтому их соперников балансируем отдельно от обычных трасс.
+const HISTORY_BOT_PACE = Object.freeze({
+    h1: { maxSpeed: 2.8, acceleration: 0.0325, jumpForce: 10.5 },
+    h2: { maxSpeed: 3.1, acceleration: 0.039, jumpForce: 10.5 },
+    h3: { maxSpeed: 3.35, acceleration: 0.046, jumpForce: 10.7 },
+    h4: { maxSpeed: 3.65, acceleration: 0.05, jumpForce: 10.7 },
+    h5: { maxSpeed: 3.9, acceleration: 0.054, jumpForce: 10.5 },
+    m1: { maxSpeed: 4.8, acceleration: 0.071, jumpForce: 10.7 },
+    m2: { maxSpeed: 4.8, acceleration: 0.071, jumpForce: 10.7 },
+    m3: { maxSpeed: 4.8, acceleration: 0.071, jumpForce: 10.7 },
+    m4: { maxSpeed: 4.8, acceleration: 0.071, jumpForce: 10.7 },
+    m5: { maxSpeed: 5.0, acceleration: 0.075, jumpForce: 10.9 }
+});
+
 export function getBotPersonality(botIndex) {
     return Number(botIndex) === 2
         ? { style: 'bold', jumpConfidence: 1.08, boostReadiness: 0.76 }
@@ -45,6 +60,9 @@ export function createBotBrain(botIndex, personality = getBotPersonality(botInde
 
 export function getBotDifficultyStats(botIndex, difficultyTrack, currentTrack, getTrackBalance) {
     const balance = getTrackBalance(difficultyTrack?.id);
+    const historyPace = currentTrack?.isHistory
+        ? HISTORY_BOT_PACE[currentTrack.id]
+        : null;
     const fallbackSpeed = Number(currentTrack?.botMaxSpeed) || 4;
     const fallbackAccel = Number(currentTrack?.botAccel) || 0.05;
     const rawSpeed = Number(currentTrack?.isHistory
@@ -61,9 +79,9 @@ export function getBotDifficultyStats(botIndex, difficultyTrack, currentTrack, g
 
     return {
         trackId: difficultyTrack?.id || currentTrack?.id,
-        maxSpeed: Math.max(1.5, rawSpeed * balance.speed * speedVariation),
-        acceleration: Math.max(0.012, rawAcceleration * balance.accel * accelVariation),
-        jumpForce: balance.jumpForce,
+        maxSpeed: Math.max(1.5, (historyPace?.maxSpeed ?? rawSpeed * balance.speed) * speedVariation),
+        acceleration: Math.max(0.012, (historyPace?.acceleration ?? rawAcceleration * balance.accel) * accelVariation),
+        jumpForce: historyPace?.jumpForce ?? balance.jumpForce,
         personality
     };
 }
