@@ -237,7 +237,11 @@ export function updateBotDrivingDecision(bike, context) {
         : clamp(speed * 12 + obstacle.width * 0.16 + 18, 60, 120);
 
     brain.targetObstacleId = obstacle.id;
-    if (distance > reactionDistance || distance < -bikeWidth * 0.2) {
+    // Разрывы обязательны для прыжка. Если бот приземлился уже у самого края,
+    // он всё равно делает поздний спасательный прыжок, пока препятствие ещё
+    // не прошло передним колесом. Обычные препятствия сохраняют прежний порог.
+    if (distance > reactionDistance ||
+        (!mandatoryGap && distance < -bikeWidth * 0.2)) {
         brain.state = distance <= reactionDistance * 1.5 ? 'preparing-jump' : brain.state;
         return;
     }
