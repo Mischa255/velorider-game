@@ -32,6 +32,7 @@ const OBSTACLE_MULTIPLIER = 3;
 const RACE_ZOOM_DESKTOP = 0.86;
 const RACE_ZOOM_MOBILE_PORTRAIT = 0.60;
 const RACE_ZOOM_MOBILE_LANDSCAPE = 0.56;
+const ROAD_DASH_PATTERN = Object.freeze([16, 12]);
 const PLAYER_LANE_OFFSET = 0;
 const BOT_LANE_OFFSET = 0;
 
@@ -136,6 +137,8 @@ let viewWidth = 0;
 let viewHeight = 0;
 let baseRaceZoom = RACE_ZOOM_DESKTOP;
 let canvasDpr = 1;
+let mobilePerformanceMode = false;
+const backgroundGradientCache = new Map();
 let canvasCssWidth = 800;
 let canvasCssHeight = 420;
 let animationId = null;
@@ -147,6 +150,7 @@ let currentTrack = null;
 let finishX = 0;
 let cameraX = 0;
 let obstacles = [];
+let trackSurfaceSamples = [];
 let frameCounter = 0;
 let raceFinished = false;
 let raceRunning = false;
@@ -1335,6 +1339,8 @@ function syncAbilityButtons() {
         ? 'Импульсный разгон готов. Клавиша G.'
         : `Импульсный разгон перезаряжается: ${cooldownSeconds} сек.`;
     if (motorButton.title !== motorTitle) motorButton.title = motorTitle;
+    const motorLabel = motorReady ? 'G' : `G · ${cooldownSeconds}`;
+    if (motorButton.textContent !== motorLabel) motorButton.textContent = motorLabel;
 
     if (pedalButton.hidden !== !hasPedalBurst) pedalButton.hidden = !hasPedalBurst;
     const pedalDisabled = !hasPedalBurst || charges <= 0;
@@ -1480,9 +1486,16 @@ function updatePlayerPhysics() {
     const slope = (backY - frontY) / (wheelBase * 2);
     const totalPower = Math.max(0, Number(player.totalPower) || 0);
 
-    if (slope > 0.04) {
+    const travelDirection = playerBike.velocityX < -0.1
+        ? -1
+        : playerBike.velocityX > 0.1
+            ? 1
+            : driveInput < 0 ? -1 : 1;
+    const travelSlope = slope * travelDirection;
+
+    if (travelSlope > 0.04) {
         // Требуемая мощность в зависимости от крутизны склона
-        const requiredPower = slope * 165;
+        const requiredPower = travelSlope * 165;
         const powerRatio = (totalPower + 6) / Math.max(10, requiredPower);
 
         if (powerRatio < 1.0) {
@@ -1495,17 +1508,21 @@ function updatePlayerPhysics() {
             // На земле недостаток мощности режет разгон от педалей
             if (playerBike.grounded) {
                 const lostAccel = acceleration * (1 - Math.min(1, powerRatio));
-                playerBike.velocityX -= lostAccel;
+                playerBike.velocityX -= travelDirection * lostAccel;
             }
 
             // Гравитационное сопротивление крутого склона действует и на земле, и при полете против склона
-            const gravityDrag = slope * 0.18 * (1 - powerRatio);
-            playerBike.velocityX -= gravityDrag;
+            const gravityDrag = travelSlope * 0.18 * (1 - powerRatio);
+            playerBike.velocityX -= travelDirection * gravityDrag;
 
             if (powerRatio < 0.45) {
                 // Мощность критически мала: велосипед не вытягивает гору и откатывается назад!
-                if (playerBike.velocityX < 0.5) {
-                    playerBike.velocityX = Math.max(-0.8, playerBike.velocityX - 0.05);
+                if (playerBike.velocityX * travelDirection < 0.5) {
+                    playerBike.velocityX = clamp(
+                        playerBike.velocityX - travelDirection * 0.05,
+                        -0.8,
+                        0.8
+                    );
                     if (powerWarningCooldown <= 0 && playerBike.grounded) {
                         addFloatingText(playerBike.x, getGroundY(playerBike.x, 0) - 65, '⚠️ Мало мощности! 🔋', '#ef4444');
                         powerWarningCooldown = 90;
@@ -1514,14 +1531,14 @@ function updatePlayerPhysics() {
             }
         } else {
             // Высокая мощность: уверенный заезд в гору и небольшая помощь тяги
-            if (driveInput > 0 && playerBike.grounded) {
-                playerBike.velocityX += Math.min(0.04, (powerRatio - 1) * 0.015);
+            if (driveInput !== 0 && Math.sign(driveInput) === travelDirection && playerBike.grounded) {
+                playerBike.velocityX += travelDirection * Math.min(0.04, (powerRatio - 1) * 0.015);
             }
         }
-    } else if (slope < -0.04) {
-        // На спуске сила тяжести помогает разгону вплоть до максимальной скорости
-        const downhillBoost = Math.min(0.06, Math.abs(slope) * 0.05);
-        playerBike.velocityX += downhillBoost;
+    } else if (travelSlope < -0.04) {
+        // Гравитация помогает в направлении фактического движения, в том числе задним ходом.
+        const downhillBoost = Math.min(0.06, Math.abs(travelSlope) * 0.05);
+        playerBike.velocityX += travelDirection * downhillBoost;
     }
 
     if (playerBike.impactSlowTimer > 0) {
@@ -2490,20 +2507,33 @@ function drawMacmillanHistoryLandmarks() {
     }
 }
 
+function getBackgroundGradient(cacheKey, x0, y0, x1, y1, stops) {
+    // The gradient geometry and palette remain unchanged during a race. Reuse
+    // these CanvasGradient objects instead of allocating them on every frame.
+    // The victory camera zoom is animated, so gradients are built fresh there.
+    const key = `${cacheKey}:${viewHeight.toFixed(3)}:${baseRaceZoom}`;
+    if (!historyVictoryOutro && backgroundGradientCache.has(key)) {
+        return backgroundGradientCache.get(key);
+    }
+
+    const gradient = ctx.createLinearGradient(x0, y0, x1, y1);
+    stops.forEach(([offset, color]) => gradient.addColorStop(offset, color));
+    if (!historyVictoryOutro) backgroundGradientCache.set(key, gradient);
+    return gradient;
+}
+
 function drawBackground() {
     const palette = getTrackPalette();
 
     // 1. Градиент неба
-    const gradient = ctx.createLinearGradient(
+    const gradient = getBackgroundGradient(
+        `sky:${palette.skyTop}:${palette.skyMid}:${palette.skyBottom}`,
         0,
         0,
         0,
-        viewHeight
+        viewHeight,
+        [[0, palette.skyTop], [0.58, palette.skyMid], [1, palette.skyBottom]]
     );
-
-    gradient.addColorStop(0, palette.skyTop);
-    gradient.addColorStop(0.58, palette.skyMid);
-    gradient.addColorStop(1, palette.skyBottom);
 
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, viewWidth, viewHeight);
@@ -2556,9 +2586,14 @@ function drawBackground() {
         ctx.closePath();
 
         // Градиент для тумана у основания гор
-        const mGrad = ctx.createLinearGradient(0, viewHeight * 0.4, 0, viewHeight);
-        mGrad.addColorStop(0, color);
-        mGrad.addColorStop(1, palette.skyBottom);
+        const mGrad = getBackgroundGradient(
+            `mountain:${color}:${palette.skyBottom}`,
+            0,
+            viewHeight * 0.4,
+            0,
+            viewHeight,
+            [[0, color], [1, palette.skyBottom]]
+        );
         
         ctx.fillStyle = mGrad;
         ctx.fill();
@@ -2909,20 +2944,20 @@ function drawCollectibles() {
 
 function drawTrack() {
     const palette = getTrackPalette();
-    const points = [];
+    let sampleCount = 0;
 
-    // Собираем точки поверхности трассы
+    // Reuse the numeric buffer and avoid allocating a point object at every
+    // sample on every frame. Sampling positions and precision stay unchanged.
     for (let x = 0; x <= viewWidth + 10; x += 8) {
-        const worldX = cameraX + x;
-        const y = getGroundY(worldX, 0);
-        points.push({ x, y });
+        trackSurfaceSamples[sampleCount++] = getGroundY(cameraX + x, 0);
     }
+    trackSurfaceSamples.length = sampleCount;
 
     // 1. РИСУЕМ ПОДЗЕМЕЛЬЕ (Сплошная заливка грунта до низа экрана)
     ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i++) {
-        ctx.lineTo(points[i].x, points[i].y);
+    ctx.moveTo(0, trackSurfaceSamples[0]);
+    for (let i = 1; i < sampleCount; i++) {
+        ctx.lineTo(i * 8, trackSurfaceSamples[i]);
     }
     // Замыкаем контур по нижнему краю экрана
     ctx.lineTo(viewWidth + 10, viewHeight);
@@ -2930,17 +2965,22 @@ function drawTrack() {
     ctx.closePath();
 
     // Градиент грунта (сверху цвет земли трассы, снизу уходит в темноту)
-    const groundGradient = ctx.createLinearGradient(0, viewHeight * 0.5, 0, viewHeight);
-    groundGradient.addColorStop(0, palette.near); 
-    groundGradient.addColorStop(1, '#020617');    
+    const groundGradient = getBackgroundGradient(
+        `ground:${palette.near}`,
+        0,
+        viewHeight * 0.5,
+        0,
+        viewHeight,
+        [[0, palette.near], [1, '#020617']]
+    );
     ctx.fillStyle = groundGradient;
     ctx.fill();
 
     // 2. РИСУЕМ САМУ ДОРОГУ (Широкая полоса по поверхности)
     ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i++) {
-        ctx.lineTo(points[i].x, points[i].y);
+    ctx.moveTo(0, trackSurfaceSamples[0]);
+    for (let i = 1; i < sampleCount; i++) {
+        ctx.lineTo(i * 8, trackSurfaceSamples[i]);
     }
 
     // Основная толстая линия дороги
@@ -2958,7 +2998,7 @@ function drawTrack() {
     // Пунктирная разметка посередине дороги
     ctx.strokeStyle = palette.edge;
     ctx.lineWidth = 2;
-    ctx.setLineDash([16, 12]);
+    ctx.setLineDash(ROAD_DASH_PATTERN);
     ctx.stroke();
     ctx.setLineDash([]);
 }
@@ -4122,7 +4162,11 @@ function drawBike(bike, label, color) {
         ? 0
         : (bike.pedalPhase || 0) + travel / radius * 0.42;
     const wheelAngle = bike.wheelRotation;
-    const pedalAngle = bike.pedalPhase;
+    // У рамы Макмиллана рычажный привод заметно работает даже на малой
+    // скорости — как у исторического соперника, независимо от выбранного райдера.
+    const pedalAngle = macmillanFrame
+        ? (Number(bike.pedalPhase) || 0) + frameCounter * 0.045
+        : bike.pedalPhase;
 
     // Тень остаётся на земле и не поворачивается вместе с рамой.
     const airHeight = Math.max(0, Number(bike.jumpHeight) || 0) + Math.max(0, Number(bike.rampLift) || 0);
@@ -4635,6 +4679,21 @@ function drawBike(bike, label, color) {
         ctx.fillRect(rightPedal.x - 2, rightPedal.y - 1.2, 5, 2.4);
     }
 
+    // Курьерская сумка расположена позади корпуса, чтобы читалась как отдельный предмет.
+    if (riderId === 'r4') {
+        const bagX = hip.x - 14;
+        const bagY = shoulder.y - 1;
+        ctx.fillStyle = '#f97316';
+        ctx.fillRect(bagX, bagY, 12, 15);
+        ctx.fillStyle = '#c2410c';
+        ctx.fillRect(bagX, bagY, 12, 3);
+        ctx.strokeStyle = '#431407';
+        ctx.lineWidth = 1.2;
+        ctx.strokeRect(bagX, bagY, 12, 15);
+        ctx.fillStyle = '#fef3c7';
+        ctx.fillRect(bagX + 2, bagY + 7, 8, 2.2);
+    }
+
     // Торс / Джерси
     ctx.fillStyle = jersey;
     ctx.beginPath();
@@ -4670,16 +4729,6 @@ function drawBike(bike, label, color) {
             ctx.moveTo(shoulder.x + 1, shoulder.y + 3);
             ctx.lineTo(hip.x - 2, hip.y - 4);
             ctx.stroke();
-        } else if (riderId === 'r4') {
-            // Большой терморюкзак курьера (Delivery Box)
-            ctx.fillStyle = '#eab308';
-            ctx.fillRect(hip.x - 11, shoulder.y - 2, 10, 14);
-            ctx.strokeStyle = '#713f12';
-            ctx.lineWidth = 1.2;
-            ctx.strokeRect(hip.x - 11, shoulder.y - 2, 10, 14);
-            // Логотип полоска
-            ctx.fillStyle = '#0f172a';
-            ctx.fillRect(hip.x - 10, shoulder.y + 4, 8, 3);
         } else if (riderId === 'r5') {
             // Джон: золотые полосы чемпиона
             ctx.strokeStyle = '#f59e0b';
@@ -4697,6 +4746,16 @@ function drawBike(bike, label, color) {
             ctx.lineTo(hip.x, hip.y);
             ctx.stroke();
         }
+    }
+
+    if (riderId === 'r4') {
+        // Лямка проходит поверх формы и закрепляет сумку на спине.
+        ctx.strokeStyle = '#7c2d12';
+        ctx.lineWidth = 1.7;
+        ctx.beginPath();
+        ctx.moveTo(shoulder.x - 1, shoulder.y + 1);
+        ctx.lineTo(hip.x - 8, hip.y - 1);
+        ctx.stroke();
     }
 
     const elbow = draisineFrame
@@ -4863,7 +4922,7 @@ function drawBike(bike, label, color) {
             historyPhaseFrame,
             riseProgress,
             visuals,
-            visuals.macmillan ? 'macmillan' : ''
+            visuals.macmillanFrame || visuals.macmillan ? 'macmillan' : ''
         );
     }
 
@@ -4916,7 +4975,8 @@ function drawRaceHUD() {
     const racers = [
         {
             bike: playerBike,
-            label: `🚴 ТЫ${playerBike.abilities?.macmillanBurst ? ` ⏩${playerBike.macmillanBurstCharges}` : ''}${playerBike.abilities?.shieldCharges > 0 || playerBike.shieldActiveTimer > 0 ? ' 🛡️' : ''}`,
+            // Число рывков уже показано на кнопке E; не дублируем его в HUD.
+            label: `🚴 ТЫ${playerBike.abilities?.shieldCharges > 0 || playerBike.shieldActiveTimer > 0 ? ' 🛡️' : ''}`,
             color: '#22c55e'
         },
 
@@ -5204,7 +5264,9 @@ function drawHistoryCinematicOverlay() {
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = 'rgba(239, 224, 192, 0.82)';
-        ctx.fillText('МАНГЕЙМ · 1817', 28, barHeight * 0.5);
+        const location = currentTrack?.historyCinematicLocation || currentTrack?.name || 'ИСТОРИЯ';
+        const year = currentTrack?.year ? ` · ${currentTrack.year}` : '';
+        ctx.fillText(`${location}${year}`, 28, barHeight * 0.5);
     }
     ctx.restore();
 }
@@ -5366,6 +5428,8 @@ function resizeCanvas() {
 
     const rect = canvas.getBoundingClientRect();
 
+    mobilePerformanceMode = document.documentElement.classList.contains('touch-device')
+        || window.matchMedia('(pointer: coarse)').matches;
     const dpr = Math.max(
         1,
         Math.min(2, window.devicePixelRatio || 1)
@@ -5383,8 +5447,11 @@ function resizeCanvas() {
 
     canvas.width = Math.round(canvasWidth * dpr);
     canvas.height = Math.round(canvasHeight * dpr);
+    backgroundGradientCache.clear();
 
-    ctx = canvas.getContext('2d');
+    ctx = canvas.getContext('2d', mobilePerformanceMode
+        ? { desynchronized: true }
+        : undefined);
 
     if (ctx) {
         ctx.setTransform(

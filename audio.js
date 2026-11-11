@@ -13,6 +13,7 @@ let sfxGain = null;
 const bgm = new Audio();
 bgm.loop = true;
 let fadeInterval = null;
+let raceResultVolumeTimer = null;
 
 let enabled = false;
 let volume = 0.65;
@@ -81,7 +82,15 @@ function updateBgmVolume() {
     }
 }
 
+function clearRaceResultVolumeTimer() {
+    if (raceResultVolumeTimer === null) return false;
+    clearTimeout(raceResultVolumeTimer);
+    raceResultVolumeTimer = null;
+    return true;
+}
+
 function playBgm(sceneName) {
+    const restoreRaceResultVolume = clearRaceResultVolumeTimer();
     if (!enabled || !audioUnlocked) return;
 
     const trackName = /^(?:t\d+|[12]h[1-5])$/.test(sceneName) ? sceneName : 'garage';
@@ -89,6 +98,7 @@ function playBgm(sceneName) {
 
     // Если этот же трек уже играет и не на паузе — не дергаем лишний раз
     if (bgm.src.endsWith(fileName) && !bgm.paused) {
+        if (restoreRaceResultVolume) updateBgmVolume();
         return;
     }
 
@@ -123,12 +133,14 @@ function playBgm(sceneName) {
 }
 
 function stopBgm() {
+    clearRaceResultVolumeTimer();
     if (fadeInterval) clearInterval(fadeInterval);
     bgm.pause();
     bgm.currentTime = 0;
 }
 
 export function setAudioScene(scene) {
+    if (clearRaceResultVolumeTimer()) updateBgmVolume();
     currentScene = scene;
     if (enabled && audioUnlocked) {
         playBgm(currentScene);
@@ -239,8 +251,12 @@ export function playBoostSound() {
 export function playRaceResult(win) {
     if (!audioContext || !audioUnlocked || !enabled) return;
 
+    clearRaceResultVolumeTimer();
     bgm.volume = clamp((volume * BGM_MAX_VOLUME) * 0.3, 0, 1);
-    setTimeout(updateBgmVolume, 3000);
+    raceResultVolumeTimer = setTimeout(() => {
+        raceResultVolumeTimer = null;
+        updateBgmVolume();
+    }, 3000);
 
     const now = audioContext.currentTime;
 

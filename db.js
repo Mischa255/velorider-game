@@ -196,7 +196,7 @@ export const ITEMS_DB = {
         part("b3", "Shimano MT200 Hydraulic", "rare", 0, 0, 0, 6, 1800),
         part("b4", "Shimano Deore M6100", "rare", 0, 0, 0, 8, 3000),
         part("b5", "Shimano SLX M7100", "rare", 0, 0, 0, 9, 3900),
-        part("b9", "Avid BB7", "rare", 0, 0, 0, 6, 5100),
+        part("b9", "Avid BB5", "rare", 0, 0, 0, 6, 5100),
         part('b6', 'Shimano Deore XT M8120', 'legendary', 0, 0, 0, 12, 2000),
         part('b7', 'Shimano XTR M9120', 'legendary', 0, 0, 0, 15, 2800),
         part('b8', 'SRAM Code RSC', 'legendary', 0, 0, 0, 14, 2600)
@@ -743,7 +743,7 @@ export const HISTORY_TRACKS_DB = [
     },
     {
         id: 'h5', historyChapter: 1, historyStage: 5, isHistory: true, musicTheme: '1h5',
-        name: 'Заезд Карла Дреза', year: '1818', opponent: 'Карл Дрез',
+        name: 'Заезд Карла Дреза', year: '1818', opponent: 'Карл Дрез', historyCinematicLocation: 'ПАРИЖ',
         historyFeature: 'Финальный маршрут: ямы, лужи, камни, настил и обрыв у финиша. Соперник едет на Laufmaschine и отталкивается ногами.',
         length: 25000, hills: 30, botMaxSpeed: 6.5, botAccel: 0.08,
         botDifficultyTrackId: 't2', obstacles: 7,
@@ -799,7 +799,7 @@ export const HISTORY_TRACKS_DB = [
     },
     {
         id: 'm5', historyChapter: 2, historyStage: 5, isHistory: true, musicTheme: '2h5',
-        name: 'Испытание Макмиллана', year: '1840', opponent: 'Киркпатрик Макмиллан',
+        name: 'Испытание Макмиллана', year: '1840', opponent: 'Киркпатрик Макмиллан', historyCinematicLocation: 'ДАМФРИС',
         historyFeature: 'Финальный маршрут собирает все испытания: молот у кузницы, брод и лопасти, булыжный подъём и короткий мостовой разрыв перед финишем.',
         length: 35000, hills: 55, botMaxSpeed: 10, botAccel: 0.12,
         botDifficultyTrackId: 't3', obstacles: 30,

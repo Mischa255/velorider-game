@@ -26,6 +26,60 @@ import {
 } from './audio.js';
 import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js';
 
+function showAppAlert(message) {
+    const text = String(message ?? '');
+    const telegram = window.Telegram?.WebApp;
+    if (typeof telegram?.showAlert === 'function') {
+        return new Promise(resolve => {
+            let finished = false;
+            const finish = () => {
+                if (finished) return;
+                finished = true;
+                resolve();
+            };
+
+            try {
+                const result = telegram.showAlert(text, finish);
+                if (result && typeof result.then === 'function') result.then(finish, finish);
+            } catch (error) {
+                console.warn('Telegram не показал системное сообщение:', error);
+                window.alert(text);
+                finish();
+            }
+        });
+    }
+
+    window.alert(text);
+    return Promise.resolve();
+}
+
+function showAppConfirm(message) {
+    const text = String(message ?? '');
+    const telegram = window.Telegram?.WebApp;
+    if (typeof telegram?.showConfirm === 'function') {
+        return new Promise(resolve => {
+            let finished = false;
+            const finish = confirmed => {
+                if (finished) return;
+                finished = true;
+                resolve(Boolean(confirmed));
+            };
+
+            try {
+                const result = telegram.showConfirm(text, finish);
+                if (result && typeof result.then === 'function') {
+                    result.then(finish, () => finish(false));
+                }
+            } catch (error) {
+                console.warn('Telegram не показал подтверждение:', error);
+                finish(window.confirm(text));
+            }
+        });
+    }
+
+    return Promise.resolve(window.confirm(text));
+}
+
 function renderGameVersionBadge() {
     const build = document.body?.dataset.gameBuild || '100';
     document.querySelectorAll('[data-game-version-label]').forEach(label => {
@@ -220,7 +274,7 @@ const STAT_META = {
 
 const NON_STAT_NUMERIC_FIELDS = new Set([
     'price', 'cost', 'priceCoins', 'price_coins', 'year', 'id', 'level',
-    'rarityLevel', 'rarity_level', 'stock', 'quantity', 'count'
+    'rarityLevel', 'rarity_level', 'stock', 'quantity', 'count', 'couponPrice'
 ]);
 
 const STAT_KEY_ALIASES = {
@@ -1946,25 +2000,25 @@ function buyPart(category, id) {
     if (!part) return;
 
     if (part.rarity === 'special') {
-        alert('Специальные детали выдаются только за прохождение исторических этапов.');
+        showAppAlert('Специальные детали выдаются только за прохождение исторических этапов.');
         return;
     }
 
     if (hasPart(category, id)) {
-        alert('Этот предмет уже есть в инвентаре!');
+        showAppAlert('Этот предмет уже есть в инвентаре!');
         return;
     }
 
     if (isCouponPurchaseItem(part)) {
         if (part.rarity === 'legendary' && category !== 'riders' && !isRarityUnlocked('legendary')) {
-            alert('Сначала открой легендарную редкость победой на трассе!');
+            showAppAlert('Сначала открой легендарную редкость победой на трассе!');
             return;
         }
 
         const couponPrice = getCouponPurchasePrice(part);
         const coupons = Math.max(0, Number(player.coupons) || 0);
         if (coupons < couponPrice) {
-            alert(`Недостаточно Велокупонов! Нужно ${couponPrice} 🎟️ (у вас: ${coupons} 🎟️)`);
+            showAppAlert(`Недостаточно Велокупонов! Нужно ${couponPrice} 🎟️ (у вас: ${coupons} 🎟️)`);
             return;
         }
         player.coupons = coupons - couponPrice;
@@ -1977,17 +2031,17 @@ function buyPart(category, id) {
     }
 
     if (part.rarity === 'legendary' && category !== 'riders') {
-        alert('Легендарные детали можно получить только из контейнеров!');
+        showAppAlert('Легендарные детали можно получить только из контейнеров!');
         return;
     }
 
     if (!isRarityUnlocked(part.rarity)) {
-        alert('Сначала открой эту редкость победой на трассе!');
+        showAppAlert('Сначала открой эту редкость победой на трассе!');
         return;
     }
 
     if (hasPart(category, id)) {
-        alert('Эта деталь уже есть в инвентаре!');
+        showAppAlert('Эта деталь уже есть в инвентаре!');
         return;
     }
 
@@ -1995,7 +2049,7 @@ function buyPart(category, id) {
     const balance = Math.max(0, Number(player.coins) || 0);
 
     if (balance < price) {
-        alert(`Недостаточно монет! Нужно ${price} 🪙`);
+        showAppAlert(`Недостаточно монет! Нужно ${price} 🪙`);
         return;
     }
 
@@ -2012,7 +2066,7 @@ function buyAndReplacePart(category, id) {
     if (!part) return;
 
     if (category === 'suspension' && !hasFullSuspensionFrame()) {
-        alert('Чтобы установить задний амортизатор, сначала выбери двухподвесную раму (DH).');
+        showAppAlert('Чтобы установить задний амортизатор, сначала выбери двухподвесную раму (DH).');
         return;
     }
 
@@ -2022,20 +2076,20 @@ function buyAndReplacePart(category, id) {
     }
 
     if (part.rarity === 'special') {
-        alert('Специальные детали выдаются только за прохождение исторических этапов.');
+        showAppAlert('Специальные детали выдаются только за прохождение исторических этапов.');
         return;
     }
 
     if (isCouponPurchaseItem(part)) {
         if (part.rarity === 'legendary' && category !== 'riders' && !isRarityUnlocked('legendary')) {
-            alert('Сначала открой легендарную редкость победой на трассе!');
+            showAppAlert('Сначала открой легендарную редкость победой на трассе!');
             return;
         }
 
         const couponPrice = getCouponPurchasePrice(part);
         const coupons = Math.max(0, Number(player.coupons) || 0);
         if (coupons < couponPrice) {
-            alert(`Недостаточно Велокупонов! Нужно ${couponPrice} 🎟️ (у вас: ${coupons} 🎟️)`);
+            showAppAlert(`Недостаточно Велокупонов! Нужно ${couponPrice} 🎟️ (у вас: ${coupons} 🎟️)`);
             return;
         }
         player.coupons = coupons - couponPrice;
@@ -2049,12 +2103,12 @@ function buyAndReplacePart(category, id) {
     }
 
     if (part.rarity === 'legendary' && category !== 'riders') {
-        alert('Легендарные детали можно получить только из контейнеров!');
+        showAppAlert('Легендарные детали можно получить только из контейнеров!');
         return;
     }
 
     if (!isRarityUnlocked(part.rarity)) {
-        alert('Эта редкость ещё не открыта!');
+        showAppAlert('Эта редкость ещё не открыта!');
         return;
     }
 
@@ -2067,7 +2121,7 @@ function buyAndReplacePart(category, id) {
     const balance = Math.max(0, Number(player.coins) || 0);
 
     if (balance < price) {
-        alert(`Недостаточно монет! Нужно ${price} 🪙`);
+        showAppAlert(`Недостаточно монет! Нужно ${price} 🪙`);
         return;
     }
 
@@ -2087,17 +2141,17 @@ function installPart(category, id) {
     if (!part) return;
 
     if (category === 'suspension' && !hasFullSuspensionFrame()) {
-        alert('Чтобы установить задний амортизатор, сначала выбери двухподвесную раму (DH).');
+        showAppAlert('Чтобы установить задний амортизатор, сначала выбери двухподвесную раму (DH).');
         return;
     }
 
     if (part.rarity !== 'special' && !isRarityUnlocked(part.rarity)) {
-        alert('Эта редкость ещё не открыта!');
+        showAppAlert('Эта редкость ещё не открыта!');
         return;
     }
 
     if (!hasPart(category, id)) {
-        alert('Сначала купи эту деталь!');
+        showAppAlert('Сначала купи эту деталь!');
         return;
     }
 
@@ -2570,7 +2624,7 @@ function openContainer(containerId) {
     const loot = getPartLoot(container);
 
     if (!loot) {
-        alert(
+        showAppAlert(
             'Нет деталей доступной редкости для этого контейнера. ' +
             'Открой следующую редкость. Оплата не списана.'
         );
@@ -2579,9 +2633,9 @@ function openContainer(containerId) {
 
     if (!hasEnoughCurrency(container)) {
         if (container.currency === 'coupon') {
-            alert(`Недостаточно Велокупонов! За этот контейнер нужно ${container.price}.`);
+            showAppAlert(`Недостаточно Велокупонов! За этот контейнер нужно ${container.price}.`);
         } else {
-            alert(
+            showAppAlert(
                 `Недостаточно монет! Нужно ${Number(container.price).toLocaleString('ru-RU')} 🪙`
             );
         }
@@ -3008,7 +3062,7 @@ async function handleRaceEnd(win, reason = 'finish', raceTimeMs = 0, collectedCo
 
 window.selectTrack = function (id) {
     if (!canPlayTrack(id)) {
-        alert('Сначала победи на предыдущей трассе!');
+        showAppAlert('Сначала победи на предыдущей трассе!');
         return;
     }
 
@@ -3032,7 +3086,7 @@ window.openContainer = function (type, payment) {
 };
 
 async function resetProgressRequest() {
-    const confirmed = window.confirm(
+    const confirmed = await showAppConfirm(
         'Сбросить весь прогресс VeloRider?\n\n' +
         'Будут удалены монеты, велокупоны, открытые трассы, победы, ' +
         'купленные детали и текущая сборка велосипеда.\n\n' +
@@ -3048,11 +3102,11 @@ async function resetProgressRequest() {
 
         await clearSavedProgress();
 
-        window.alert('Прогресс сброшен. Игра перезапустится.');
+        await showAppAlert('Прогресс сброшен. Игра перезапустится.');
         window.location.reload();
     } catch (error) {
         console.error('Не удалось сбросить прогресс:', error);
-        window.alert(
+        await showAppAlert(
             'Не удалось полностью сбросить прогресс. ' +
             'Проверь подключение и попробуй ещё раз.'
         );

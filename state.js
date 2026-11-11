@@ -374,6 +374,7 @@ function sanitizeLoadedState(raw) {
     merged.totalJump = Number(merged.totalJump) || 0;
     merged.totalBrake = Number(merged.totalBrake) || 0;
     merged.totalPower = Number(merged.totalPower) || 0;
+    merged.totalStability = Number(merged.totalStability) || 0;
     if (!merged.equipped.riders) merged.equipped.riders = 'r1';
     if (!merged.inventory.includes('riders:r1')) merged.inventory.push('riders:r1');
     merged.selectedTrack = String(merged.selectedTrack || 't1');
@@ -543,7 +544,8 @@ function toPlayerSaveData(source) {
         totalAccel: source.totalAccel,
         totalJump: source.totalJump,
         totalBrake: source.totalBrake,
-        totalPower: source.totalPower
+        totalPower: source.totalPower,
+        totalStability: source.totalStability
     };
 }
 
