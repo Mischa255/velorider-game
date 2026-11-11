@@ -1,4 +1,4 @@
-import { player } from './state.js';
+import { beginAutosaveBatch, endAutosaveBatch, player } from './state.js';
 import { TRACKS_DB, HISTORY_TRACKS_DB, OBSTACLE_TYPES, ITEMS_DB } from './db.js';
 import { clamp, randomItem, MIN_SPRINT_RECORD_IMPROVEMENT_MS, getRarityAccent } from './utils.js';
 import { playCoinSound, playBoostSound } from './audio.js';
@@ -36,6 +36,11 @@ const RACE_ZOOM_MOBILE_LANDSCAPE = 0.56;
 const ROAD_DASH_PATTERN = Object.freeze([16, 12]);
 const PLAYER_LANE_OFFSET = 0;
 const BOT_LANE_OFFSET = 0;
+const REPEATING_GROUND_HAZARDS = new Set([
+    'mud', 'water_splash', 'ice_patch', 'wind_fan', 'forge_slag', 'ford_stones',
+    'cobblestones', 'plank_bridge', 'smith_hammer', 'mill_paddle', 'crank_rack'
+]);
+const GROUND_HAZARD_REHIT_FRAMES = 30;
 
 function getCameraZoom() {
     const w = window.innerWidth || 800;
@@ -47,6 +52,22 @@ function getCameraZoom() {
     if (w <= 920 && h <= 540) return RACE_ZOOM_MOBILE_LANDSCAPE;
     if (w <= 768) return 0.68;
     return RACE_ZOOM_DESKTOP;
+}
+
+// Плавное насыщение оставляет бонусы полезными за верхним ориентиром,
+// но не позволяет нормализованным физическим коэффициентам выйти за 1.
+function getSoftStatRatio(value, reference) {
+    const points = Math.max(0, Number(value) || 0);
+    const scale = Math.max(1, Number(reference) || 1);
+    return 1 - Math.exp(-3 * Math.pow(points / scale, 1.58));
+}
+
+function getStabilityRatio(value) {
+    return getSoftStatRatio(value, 100);
+}
+
+function getBrakeQualityRatio(value) {
+    return getSoftStatRatio(value, 15);
 }
 
 function easeOutCubic(progress) {
@@ -137,6 +158,7 @@ let ctx = null;
 let viewWidth = 0;
 let viewHeight = 0;
 let baseRaceZoom = RACE_ZOOM_DESKTOP;
+let cameraZoomFactor = 1;
 let canvasDpr = 1;
 let mobilePerformanceMode = false;
 const backgroundGradientCache = new Map();
@@ -158,6 +180,7 @@ let raceRunning = false;
 let raceStarted = false;
 let raceTimeMs = 0;
 let timerStarted = false;
+let raceAutosaveBatchActive = false;
 let historyVictoryOutro = null;
 
 let input = {
@@ -200,6 +223,16 @@ function getTrackLevel() {
     const index = storyTracks.findIndex(track => track.id === currentTrack?.id);
 
     return Math.max(1, index + 1);
+}
+
+export function getTrackObstacleCount(track, level = 1) {
+    if (!track || track.id === 'sprint') return 0;
+    const configuredCount = Math.max(1, Number(track.obstacles) || 1);
+    const trackLevel = Math.max(1, Math.floor(Number(level) || 1));
+    return Math.max(
+        1,
+        Math.floor(configuredCount * (OBSTACLE_MULTIPLIER + (trackLevel - 1) * 0.07))
+    );
 }
 
 // =========================================
@@ -408,11 +441,7 @@ function createObstacles() {
         : Object.keys(OBSTACLE_TYPES);
     if (!typePool.length) return [];
 
-    const configuredCount = Math.max(1, Number(currentTrack.obstacles) || 1);
-    const obstacleCount = Math.max(
-        1,
-        Math.floor(configuredCount * (3 + Math.max(0, currentTrackLevel - 1) * 0.07))
-    );
+    const obstacleCount = getTrackObstacleCount(currentTrack, currentTrackLevel);
     // На сюжетных трассах ямы размещаются гарантированно. Глава II использует
     // плотность ям обычных трасс 2–3 уровня, остальные истории — мягкую прогрессию.
     const historyDifficultyLevel = currentTrack.historyChapter === 2
@@ -491,7 +520,7 @@ function createObstacles() {
             color: definition.color,
             phase: Math.random() * Math.PI * 2,
             playerHit: false,
-            botHitBy: new Set(),
+            botHitBy: new Map(),
             botJumpAttemptedBy: new Set(),
             playerRampUsed: false,
             botRampUsedBy: new Set()
@@ -511,7 +540,7 @@ function createObstacles() {
             height: cliff.height,
             color: cliff.color,
             playerHit: false,
-            botHitBy: new Set(),
+            botHitBy: new Map(),
             botJumpAttemptedBy: new Set(),
             playerRampUsed: false,
             botRampUsedBy: new Set()
@@ -577,7 +606,7 @@ function getBikeVisualProfile() {
     const pedals = getEquippedPart('pedals');
     const electronics = getEquippedPart('electronics'); // Добавили электронику
     const fullSuspension = frame?.visuals?.type === 'dh';
-    const stability = Math.min(100,
+    const stability = Math.max(0,
         (Number(frame?.stability) || 0) +
         (Number(fork?.stability) || 0) +
         (fullSuspension ? Number(shock?.stability) || 0 : 0) +
@@ -604,7 +633,7 @@ function getBikeVisualProfile() {
         rearShockColor: shock?.visuals?.color || getRarityAccent(shock?.rarity),
         stability,
         hasBrakes: Boolean(brakes),
-        brakeStrength: clamp(Number(brakes?.brake) || 0, 0, 15),
+        brakeStrength: Math.max(0, Number(brakes?.brake) || 0),
         
         // --- ВИЛКА ---
         forkColor: fork?.visuals?.color || getRarityAccent(fork?.rarity),
@@ -612,7 +641,8 @@ function getBikeVisualProfile() {
         // --- ТРАНСМИССИЯ И ПОСАДКА ---
         chainColor: chain?.visuals?.color || getRarityAccent(chain?.rarity),
         gearColor: getRarityAccent(derailleur?.rarity),
-        chainringCount: ['d1', 'd2', 'd3'].includes(drivetrain?.id) ? 3 : 1,
+        chainringCount: ['d1', 'd2', 'd3'].includes(drivetrain?.id) &&
+            !(electronics && electronics.id !== 'e1') ? 3 : 1,
         crankColor: crank?.visuals?.color || getRarityAccent(crank?.rarity),
         seatpostColor: seatpost?.visuals?.color || getRarityAccent(seatpost?.rarity),
         saddleColor: saddle?.visuals?.color || getRarityAccent(saddle?.rarity),
@@ -689,9 +719,9 @@ function createBike(isBot = false, botIndex = 1) {
         id: isBot ? `bot-${botIndex}` : 'player',
         displayName: isBot ? (botIndex === 1 ? 'Макс' : 'Лера') : 'Игрок',
         visuals,
-        stability: clamp(Number(visuals?.stability) || 0, 0, 100),
+        stability: Math.max(0, Number(visuals?.stability) || 0),
         hasBrakes: Boolean(visuals?.hasBrakes),
-        brakeStrength: clamp(Number(visuals?.brakeStrength) || 0, 0, 15),
+        brakeStrength: Math.max(0, Number(visuals?.brakeStrength) || 0),
         frontSuspension: Boolean(visuals?.frontSuspension),
         rearSuspension: Boolean(visuals?.rearSuspension),
 
@@ -719,7 +749,7 @@ function createBike(isBot = false, botIndex = 1) {
         currentRamp: null,
         impactSlowTimer: 0,
         impactSpeedLimit: 0,
-        collidedObstacles: new Set(),
+        collidedObstacles: new Map(),
 
         isBot,
         botIndex: isBot ? botIndex : 0,
@@ -736,10 +766,13 @@ function createBike(isBot = false, botIndex = 1) {
         botJumpForce: difficulty?.jumpForce || 0,
 
         nitroTimer: 0,
+        padBoostTimer: 0,
+        padBoostSpeed: 0,
         springBoostTimer: 0,
         nitroCooldown: isBot ? 120 + Math.floor(Math.random() * 100) : 0,
         landingBoostCooldown: 0,
         shieldActiveTimer: 0,
+        jumpBufferFrames: 0,
         finishFrame: null,
         wheelRotation: 0,
         pedalPhase: 0
@@ -787,7 +820,7 @@ function startBikeFlip(bike, direction = 1, message = 'ПЕРЕВОРОТ! Ни�
     bike.flippedTimer = 74;
     bike.macmillanBurstRequested = false;
     bike.flipDirection = direction < 0 ? -1 : 1;
-    const instability = 1 - clamp(Number(bike.stability) || 0, 0, 100) / 100;
+    const instability = 1 - getStabilityRatio(bike.stability);
     bike.pitchVelocity = clamp(
         (Number(bike.pitchVelocity) || 0) + bike.flipDirection * (0.055 + instability * 0.04),
         -0.14,
@@ -817,7 +850,7 @@ function queuePlayerCrash(bike, reason) {
 function maybeFlipFromImpact(bike, impactForce, direction = 1, message = 'КОЧКА! Низкая стабильность') {
     if (!bike || bike.flippedTimer > 0 || bike.bumpCooldown > 0) return false;
 
-    const stabilityRatio = clamp(Number(bike.stability) || 0, 0, 100) / 100;
+    const stabilityRatio = getStabilityRatio(bike.stability);
     const instability = 1 - stabilityRatio;
     const minimumSpeed = 4.4 + stabilityRatio * 1.6;
     if (bike.velocityX < minimumSpeed) return false;
@@ -849,7 +882,7 @@ function getBikePitchInertia(bike) {
 function applyPitchImpulseAtContact(bike, impactForce, contactX, verticalDirection = -1, scale = 1) {
     if (!bike) return;
 
-    const stabilityRatio = clamp(Number(bike.stability) || 0, 0, 100) / 100;
+    const stabilityRatio = getStabilityRatio(bike.stability);
     const instability = 1 - stabilityRatio;
     const leverArm = Number(contactX) - bike.x;
     const verticalImpulse = Math.abs(Number(impactForce) || 0) * 0.064 * Math.sign(verticalDirection) * scale;
@@ -889,7 +922,7 @@ function updateBikeFlipRecovery(bike) {
     bike.x = Math.max(0, bike.x + Math.max(0, bike.velocityX) * 0.28);
     bike.velocityX = Math.max(0.2, bike.velocityX * 0.955);
 
-    const stabilityRatio = clamp(Number(bike.stability) || 0, 0, 100) / 100;
+    const stabilityRatio = getStabilityRatio(bike.stability);
     const stillFalling = Boolean(bike.crashPending) || bike.flippedTimer > 36;
     let restingAngle = 0;
     if (!stillFalling && bike.grounded) {
@@ -951,7 +984,7 @@ function updateSuspensionResponse(bike) {
     const rearRelativeTravel = rearDelta - averageDelta;
     bike.previousGroundDelta = averageDelta;
 
-    const suspensionQuality = clamp((Number(bike.stability) || 0) / 100, 0.15, 1);
+    const suspensionQuality = Math.max(0.15, getStabilityRatio(bike.stability));
     const front = advanceSuspension(
         bike.frontCompression,
         bike.frontCompressionVelocity,
@@ -973,7 +1006,7 @@ function updateSuspensionResponse(bike) {
     bike.rearCompression = rear.compression;
     bike.rearCompressionVelocity = rear.velocity;
 
-    const stabilityRatio = clamp(Number(bike.stability) || 0, 0, 100) / 100;
+    const stabilityRatio = getStabilityRatio(bike.stability);
     const instability = 1 - stabilityRatio;
     const suspensionSupport = (
         (bike.frontSuspension ? 1 : 0) +
@@ -1010,7 +1043,7 @@ function updateSuspensionResponse(bike) {
 function updateJumpPhysics(bike) {
     if (!bike.isBot && bike.landingBoostCooldown > 0) bike.landingBoostCooldown--;
 
-    const stabilityRatio = clamp(Number(bike.stability) || 0, 0, 100) / 100;
+    const stabilityRatio = getStabilityRatio(bike.stability);
     bike.pitchAngle = Number(bike.pitchAngle) || 0;
     bike.pitchVelocity = Number(bike.pitchVelocity) || 0;
 
@@ -1034,7 +1067,7 @@ function updateJumpPhysics(bike) {
             ? Math.abs(bike.pitchVelocity) > 0.022
             : input.braking;
         if (braking && bike.hasBrakes) {
-            const brakeRatio = clamp(Number(bike.brakeStrength) || 0, 0, 15) / 15;
+            const brakeRatio = getBrakeQualityRatio(bike.brakeStrength);
             bike.pitchVelocity *= 1 - (0.01 + brakeRatio * 0.05);
         }
         bike.pitchVelocity *= 0.965 - stabilityRatio * 0.055;
@@ -1142,11 +1175,9 @@ function startJump(bike, force, gravity = GRAVITY) {
     // Прыжок сохраняет текущий наклон; сам отрыв не добавляет резкого переворота.
     bike.pitchVelocity = clamp(Number(bike.pitchVelocity) || 0, -0.045, 0.045);
 
-    bike.jumpGravity = clamp(
-        Number(gravity) || GRAVITY,
-        0.36,
-        GRAVITY
-    );
+    // Callers provide a gravity derived from equipment or the bot profile;
+    // retain a broad physical guard without clipping player stats at a score cap.
+    bike.jumpGravity = clamp(Number(gravity) || GRAVITY, 0.36, GRAVITY);
 
     bike.jumpHeight = 1 + (bike.rampLift || 0);
     bike.airY = groundY - bike.jumpHeight;
@@ -1244,11 +1275,7 @@ function updateRamp(bike, isBot) {
                 0,
                 3
             ) * 4 + (bike.abilities?.superJumpUnlocked ? 6 : 0)
-            : clamp(
-                Number(player.totalJump) || 0,
-                0,
-                30
-            );
+            : Math.max(0, Number(player.totalJump) || 0);
 
         const extraJump = jumpStat * 0.045;
 
@@ -1276,11 +1303,7 @@ function updateRamp(bike, isBot) {
                     0.36,
                     0.38
                 )
-                : clamp(
-                    0.38 - jumpStat * 0.0007,
-                    0.36,
-                    0.38
-                );
+                : 0.36 + 0.02 * Math.exp(-jumpStat / 7);
 
         bike.currentRamp = null;
     }
@@ -1296,10 +1319,10 @@ const REVERSE_STOP_THRESHOLD = 0.06;
 function getBrakeDeceleration(bike, totalBrake, speed) {
     if (!bike?.hasBrakes) return 0;
 
-    const brakeQuality = clamp(Number(bike.brakeStrength) || 0, 0, 15) / 15;
-    const ratedPower = 0.08 + clamp(Number(totalBrake) || 0, 0, 80) * 0.0045;
+    const brakeQuality = getBrakeQualityRatio(bike.brakeStrength);
+    const ratedPower = 0.08 + Math.max(0, Number(totalBrake) || 0) * 0.0045;
     const brakeTierFactor = 0.4 + brakeQuality * 0.6;
-    const speedPenalty = 1 + Math.min(20, Math.abs(Number(speed) || 0)) * 0.03;
+    const speedPenalty = 1 + Math.abs(Number(speed) || 0) * 0.03;
 
     return ratedPower * brakeTierFactor / speedPenalty;
 }
@@ -1371,6 +1394,7 @@ function updatePlayerPhysics() {
 
     if (playerBike.shieldActiveTimer > 0) playerBike.shieldActiveTimer--;
     if (playerBike.macmillanBurstTimer > 0) playerBike.macmillanBurstTimer--;
+    if (playerBike.padBoostTimer > 0) playerBike.padBoostTimer--;
 
     const speed = Math.max(
         0,
@@ -1382,36 +1406,26 @@ function updatePlayerPhysics() {
         Number(player.totalAccel) || 0
     );
 
-    const jump = clamp(
-        Number(player.totalJump) || 0,
-        0,
-        30
-    );
+    const jump = Math.max(0, Number(player.totalJump) || 0);
 
-    const brake = clamp(
-        Number(player.totalBrake) || 0,
-        0,
-        80
-    );
+    const brake = Math.max(0, Number(player.totalBrake) || 0);
 
-    const maxSpeed =
-        3.2 + Math.min(speed, 70) * 0.12;
+    const maxSpeed = 3.2 + speed * 0.12;
 
     if (playerBike.nitroTimer > 0) playerBike.nitroTimer--;
     if (playerBike.nitroCooldown > 0) playerBike.nitroCooldown--;
     syncAbilityButtons();
     const nitroMultiplier = playerBike.nitroTimer > 0 ? 1.32 : 1;
 
-    const acceleration =
-        0.05 + Math.min(accel, 70) * 0.002;
+    const acceleration = 0.05 + accel * 0.002;
 
     // Задний ход заметно слабее педалирования вперёд. Его тяга и скорость
     // растут от характеристик сборки, включая бонусы райдера.
-    const reversePower = clamp(Number(player.totalPower) || 0, 0, 80);
+    const reversePower = Math.max(0, Number(player.totalPower) || 0);
     const reverseAcceleration = acceleration * (0.2 + reversePower * 0.0015);
-    const reverseMaxSpeed = Math.min(
-        maxSpeed * 0.38,
-        0.65 + Math.min(speed, 70) * 0.035 + reversePower * 0.008
+    const reverseSpeedPotential = 0.65 + speed * 0.035 + reversePower * 0.008;
+    const reverseMaxSpeed = maxSpeed * (
+        1 - Math.exp(-1.17 * reverseSpeedPotential / Math.max(0.1, maxSpeed))
     );
 
     const brakeApplied = input.braking && playerBike.hasBrakes;
@@ -1423,11 +1437,7 @@ function updatePlayerPhysics() {
     const jumpForce =
         8.5 + jump * 0.12;
 
-    const jumpGravity = clamp(
-        GRAVITY - jump * 0.001,
-        0.39,
-        GRAVITY
-    );
+    const jumpGravity = 0.39 + (GRAVITY - 0.39) * Math.exp(-jump / 5);
 
     if (driveInput > 0 && playerBike.grounded) {
         playerBike.velocityX += acceleration * draisinePush;
@@ -1473,7 +1483,16 @@ function updatePlayerPhysics() {
         playerBike.velocityX *= 1 - 0.005;
     }
 
-    let allowedSpeed = maxSpeed * nitroMultiplier;
+    const regularAllowedSpeed = maxSpeed * nitroMultiplier;
+    const padBoostFraction = playerBike.padBoostTimer > 0
+        ? playerBike.padBoostTimer / 50
+        : 0;
+    const padBoostCeiling = Math.max(
+        regularAllowedSpeed,
+        Number(playerBike.padBoostSpeed) || 0
+    );
+    let allowedSpeed = regularAllowedSpeed +
+        (padBoostCeiling - regularAllowedSpeed) * padBoostFraction;
     if (playerBike.nitroTimer > 0 && driveInput > 0) {
         playerBike.velocityX += acceleration * 0.55;
     }
@@ -1542,7 +1561,8 @@ function updatePlayerPhysics() {
         } else {
             // Высокая мощность: уверенный заезд в гору и небольшая помощь тяги
             if (driveInput !== 0 && Math.sign(driveInput) === travelDirection && playerBike.grounded) {
-                playerBike.velocityX += travelDirection * Math.min(0.04, (powerRatio - 1) * 0.015);
+                const uphillAssist = 0.04 * (1 - Math.exp(-(powerRatio - 1) * 0.25));
+                playerBike.velocityX += travelDirection * uphillAssist;
             }
         }
     } else if (travelSlope < -0.04) {
@@ -1595,14 +1615,18 @@ function updatePlayerPhysics() {
     );
 
     if (input.jumpRequested) {
+        playerBike.jumpBufferFrames = Math.max(playerBike.jumpBufferFrames || 0, 8);
+        input.jumpRequested = false;
+    }
+    if (playerBike.jumpBufferFrames > 0) {
         const superJumpMultiplier = playerBike.abilities?.superJumpUnlocked ? 1.15 : 1;
-        startJump(
+        const jumped = playerBike.grounded && startJump(
             playerBike,
             jumpForce * superJumpMultiplier,
             jumpGravity * (playerBike.abilities?.superJumpUnlocked ? 0.98 : 1)
         );
-
-        input.jumpRequested = false;
+        if (jumped) playerBike.jumpBufferFrames = 0;
+        else playerBike.jumpBufferFrames--;
     }
 
     updateJumpPhysics(playerBike);
@@ -1618,6 +1642,7 @@ function updateBotPhysics(bike) {
     if (updateBikeFlipRecovery(bike)) return;
 
     updateBotAbilities(bike, obstacles, BIKE_WIDTH, [playerBike, ...activeBots]);
+    if (bike.padBoostTimer > 0) bike.padBoostTimer--;
     if (bike.springBoostTimer > 0) bike.springBoostTimer--;
 
     const baseMaxSpeed = Math.max(
@@ -1660,7 +1685,11 @@ function updateBotPhysics(bike) {
         }
     }
 
-    let allowedSpeed = maxSpeed;
+    const padBoostFraction = bike.padBoostTimer > 0
+        ? bike.padBoostTimer / 50
+        : 0;
+    const boostCeiling = Math.max(maxSpeed, Number(bike.padBoostSpeed) || 0);
+    let allowedSpeed = maxSpeed + (boostCeiling - maxSpeed) * padBoostFraction;
 
     const botWheelBase = 25;
     const botFrontY = getGroundY(bike.x + botWheelBase, 0);
@@ -1724,13 +1753,15 @@ function updateBotPhysics(bike) {
 // =========================================
 
 function applyPlayerImpact(obstacle, speedLimit = 1.0) {
-    if (
-        playerBike.collidedObstacles.has(obstacle.id)
-    ) {
-        return;
+    const previousHitFrame = playerBike.collidedObstacles.get(obstacle.id);
+    if (REPEATING_GROUND_HAZARDS.has(obstacle.type)) {
+        if (previousHitFrame !== undefined &&
+            frameCounter - previousHitFrame < GROUND_HAZARD_REHIT_FRAMES) return;
+        playerBike.collidedObstacles.set(obstacle.id, frameCounter);
+    } else {
+        if (previousHitFrame !== undefined) return;
+        playerBike.collidedObstacles.set(obstacle.id, frameCounter);
     }
-
-    playerBike.collidedObstacles.add(obstacle.id);
 
     let impactDuration = 42;
     if (playerBike.abilities?.impactBrake) impactDuration = Math.round(impactDuration * 0.85);
@@ -1739,11 +1770,11 @@ function applyPlayerImpact(obstacle, speedLimit = 1.0) {
     }
 
     const roughObstacle = ['rock', 'rolling_boulder', 'log', 'fallen_branch', 'crank_rack'].includes(obstacle.type);
-    const stability = clamp(Number(playerBike.stability) || 0, 0, 100);
+        const stability = getStabilityRatio(playerBike.stability);
     if (roughObstacle) {
-        const retainedSpeed = (playerBike.velocityX - speedLimit) * stability * 0.0018;
+        const retainedSpeed = (playerBike.velocityX - speedLimit) * stability * 0.18;
         speedLimit += retainedSpeed;
-        impactDuration = Math.round(impactDuration * (1 - stability * 0.002));
+        impactDuration = Math.round(impactDuration * (1 - stability * 0.20));
 
         const severity = obstacle.type === 'rolling_boulder' ? 1.35 : obstacle.type === 'rock' ? 1.2 : 1;
         const impactForce = playerBike.velocityX * severity / 3;
@@ -1778,6 +1809,10 @@ function applyPlayerImpact(obstacle, speedLimit = 1.0) {
 function updatePlayerCollisions() {
     const collisionHalfWidth = getBikeObstacleHalfWidth(playerBike);
     for (const obstacle of obstacles) {
+        if (playerBike.collidedObstacles.has(obstacle.id) &&
+            !isTouchingObstacle(playerBike, obstacle)) {
+            playerBike.collidedObstacles.delete(obstacle.id);
+        }
         if (
             obstacle.x + obstacle.width <
             playerBike.x - collisionHalfWidth
@@ -1887,13 +1922,15 @@ function applyBotImpact(
     speedFactor = 0.5,
     duration = 34
 ) {
-    if (
-        obstacle.botHitBy.has(bike.botIndex)
-    ) {
-        return;
+    const previousHitFrame = obstacle.botHitBy.get(bike.botIndex);
+    if (REPEATING_GROUND_HAZARDS.has(obstacle.type)) {
+        if (previousHitFrame !== undefined &&
+            frameCounter - previousHitFrame < GROUND_HAZARD_REHIT_FRAMES) return;
+        obstacle.botHitBy.set(bike.botIndex, frameCounter);
+    } else {
+        if (previousHitFrame !== undefined) return;
+        obstacle.botHitBy.set(bike.botIndex, frameCounter);
     }
-
-    obstacle.botHitBy.add(bike.botIndex);
 
     bike.impactSlowTimer = duration;
 
@@ -1919,9 +1956,9 @@ function applyBotImpact(
 
     const roughObstacle = ['rock', 'rolling_boulder', 'log', 'fallen_branch', 'crank_rack'].includes(obstacle.type);
     if (roughObstacle) {
-        const stability = clamp(Number(bike.stability) || 0, 0, 100);
-        speedFactor = Math.min(0.94, speedFactor + stability * 0.0018);
-        duration = Math.round(duration * (1 - stability * 0.002));
+        const stability = Math.max(0, Number(bike.stability) || 0);
+        speedFactor = 1 - (1 - speedFactor) * Math.exp(-stability / 110);
+        duration = Math.round(duration * Math.exp(-stability / 450));
         bike.impactSlowTimer = duration;
         const severity = obstacle.type === 'rolling_boulder' ? 1.35 : obstacle.type === 'rock' ? 1.2 : 1;
         const impactForce = bike.velocityX * severity / 3;
@@ -1946,6 +1983,10 @@ function applyBotImpact(
 function updateBotCollisions(bike) {
     const collisionHalfWidth = getBikeObstacleHalfWidth(bike);
     for (const obstacle of obstacles) {
+        if (obstacle.botHitBy.has(bike.botIndex) &&
+            !isTouchingObstacle(bike, obstacle)) {
+            obstacle.botHitBy.delete(bike.botIndex);
+        }
         if (
             obstacle.x + obstacle.width <
             bike.x - collisionHalfWidth
@@ -1965,15 +2006,8 @@ function updateBotCollisions(bike) {
         }
 
         if (obstacle.type === 'pit' || obstacle.type === 'bridge_gap' || obstacle.type === 'cliff' || obstacle.type === 'loose_planks') {
-            if (bike.jumpHeight < getGapClearanceHeight(obstacle)) {
-                applyBotImpact(
-                    bike,
-                    obstacle,
-                    0.28,
-                    54
-                );
-            }
-
+            // Боты планируют прыжок через каждый разрыв заранее. Даже если
+            // прыжок не добрал высоту, пропасть не выводит соперника из гонки.
             continue;
         }
 
@@ -2068,6 +2102,10 @@ function finishRace(playerWon, reason = 'finish') {
         reversing: false,
         jumpRequested: false
     };
+    if (raceAutosaveBatchActive) {
+        endAutosaveBatch();
+        raceAutosaveBatchActive = false;
+    }
 
     if (typeof callbackOnRaceEnd !== 'function') {
         console.error('Не задан обработчик завершения гонки.');
@@ -2102,6 +2140,10 @@ export function stopRace() {
     historyVictoryOutro = null;
     setHistoryCinematicMode(false);
     input = { accelerating: false, braking: false, reversing: false, jumpRequested: false };
+    if (raceAutosaveBatchActive) {
+        endAutosaveBatch();
+        raceAutosaveBatchActive = false;
+    }
 }
 
 function completeHistoryVictoryOutro() {
@@ -2840,7 +2882,9 @@ function updateCollectibles() {
                 if (Math.abs(bx - item.x) < 38 && Math.abs(by - itemY) < 32) {
                     item.cooldown = 90;
                     if (!bike.isBot) {
-                        playerBike.velocityX = Math.max(playerBike.velocityX + 3.2, 11);
+                        playerBike.padBoostSpeed = Math.max(playerBike.velocityX + 3.2, 11);
+                        playerBike.padBoostTimer = 50;
+                        playerBike.velocityX = playerBike.padBoostSpeed;
                         playerBike.nitroTimer = Math.max(playerBike.nitroTimer, 50);
                         if (typeof playBoostSound === 'function') {
                             try { playBoostSound(); } catch (e) {}
@@ -2848,7 +2892,9 @@ function updateCollectibles() {
                         addFloatingText(playerBike.x, by - 40, '⚡ ТУРБО БУСТ! ⚡', '#38bdf8');
                     } else {
                         // Бот наехал на турбо-ускоритель и рванул вперед!
-                        bike.velocityX = Math.max(bike.velocityX + 3.0, (bike.botBaseMaxSpeed || 4) * 1.35);
+                        bike.padBoostSpeed = Math.max(bike.velocityX + 3.0, (bike.botBaseMaxSpeed || 4) * 1.35);
+                        bike.padBoostTimer = 50;
+                        bike.velocityX = bike.padBoostSpeed;
                         bike.nitroTimer = Math.max(bike.nitroTimer, 50);
                         if (typeof playBoostSound === 'function' && Math.abs(bike.x - playerBike.x) < 650) {
                             try { playBoostSound(); } catch (e) {}
@@ -5080,7 +5126,7 @@ function drawRaceHUD() {
     // landscape phones. Scale its complete layout while still cancelling the
     // camera zoom so the HUD remains fixed-size relative to the screen.
     const hudScale = landscapePhone ? 0.72 : 1;
-    const uiScale = mobileLayout ? hudScale / getCameraZoom() : 1;
+    const uiScale = mobileLayout ? hudScale / (getCameraZoom() * cameraZoomFactor) : 1;
     const panelWidth = mobileLayout
         ? Math.min((landscapePhone ? 360 : 390) * uiScale, viewWidth - 20 * uiScale)
         : Math.min(390, viewWidth - 28);
@@ -5287,7 +5333,32 @@ function updateRaceViewportTransform() {
     const zoomIn = historyVictoryOutro
         ? 1 + 0.22 * easeOutCubic(historyVictoryOutro.elapsed / 84)
         : 1;
-    const zoom = baseRaceZoom * zoomIn;
+    let targetZoomFactor = 1;
+    if (playerBike && !historyVictoryOutro) {
+        const groundY = getGroundY(playerBike.x, 0);
+        const terrainOffset = groundY - viewHeight * 0.72;
+        const groundScreenY = canvasCssHeight * 0.72 + terrainOffset * baseRaceZoom * cameraZoomFactor;
+        const safeTop = Math.max(28, canvasCssHeight * 0.18);
+        const jumpEnvelope = Math.max(0, Number(playerBike.jumpHeight) || 0) +
+            Math.max(0, Number(playerBike.rampLift) || 0) + BIKE_HEIGHT + 42;
+        const fullZoomJumpHeight = jumpEnvelope * baseRaceZoom;
+        if (fullZoomJumpHeight > groundScreenY - safeTop) {
+            targetZoomFactor = clamp(
+                (groundScreenY - safeTop) / Math.max(1, fullZoomJumpHeight),
+                0.5,
+                1
+            );
+        }
+    }
+
+    // Отдаляем камеру только у верхней границы прыжка и плавно возвращаем
+    // исходный масштаб после приземления.
+    cameraZoomFactor += (targetZoomFactor - cameraZoomFactor) * 0.06;
+    if (Math.abs(targetZoomFactor - cameraZoomFactor) < 0.001) {
+        cameraZoomFactor = targetZoomFactor;
+    }
+
+    const zoom = baseRaceZoom * zoomIn * cameraZoomFactor;
     viewWidth = canvasCssWidth / zoom;
     viewHeight = canvasCssHeight / zoom;
     ctx.setTransform(canvasDpr * zoom, 0, 0, canvasDpr * zoom, 0, 0);
@@ -5542,6 +5613,10 @@ function resizeCanvas() {
 
 export function initRace(onRaceEnd) {
     setHistoryCinematicMode(false);
+    if (raceAutosaveBatchActive) {
+        endAutosaveBatch();
+        raceAutosaveBatchActive = false;
+    }
     if (animationId !== null) {
         cancelAnimationFrame(animationId);
         animationId = null;
@@ -5570,6 +5645,9 @@ export function initRace(onRaceEnd) {
 
         return;
     }
+
+    beginAutosaveBatch();
+    raceAutosaveBatchActive = true;
 
     currentTrackLevel = getTrackLevel();
     timerStarted = false;
@@ -5667,6 +5745,7 @@ export function initRace(onRaceEnd) {
     }
 
     cameraX = 0;
+    cameraZoomFactor = 1;
     frameCounter = 0;
 
     raceFinished = false;

@@ -16,7 +16,8 @@ import {
     activateNitroBoost,
     activateMacmillanBurst,
     stopRace,
-    getTrackDistanceMeters
+    getTrackDistanceMeters,
+    getTrackObstacleCount
 } from './race.js';
 
 import {
@@ -929,6 +930,7 @@ function enterMobileLandscape() {
 }
 
 function showScreen(screenName) {
+    document.body.classList.toggle('in-race-screen', screenName === 'race');
     const selectedTrack = [...TRACKS_DB, ...HISTORY_TRACKS_DB]
         .find(track => track.id === player.selectedTrack);
     setAudioScene(
@@ -1061,6 +1063,12 @@ function renderContainerShop() {
         const chances = getAvailableContainerChances(container, getPartPools());
         const hasAvailableLoot = Object.values(chances).some(chance => chance > 0);
         const isCoupon = container.currency === 'coupon';
+        const lockedRarities = [];
+        if (!isRarityUnlocked('rare')) lockedRarities.push('редкие (после трассы 2)');
+        if (!isRarityUnlocked('legendary')) lockedRarities.push('легендарные (после трассы 4)');
+        const lockedRarityNote = lockedRarities.length
+            ? `Пока закрыты ${lockedRarities.join(' и ')}; их шанс перераспределяется между доступными редкостями.`
+            : '';
         const priceText = isCoupon
             ? `${container.price} Велокупон`
             : `${Number(container.price).toLocaleString('ru-RU')} 🪙`;
@@ -1083,6 +1091,7 @@ function renderContainerShop() {
             </p>
 
             ${hasAvailableLoot ? '' : '<p class="text-xs text-amber-300 text-center">Откроется после разблокировки редких деталей</p>'}
+            ${lockedRarityNote ? `<p class="text-xs text-amber-200 text-center">${lockedRarityNote}</p>` : ''}
 
             <div class="bg-gray-900 rounded-lg p-3 text-xs text-gray-300 space-y-1">
                 <div class="font-bold text-gray-200 mb-1">
@@ -1155,9 +1164,13 @@ function calculateBikeStats() {
     player.totalJump = totals.jump || 0;
     player.totalBrake = totals.brake || 0;
     player.totalPower = totals.power || 0;
-    totals.stability = Math.min(100, Number(totals.stability) || 0);
+    totals.stability = Math.max(0, Number(totals.stability) || 0);
     player.totalStability = totals.stability;
-    player.totalStats = { ...totals };
+    const previousTotals = player.totalStats || {};
+    if (Object.keys(totals).some(key => previousTotals[key] !== totals[key]) ||
+        Object.keys(previousTotals).some(key => !(key in totals))) {
+        player.totalStats = { ...totals };
+    }
 
     return {
         ...totals,
@@ -1595,7 +1608,9 @@ function updateGarageUI() {
         
         const chainDetail = bikeSvg.querySelector('.bike-chain-detail');
         if (chainDetail) chainDetail.setAttribute('stroke', chain?.visuals?.color || getRarityAccent(chain?.rarity));
-        const hasTripleChainring = ['d1', 'd2', 'd3'].includes(drivetrain?.id);
+        const hasTripleChainring =
+            ['d1', 'd2', 'd3'].includes(drivetrain?.id) &&
+            !(electronics && electronics.id !== 'e1');
         bikeSvg.querySelectorAll('#garage-bike-chainring-outer, #garage-bike-chainring-inner').forEach(ring => {
             ring.setAttribute('display', hasTripleChainring ? 'inline' : 'none');
         });
@@ -2196,9 +2211,7 @@ function updateTracksUI() {
                </div>`
             : '';
         const raceLength = getTrackDistanceMeters(track);
-        const obstaclesCount = isSprint
-            ? 0
-            : Math.floor((Number(track.obstacles) || 0) * (3 + storyIndex * 0.07));
+        const obstaclesCount = getTrackObstacleCount(track, storyIndex + 1);
         const trackNumber = isSprint
             ? 'TIME TRIAL'
             : `TRACK ${String(storyIndex + 1).padStart(2, '0')}`;

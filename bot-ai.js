@@ -8,6 +8,7 @@ const BOT_GAP_JUMP_TYPES = new Set([
 ]);
 const BOT_GAP_APPROACH_DISTANCE = 560;
 const BOT_OPTIONAL_JUMP_CHANCES = {
+    rock: 0.86,
     log: 0.86,
     barrier: 0.88,
     cone: 0.74,
@@ -46,8 +47,12 @@ export function getBotDifficultyStats(botIndex, difficultyTrack, currentTrack, g
     const balance = getTrackBalance(difficultyTrack?.id);
     const fallbackSpeed = Number(currentTrack?.botMaxSpeed) || 4;
     const fallbackAccel = Number(currentTrack?.botAccel) || 0.05;
-    const rawSpeed = Number(difficultyTrack?.botMaxSpeed) || fallbackSpeed;
-    const rawAcceleration = Number(difficultyTrack?.botAccel) || fallbackAccel;
+    const rawSpeed = Number(currentTrack?.isHistory
+        ? currentTrack.botMaxSpeed
+        : difficultyTrack?.botMaxSpeed) || fallbackSpeed;
+    const rawAcceleration = Number(currentTrack?.isHistory
+        ? currentTrack.botAccel
+        : difficultyTrack?.botAccel) || fallbackAccel;
     const personality = getBotPersonality(botIndex);
 
     // Небольшая вариация формы сохраняет равный шанс лидерства в каждом заезде.
@@ -192,17 +197,17 @@ export function updateBotDrivingDecision(bike, context) {
     brain.state = 'cruising';
     brain.targetObstacleId = null;
 
-    if (approachRock(bike, context.maxSpeed, obstacles, bikeWidth, racePressure)) {
-        brain.state = 'cautious-approach';
-        brain.lastAction = 'slow-for-rock';
-    }
-
     if (!bike.grounded || bike.jumpHeight > 0) {
         brain.state = 'airborne';
         return;
     }
 
     const obstacle = findBotJumpTarget(bike, obstacles, frameCounter, bikeWidth, racePressure);
+    if (obstacle?.type !== 'rock' &&
+        approachRock(bike, context.maxSpeed, obstacles, bikeWidth, racePressure)) {
+        brain.state = 'cautious-approach';
+        brain.lastAction = 'slow-for-rock';
+    }
     if (!obstacle) return;
 
     const front = bike.x + bikeWidth * 0.35;

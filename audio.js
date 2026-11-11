@@ -374,6 +374,13 @@ function injectAudioStyles() {
             border-radius: 50%; color: white; background: rgba(20,25,35,0.95); font-size: 19px; cursor: pointer;
         }
         #audio-show.visible { display: block; }
+        body.in-race-screen #audio-panel,
+        body.in-race-screen #audio-show {
+            top: calc(env(safe-area-inset-top, 0px) + 58px);
+            left: auto;
+            right: 12px;
+            transform: none;
+        }
         @media (max-width: 480px) { #audio-panel { width: 190px; } }
     `;
     document.head.appendChild(style);

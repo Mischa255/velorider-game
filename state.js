@@ -225,6 +225,7 @@ let autosaveTimer = null;
 let autosaveInFlight = false;
 let autosaveDirty = false;
 let autosaveHeartbeatStarted = false;
+let autosaveBatchDepth = 0;
 
 const proxyCache = new WeakMap();
 
@@ -406,9 +407,10 @@ function wrapReactiveState(value) {
             return wrapReactiveState(result);
         },
         set(target, prop, newValue, receiver) {
+            const oldValue = Reflect.get(target, prop, receiver);
             const wrappedValue = wrapReactiveState(newValue);
             const result = Reflect.set(target, prop, wrappedValue, receiver);
-            if (!suppressAutoSave) {
+            if (!suppressAutoSave && !Object.is(oldValue, wrappedValue)) {
                 markAutosaveDirty();
             }
             return result;
@@ -435,6 +437,7 @@ function resetAutosaveTimer() {
 
 function markAutosaveDirty() {
     autosaveDirty = true;
+    if (autosaveBatchDepth > 0) return;
     resetAutosaveTimer();
 
     autosaveTimer = setTimeout(() => {
@@ -443,6 +446,11 @@ function markAutosaveDirty() {
 }
 
 async function flushAutosave() {
+    if (autosaveBatchDepth > 0) {
+        if (autosaveDirty) writeLocalSave(getPlayerSaveData());
+        return;
+    }
+
     if (autosaveInFlight || !autosaveDirty) {
         return;
     }
@@ -464,7 +472,7 @@ async function flushAutosave() {
     } finally {
         autosaveInFlight = false;
 
-        if (autosaveDirty && !suppressAutoSave) {
+        if (autosaveDirty && !suppressAutoSave && autosaveBatchDepth === 0) {
             resetAutosaveTimer();
             autosaveTimer = setTimeout(() => {
                 void flushAutosave();
@@ -498,9 +506,10 @@ function startAutosaveHeartbeat() {
 
     window.addEventListener('beforeunload', () => {
         try {
+            const saveData = getPlayerSaveData();
             if (autosaveDirty) {
-                const payload = JSON.stringify(getPlayerSaveData());
-                writeLocalSave(getPlayerSaveData());
+                const payload = JSON.stringify(saveData);
+                writeLocalSave(saveData);
 
                 const cloud = getCloudStorage();
                 if (cloud && typeof cloud.setItem === 'function') {
@@ -509,13 +518,34 @@ function startAutosaveHeartbeat() {
                     } catch {}
                 }
             } else {
-                writeLocalSave(getPlayerSaveData());
+                writeLocalSave(saveData);
             }
         } catch {}
     });
 }
 
 export let player = wrapReactiveState(createDefaultPlayer());
+
+// During a race, defer cloud serialization until the end rather than saving
+// the complete player state for every collected coin.
+export function beginAutosaveBatch() {
+    if (autosaveBatchDepth === 0 && autosaveDirty) {
+        void flushAutosave();
+    }
+    autosaveBatchDepth++;
+    resetAutosaveTimer();
+}
+
+export function endAutosaveBatch() {
+    if (autosaveBatchDepth === 0) return;
+    autosaveBatchDepth--;
+    if (autosaveBatchDepth === 0 && autosaveDirty && !suppressAutoSave) {
+        resetAutosaveTimer();
+        autosaveTimer = setTimeout(() => {
+            void flushAutosave();
+        }, AUTOSAVE_DELAY_MS);
+    }
+}
 
 // =====================================
 // ДАННЫЕ ДЛЯ СОХРАНЕНИЯ
