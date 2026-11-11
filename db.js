@@ -37,7 +37,10 @@ const part = (
 ) => {
     const partData = { id, name, rarity, speed, accel, jump, brake, price, visuals }; // <-- Сохраняем visuals
     if (Number.isFinite(visuals.stability) && /^(?:f\d+|fk\d+|s\d+)$/.test(id)) {
-        partData.stability = visuals.stability;
+        const modestHardtailBonus = /^f\d+$/.test(id) && visuals.type === 'hardtail' && rarity !== 'special'
+            ? 6
+            : 0;
+        partData.stability = visuals.stability + modestHardtailBonus;
     }
     if (power) partData.power = power;
     const partAbilities = {

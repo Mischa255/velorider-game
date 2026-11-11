@@ -21,6 +21,8 @@ import {
 // =========================================
 
 const GRAVITY = 0.42;
+const SPEED_ACCEL_STAT_FACTOR = 0.8;
+const JUMP_STAT_FACTOR = 0.65;
 const SIMULATION_STEP_MS = 1000 / 60;
 const MAX_FRAME_DELTA_MS = 100;
 const SPRINT_GHOST_ACCELERATION_SECONDS = 1.2;
@@ -84,15 +86,17 @@ function easeInOutCubic(progress) {
 
 const TRACK_BALANCE = {
     t1:  { speed: 0.70, accel: 0.65, jumpForce: 10.5 },
-    t2:  { speed: 0.58, accel: 0.65, jumpForce: 10.5 },
-    t3:  { speed: 0.52, accel: 0.68, jumpForce: 10.7 },
-    t4:  { speed: 0.46, accel: 0.70, jumpForce: 10.7 },
-    t5:  { speed: 0.43, accel: 0.72, jumpForce: 10.8 },
-    t6:  { speed: 0.41, accel: 0.74, jumpForce: 11.0 },
-    t7:  { speed: 0.39, accel: 0.76, jumpForce: 11.0 },
-    t8:  { speed: 0.38, accel: 0.78, jumpForce: 11.2 },
-    t9:  { speed: 0.36, accel: 0.80, jumpForce: 11.3 },
-    t10: { speed: 0.35, accel: 0.82, jumpForce: 11.5 }
+    // Базовые значения соперников растут вместе с трассами, а эти множители
+    // распределяют ускорение между этапами без резкого скачка на t3.
+    t2:  { speed: 0.60, accel: 0.675, jumpForce: 10.5 },
+    t3:  { speed: 0.48, accel: 0.592, jumpForce: 10.7 },
+    t4:  { speed: 0.43, accel: 0.517, jumpForce: 10.7 },
+    t5:  { speed: 0.431, accel: 0.610, jumpForce: 10.8 },
+    t6:  { speed: 0.417, accel: 0.687, jumpForce: 11.0 },
+    t7:  { speed: 0.40, accel: 0.75, jumpForce: 11.0 },
+    t8:  { speed: 0.386, accel: 0.80, jumpForce: 11.2 },
+    t9:  { speed: 0.368, accel: 0.844, jumpForce: 11.3 },
+    t10: { speed: 0.35, accel: 0.833, jumpForce: 11.5 }
 };
 
 // =========================================
@@ -158,7 +162,8 @@ let ctx = null;
 let viewWidth = 0;
 let viewHeight = 0;
 let baseRaceZoom = RACE_ZOOM_DESKTOP;
-let cameraZoomFactor = 1;
+let cameraVerticalOffset = 0;
+let terrainVisibility = 1;
 let canvasDpr = 1;
 let mobilePerformanceMode = false;
 const backgroundGradientCache = new Map();
@@ -1277,7 +1282,7 @@ function updateRamp(bike, isBot) {
             ) * 4 + (bike.abilities?.superJumpUnlocked ? 6 : 0)
             : Math.max(0, Number(player.totalJump) || 0);
 
-        const extraJump = jumpStat * 0.045;
+        const extraJump = jumpStat * 0.045 * JUMP_STAT_FACTOR;
 
         bike.jumpHeight = Math.max(
             bike.rampLift,
@@ -1303,7 +1308,7 @@ function updateRamp(bike, isBot) {
                     0.36,
                     0.38
                 )
-                : 0.36 + 0.02 * Math.exp(-jumpStat / 7);
+                : 0.36 + 0.02 * Math.exp(-(jumpStat * JUMP_STAT_FACTOR) / 7);
 
         bike.currentRamp = null;
     }
@@ -1410,20 +1415,20 @@ function updatePlayerPhysics() {
 
     const brake = Math.max(0, Number(player.totalBrake) || 0);
 
-    const maxSpeed = 3.2 + speed * 0.12;
+    const maxSpeed = 3.2 + speed * 0.12 * SPEED_ACCEL_STAT_FACTOR;
 
     if (playerBike.nitroTimer > 0) playerBike.nitroTimer--;
     if (playerBike.nitroCooldown > 0) playerBike.nitroCooldown--;
     syncAbilityButtons();
     const nitroMultiplier = playerBike.nitroTimer > 0 ? 1.32 : 1;
 
-    const acceleration = 0.05 + accel * 0.002;
+    const acceleration = 0.05 + accel * 0.002 * SPEED_ACCEL_STAT_FACTOR;
 
     // Задний ход заметно слабее педалирования вперёд. Его тяга и скорость
     // растут от характеристик сборки, включая бонусы райдера.
     const reversePower = Math.max(0, Number(player.totalPower) || 0);
     const reverseAcceleration = acceleration * (0.2 + reversePower * 0.0015);
-    const reverseSpeedPotential = 0.65 + speed * 0.035 + reversePower * 0.008;
+    const reverseSpeedPotential = 0.65 + speed * 0.035 * SPEED_ACCEL_STAT_FACTOR + reversePower * 0.008;
     const reverseMaxSpeed = maxSpeed * (
         1 - Math.exp(-1.17 * reverseSpeedPotential / Math.max(0.1, maxSpeed))
     );
@@ -1435,9 +1440,9 @@ function updatePlayerPhysics() {
         : 1;
 
     const jumpForce =
-        8.5 + jump * 0.12;
+        8.5 + jump * 0.12 * JUMP_STAT_FACTOR;
 
-    const jumpGravity = 0.39 + (GRAVITY - 0.39) * Math.exp(-jump / 5);
+    const jumpGravity = 0.39 + (GRAVITY - 0.39) * Math.exp(-(jump * JUMP_STAT_FACTOR) / 5);
 
     if (driveInput > 0 && playerBike.grounded) {
         playerBike.velocityX += acceleration * draisinePush;
@@ -5126,7 +5131,7 @@ function drawRaceHUD() {
     // landscape phones. Scale its complete layout while still cancelling the
     // camera zoom so the HUD remains fixed-size relative to the screen.
     const hudScale = landscapePhone ? 0.72 : 1;
-    const uiScale = mobileLayout ? hudScale / (getCameraZoom() * cameraZoomFactor) : 1;
+    const uiScale = mobileLayout ? hudScale / getCameraZoom() : 1;
     const panelWidth = mobileLayout
         ? Math.min((landscapePhone ? 360 : 390) * uiScale, viewWidth - 20 * uiScale)
         : Math.min(390, viewWidth - 28);
@@ -5282,10 +5287,14 @@ function render() {
     updateRaceViewportTransform();
 
     drawBackground();
+    ctx.save();
+    ctx.translate(0, cameraVerticalOffset);
+    ctx.globalAlpha = terrainVisibility;
     drawTrack();
     drawObstacles();
     drawCollectibles();
     drawFinishLine();
+    ctx.restore();
 
     const drawBot = bike => {
         const label = bike.nitroTimer > 0
@@ -5306,6 +5315,8 @@ function render() {
         );
     };
 
+    ctx.save();
+    ctx.translate(0, cameraVerticalOffset);
     activeBots.filter(bike => !bike.isGhost).forEach(drawBot);
 
     drawBike(
@@ -5316,9 +5327,13 @@ function render() {
 
     // Рисуем призрака поверх игрока, чтобы он оставался заметен при совпадении позиций.
     activeBots.filter(bike => bike.isGhost).forEach(drawBot);
+    ctx.restore();
 
     if (!historyVictoryOutro) {
+        ctx.save();
+        ctx.translate(0, cameraVerticalOffset);
         drawFloatingTexts();
+        ctx.restore();
         drawRaceHUD();
     } else {
         drawHistoryCinematicOverlay();
@@ -5333,35 +5348,28 @@ function updateRaceViewportTransform() {
     const zoomIn = historyVictoryOutro
         ? 1 + 0.22 * easeOutCubic(historyVictoryOutro.elapsed / 84)
         : 1;
-    let targetZoomFactor = 1;
-    if (playerBike && !historyVictoryOutro) {
-        const groundY = getGroundY(playerBike.x, 0);
-        const terrainOffset = groundY - viewHeight * 0.72;
-        const groundScreenY = canvasCssHeight * 0.72 + terrainOffset * baseRaceZoom * cameraZoomFactor;
-        const safeTop = Math.max(28, canvasCssHeight * 0.18);
-        const jumpEnvelope = Math.max(0, Number(playerBike.jumpHeight) || 0) +
-            Math.max(0, Number(playerBike.rampLift) || 0) + BIKE_HEIGHT + 42;
-        const fullZoomJumpHeight = jumpEnvelope * baseRaceZoom;
-        if (fullZoomJumpHeight > groundScreenY - safeTop) {
-            targetZoomFactor = clamp(
-                (groundScreenY - safeTop) / Math.max(1, fullZoomJumpHeight),
-                0.5,
-                1
-            );
-        }
-    }
-
-    // Отдаляем камеру только у верхней границы прыжка и плавно возвращаем
-    // исходный масштаб после приземления.
-    cameraZoomFactor += (targetZoomFactor - cameraZoomFactor) * 0.06;
-    if (Math.abs(targetZoomFactor - cameraZoomFactor) < 0.001) {
-        cameraZoomFactor = targetZoomFactor;
-    }
-
-    const zoom = baseRaceZoom * zoomIn * cameraZoomFactor;
+    // Масштаб во время прыжка не меняется. Вместо "уменьшения" велосипеда
+    // камера плавно сопровождает его по вертикали, а трасса уходит вниз.
+    const zoom = baseRaceZoom * zoomIn;
     viewWidth = canvasCssWidth / zoom;
     viewHeight = canvasCssHeight / zoom;
     ctx.setTransform(canvasDpr * zoom, 0, 0, canvasDpr * zoom, 0, 0);
+
+    const groundY = playerBike ? getGroundY(playerBike.x, 0) : viewHeight * 0.72;
+    const jumpHeight = playerBike && !historyVictoryOutro
+        ? Math.max(0, Number(playerBike.jumpHeight) || 0) + Math.max(0, Number(playerBike.rampLift) || 0)
+        : 0;
+    const riderTopY = groundY - jumpHeight - 124;
+    const safeTopY = Math.max(34, canvasCssHeight * 0.18) / zoom;
+    const targetVerticalOffset = Math.max(0, safeTopY - riderTopY);
+    const followRate = targetVerticalOffset > cameraVerticalOffset ? 0.12 : 0.075;
+    cameraVerticalOffset += (targetVerticalOffset - cameraVerticalOffset) * followRate;
+    if (Math.abs(targetVerticalOffset - cameraVerticalOffset) < 0.15) {
+        cameraVerticalOffset = targetVerticalOffset;
+    }
+
+    const altitudeProgress = clamp(cameraVerticalOffset / Math.max(1, viewHeight * 0.72), 0, 1);
+    terrainVisibility = 1 - 0.94 * easeOutCubic(altitudeProgress);
 }
 
 function drawHistoryCinematicOverlay() {
@@ -5745,7 +5753,8 @@ export function initRace(onRaceEnd) {
     }
 
     cameraX = 0;
-    cameraZoomFactor = 1;
+    cameraVerticalOffset = 0;
+    terrainVisibility = 1;
     frameCounter = 0;
 
     raceFinished = false;
