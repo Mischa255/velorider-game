@@ -21,8 +21,9 @@ import {
 // =========================================
 
 const GRAVITY = 0.42;
-const SPEED_ACCEL_STAT_FACTOR = 0.8;
-const JUMP_STAT_FACTOR = 0.65;
+const SPEED_ACCEL_STAT_FACTOR = 0.84; // +5% к прежнему влиянию: 0.8 × 1.05.
+const JUMP_STAT_FACTOR = 0.715; // На 10% выше прежнего влияния очков прыжка (0.65 × 1.1).
+const PLAYER_STABILITY_EFFECT_FACTOR = 1.05;
 const SIMULATION_STEP_MS = 1000 / 60;
 const MAX_FRAME_DELTA_MS = 100;
 const SPRINT_GHOST_ACCELERATION_SECONDS = 1.2;
@@ -64,8 +65,18 @@ function getSoftStatRatio(value, reference) {
     return 1 - Math.exp(-3 * Math.pow(points / scale, 1.58));
 }
 
-function getStabilityRatio(value) {
-    return getSoftStatRatio(value, 100);
+function getStabilityRatio(value, effectFactor = 1) {
+    const points = Math.max(0, Number(value) || 0);
+    return 1 - Math.exp(
+        -3 * effectFactor * Math.pow(points / 100, 1.58)
+    );
+}
+
+function getBikeStabilityRatio(bike) {
+    return getStabilityRatio(
+        bike?.stability,
+        bike && !bike.isBot ? PLAYER_STABILITY_EFFECT_FACTOR : 1
+    );
 }
 
 function getBrakeQualityRatio(value) {
@@ -825,7 +836,7 @@ function startBikeFlip(bike, direction = 1, message = 'ПЕРЕВОРОТ! Ни�
     bike.flippedTimer = 74;
     bike.macmillanBurstRequested = false;
     bike.flipDirection = direction < 0 ? -1 : 1;
-    const instability = 1 - getStabilityRatio(bike.stability);
+    const instability = 1 - getBikeStabilityRatio(bike);
     bike.pitchVelocity = clamp(
         (Number(bike.pitchVelocity) || 0) + bike.flipDirection * (0.055 + instability * 0.04),
         -0.14,
@@ -855,7 +866,7 @@ function queuePlayerCrash(bike, reason) {
 function maybeFlipFromImpact(bike, impactForce, direction = 1, message = 'КОЧКА! Низкая стабильность') {
     if (!bike || bike.flippedTimer > 0 || bike.bumpCooldown > 0) return false;
 
-    const stabilityRatio = getStabilityRatio(bike.stability);
+    const stabilityRatio = getBikeStabilityRatio(bike);
     const instability = 1 - stabilityRatio;
     const minimumSpeed = 4.4 + stabilityRatio * 1.6;
     if (bike.velocityX < minimumSpeed) return false;
@@ -887,7 +898,7 @@ function getBikePitchInertia(bike) {
 function applyPitchImpulseAtContact(bike, impactForce, contactX, verticalDirection = -1, scale = 1) {
     if (!bike) return;
 
-    const stabilityRatio = getStabilityRatio(bike.stability);
+    const stabilityRatio = getBikeStabilityRatio(bike);
     const instability = 1 - stabilityRatio;
     const leverArm = Number(contactX) - bike.x;
     const verticalImpulse = Math.abs(Number(impactForce) || 0) * 0.064 * Math.sign(verticalDirection) * scale;
@@ -927,7 +938,7 @@ function updateBikeFlipRecovery(bike) {
     bike.x = Math.max(0, bike.x + Math.max(0, bike.velocityX) * 0.28);
     bike.velocityX = Math.max(0.2, bike.velocityX * 0.955);
 
-    const stabilityRatio = getStabilityRatio(bike.stability);
+    const stabilityRatio = getBikeStabilityRatio(bike);
     const stillFalling = Boolean(bike.crashPending) || bike.flippedTimer > 36;
     let restingAngle = 0;
     if (!stillFalling && bike.grounded) {
@@ -989,7 +1000,7 @@ function updateSuspensionResponse(bike) {
     const rearRelativeTravel = rearDelta - averageDelta;
     bike.previousGroundDelta = averageDelta;
 
-    const suspensionQuality = Math.max(0.15, getStabilityRatio(bike.stability));
+    const suspensionQuality = Math.max(0.15, getBikeStabilityRatio(bike));
     const front = advanceSuspension(
         bike.frontCompression,
         bike.frontCompressionVelocity,
@@ -1011,7 +1022,7 @@ function updateSuspensionResponse(bike) {
     bike.rearCompression = rear.compression;
     bike.rearCompressionVelocity = rear.velocity;
 
-    const stabilityRatio = getStabilityRatio(bike.stability);
+    const stabilityRatio = getBikeStabilityRatio(bike);
     const instability = 1 - stabilityRatio;
     const suspensionSupport = (
         (bike.frontSuspension ? 1 : 0) +
@@ -1048,7 +1059,7 @@ function updateSuspensionResponse(bike) {
 function updateJumpPhysics(bike) {
     if (!bike.isBot && bike.landingBoostCooldown > 0) bike.landingBoostCooldown--;
 
-    const stabilityRatio = getStabilityRatio(bike.stability);
+    const stabilityRatio = getBikeStabilityRatio(bike);
     bike.pitchAngle = Number(bike.pitchAngle) || 0;
     bike.pitchVelocity = Number(bike.pitchVelocity) || 0;
 
@@ -1775,7 +1786,7 @@ function applyPlayerImpact(obstacle, speedLimit = 1.0) {
     }
 
     const roughObstacle = ['rock', 'rolling_boulder', 'log', 'fallen_branch', 'crank_rack'].includes(obstacle.type);
-        const stability = getStabilityRatio(playerBike.stability);
+        const stability = getBikeStabilityRatio(playerBike);
     if (roughObstacle) {
         const retainedSpeed = (playerBike.velocityX - speedLimit) * stability * 0.18;
         speedLimit += retainedSpeed;
