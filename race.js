@@ -6166,6 +6166,10 @@ export function initRace(onRaceEnd) {
                     saddleColor: '#302a22',
                     seatpostColor: '#4b5563'
                 };
+                // Pierre's special trait is uphill torque. It is read only by
+                // the bot hill-resistance calculation, so his flat speed and
+                // acceleration stay at the chapter's intended difficulty.
+                botBike.botBasePower = Math.round((Number(botBike.botBasePower) || 0) * 1.5);
             }
         }
         const chapterTwoQualifiers = currentTrack.isHistory && Number(currentTrack.historyChapter) === 2 && Number(currentTrack.historyStage) <= 4;
