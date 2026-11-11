@@ -29,6 +29,7 @@ const BIKE_HEIGHT = 24;
 const TRACK_MULTIPLIER = 3;
 const GAME_WORLD_UNITS_PER_METER = 45;
 const OBSTACLE_MULTIPLIER = 3;
+const MACMILLAN_PEDAL_CADENCE = 0.22;
 const RACE_ZOOM_DESKTOP = 0.86;
 const RACE_ZOOM_MOBILE_PORTRAIT = 0.60;
 const RACE_ZOOM_MOBILE_LANDSCAPE = 0.56;
@@ -1404,6 +1405,15 @@ function updatePlayerPhysics() {
     const acceleration =
         0.05 + Math.min(accel, 70) * 0.002;
 
+    // Задний ход заметно слабее педалирования вперёд. Его тяга и скорость
+    // растут от характеристик сборки, включая бонусы райдера.
+    const reversePower = clamp(Number(player.totalPower) || 0, 0, 80);
+    const reverseAcceleration = acceleration * (0.2 + reversePower * 0.0015);
+    const reverseMaxSpeed = Math.min(
+        maxSpeed * 0.38,
+        0.65 + Math.min(speed, 70) * 0.035 + reversePower * 0.008
+    );
+
     const brakeApplied = input.braking && playerBike.hasBrakes;
     const driveInput = Number(input.accelerating) - Number(input.reversing);
     const draisinePush = playerBike.visuals?.draisine && playerBike.grounded
@@ -1433,7 +1443,7 @@ function updatePlayerPhysics() {
         } else {
             // После полной остановки та же кнопка действительно включает задний ход.
             if (playerBike.velocityX > 0) playerBike.velocityX = 0;
-            playerBike.velocityX -= acceleration * 0.9;
+            playerBike.velocityX -= reverseAcceleration;
         }
     }
 
@@ -1573,7 +1583,7 @@ function updatePlayerPhysics() {
 
     playerBike.velocityX = clamp(
         playerBike.velocityX,
-        -maxSpeed * 0.65,
+        -reverseMaxSpeed,
         allowedSpeed
     );
 
@@ -3696,6 +3706,19 @@ function drawPlayerHistoryObserver(x, groundY, phaseFrame, riseProgress, visuals
     ctx.fillRect(-12, -2, 8, 2);
     ctx.fillRect(4, -2, 8, 2);
 
+    // У курьера сумка остаётся видна и после спешивания в исторической сцене.
+    if (riderId === 'r4') {
+        ctx.fillStyle = '#f97316';
+        ctx.fillRect(4, -41, 13, 17);
+        ctx.fillStyle = '#c2410c';
+        ctx.fillRect(4, -38, 13, 3);
+        ctx.strokeStyle = '#431407';
+        ctx.lineWidth = 1.4;
+        ctx.strokeRect(4, -41, 13, 17);
+        ctx.fillStyle = '#fef3c7';
+        ctx.fillRect(6, -32, 10, 3);
+    }
+
     ctx.fillStyle = shirt;
     ctx.beginPath();
     ctx.moveTo(-6, -40);
@@ -3704,6 +3727,21 @@ function drawPlayerHistoryObserver(x, groundY, phaseFrame, riseProgress, visuals
     ctx.lineTo(-5, -22);
     ctx.closePath();
     ctx.fill();
+
+    if (riderId === 'r4') {
+        ctx.strokeStyle = '#431407';
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        ctx.moveTo(3, -38);
+        ctx.lineTo(-4, -32);
+        ctx.stroke();
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(3, -38);
+        ctx.lineTo(-4, -32);
+        ctx.stroke();
+    }
 
     // Поворачивает голову влево, в сторону Карла Дреза.
     ctx.fillStyle = '#f1c9a5';
@@ -3981,9 +4019,12 @@ function drawDraisineBike(bike, label, variant = 'draisine') {
         saddleColor: bike.visuals?.saddleColor || '#342319'
     });
 
+    const macmillanDrivePhase = bike.grounded
+        ? frameCounter * MACMILLAN_PEDAL_CADENCE
+        : 0;
     if (macmillan && bike.visuals?.macmillanTreadles) {
         const crank = { x: x + 2, y: bodyY - 17 };
-        const phase = (Number(bike.pedalPhase) || 0) + frameCounter * 0.045;
+        const phase = macmillanDrivePhase;
         const pedalNear = { x: crank.x + Math.cos(phase) * 10, y: crank.y + Math.sin(phase) * 10 };
         const pedalFar = { x: crank.x + Math.cos(phase + Math.PI) * 10, y: crank.y + Math.sin(phase + Math.PI) * 10 };
         ctx.strokeStyle = bike.visuals?.macmillanTreadleColor || '#57391f';
@@ -4016,7 +4057,7 @@ function drawDraisineBike(bike, label, variant = 'draisine') {
         ctx.save();
         ctx.globalAlpha *= seatedOpacity;
         // Дрез отталкивается ногами от земли; Макмиллан сидит и качает рычажные педали.
-        const push = bike.grounded ? Math.sin(frameCounter * (macmillan ? 0.22 : 0.13)) : 0;
+        const push = macmillan ? macmillanDrivePhase : (bike.grounded ? Math.sin(frameCounter * 0.13) : 0);
         const hip = { x: x - 5, y: bodyY - (macmillan ? 58 : 66) };
         const shoulder = { x: x + 1, y: bodyY - (macmillan ? 76 : 81) };
         const head = { x: x + 3, y: bodyY - (macmillan ? 86 : 91) };
@@ -4158,14 +4199,14 @@ function drawBike(bike, label, color) {
         : 0;
 
     bike.wheelRotation = (bike.wheelRotation || 0) + travel / radius;
-    bike.pedalPhase = draisineFrame
+    bike.pedalPhase = (draisineFrame || macmillanFrame)
         ? 0
         : (bike.pedalPhase || 0) + travel / radius * 0.42;
     const wheelAngle = bike.wheelRotation;
     // У рамы Макмиллана рычажный привод заметно работает даже на малой
     // скорости — как у исторического соперника, независимо от выбранного райдера.
     const pedalAngle = macmillanFrame
-        ? (Number(bike.pedalPhase) || 0) + frameCounter * 0.045
+        ? (bike.grounded ? frameCounter * MACMILLAN_PEDAL_CADENCE : 0)
         : bike.pedalPhase;
 
     // Тень остаётся на земле и не поворачивается вместе с рамой.
@@ -4469,10 +4510,10 @@ function drawBike(bike, label, color) {
 
     const pedalRadius = macmillanFrame ? 10 : 7;
     const leftPedal = macmillanFrame
-        ? { x: bottomX + 2 + Math.cos(pedalAngle) * pedalRadius, y: bottomY - 4 + Math.sin(pedalAngle) * 5 }
+        ? { x: x + 2 + Math.cos(pedalAngle) * pedalRadius, y: y - 17 + Math.sin(pedalAngle) * pedalRadius }
         : { x: bottomX + Math.cos(pedalAngle) * pedalRadius, y: bottomY + Math.sin(pedalAngle) * pedalRadius };
     const rightPedal = macmillanFrame
-        ? { x: bottomX + 2 + Math.cos(pedalAngle + Math.PI) * pedalRadius, y: bottomY - 4 + Math.sin(pedalAngle + Math.PI) * 5 }
+        ? { x: x + 2 + Math.cos(pedalAngle + Math.PI) * pedalRadius, y: y - 17 + Math.sin(pedalAngle + Math.PI) * pedalRadius }
         : { x: bottomX + Math.cos(pedalAngle + Math.PI) * pedalRadius, y: bottomY + Math.sin(pedalAngle + Math.PI) * pedalRadius };
     ctx.strokeStyle = visuals.crankColor || '#e2e8f0';
     ctx.lineWidth = 2;
@@ -4484,17 +4525,24 @@ function drawBike(bike, label, color) {
         ctx.moveTo(bottomX + 7.5, bottomY);
         ctx.arc(bottomX, bottomY, 7.5, 0, Math.PI * 2);
     }
-    ctx.moveTo(bottomX, bottomY);
-    ctx.lineTo(leftPedal.x, leftPedal.y);
-    ctx.moveTo(bottomX, bottomY);
-    ctx.lineTo(rightPedal.x, rightPedal.y);
+    if (!macmillanFrame) {
+        ctx.moveTo(bottomX, bottomY);
+        ctx.lineTo(leftPedal.x, leftPedal.y);
+        ctx.moveTo(bottomX, bottomY);
+        ctx.lineTo(rightPedal.x, rightPedal.y);
+    }
     ctx.stroke();
     if (macmillanFrame) {
-        // Рычаги двигаются вместе с педалированием, но не меняют установленную
-        // модель райдера и не подменяют выбранные компоненты велосипеда.
-        ctx.strokeStyle = frameColor;
-        ctx.lineWidth = 2.2;
+        // Кинематика рычажного привода совпадает с велосипедом Макмиллана.
+        const drivePivot = { x: x + 2, y: y - 17 };
+        ctx.strokeStyle = visuals.macmillanTreadleColor || frameColor || '#8b5a2b';
+        ctx.lineWidth = 2.4;
         ctx.beginPath();
+        ctx.arc(drivePivot.x, drivePivot.y, 3.5, 0, Math.PI * 2);
+        ctx.moveTo(drivePivot.x, drivePivot.y);
+        ctx.lineTo(leftPedal.x, leftPedal.y);
+        ctx.moveTo(drivePivot.x, drivePivot.y);
+        ctx.lineTo(rightPedal.x, rightPedal.y);
         ctx.moveTo(rearWheelX + 3, rearWheelY + 1);
         ctx.lineTo(leftPedal.x, leftPedal.y);
         ctx.moveTo(rearWheelX + 3, rearWheelY + 1);
@@ -4528,13 +4576,19 @@ function drawBike(bike, label, color) {
 
     const hip = draisineFrame
         ? { x: seatX + 1, y: y - 66 }
-        : { x: seatX + 1, y: wheelY - 35 };
+        : macmillanFrame
+            ? { x: x - 5, y: y - 58 }
+            : { x: seatX + 1, y: wheelY - 35 };
     const shoulder = draisineFrame
         ? { x: x + 1, y: y - 81 }
-        : { x: x + 1, y: wheelY - 46 };
+        : macmillanFrame
+            ? { x: x + 1, y: y - 76 }
+            : { x: x + 1, y: wheelY - 46 };
     const head = draisineFrame
         ? { x: x + 3, y: y - 91 }
-        : { x: x + 4, y: wheelY - 53 };
+        : macmillanFrame
+            ? { x: x + 3, y: y - 86 }
+            : { x: x + 4, y: wheelY - 53 };
     const kneeA = { x: (hip.x + leftPedal.x) / 2 + 3, y: (hip.y + leftPedal.y) / 2 - 3 };
     const kneeB = { x: (hip.x + rightPedal.x) / 2 - 3, y: (hip.y + rightPedal.y) / 2 - 3 };
 
@@ -4638,8 +4692,8 @@ function drawBike(bike, label, color) {
     } else if (macmillanFrame) {
         const phaseSin = Math.sin(pedalAngle);
         const phaseCos = Math.cos(pedalAngle);
-        const nearKnee = { x: hip.x + 4 + phaseSin * 2.5, y: wheelY - 23 + phaseCos * 3.4 };
-        const farKnee = { x: hip.x - 4 - phaseSin * 2.5, y: wheelY - 24 - phaseCos * 3.0 };
+        const nearKnee = { x: x - 1 + phaseCos * 4, y: y - 38 + phaseSin * 5 };
+        const farKnee = { x: x + 6 - phaseCos * 4, y: y - 38 - phaseSin * 5 };
         ctx.strokeStyle = pantsColor;
         ctx.lineWidth = 3.8;
         ctx.beginPath();
@@ -4679,19 +4733,30 @@ function drawBike(bike, label, color) {
         ctx.fillRect(rightPedal.x - 2, rightPedal.y - 1.2, 5, 2.4);
     }
 
-    // Курьерская сумка расположена позади корпуса, чтобы читалась как отдельный предмет.
+    // Яркая сумка выступает за силуэт спины и остаётся заметной в небольшом
+    // масштабе гонки; рисуем её до корпуса, чтобы она выглядела надетой.
     if (riderId === 'r4') {
-        const bagX = hip.x - 14;
-        const bagY = shoulder.y - 1;
+        const bagX = hip.x - 20;
+        const bagY = shoulder.y + 1;
         ctx.fillStyle = '#f97316';
-        ctx.fillRect(bagX, bagY, 12, 15);
+        ctx.beginPath();
+        ctx.moveTo(bagX + 2, bagY);
+        ctx.lineTo(bagX + 15, bagY);
+        ctx.lineTo(bagX + 17, bagY + 3);
+        ctx.lineTo(bagX + 16, bagY + 19);
+        ctx.lineTo(bagX, bagY + 19);
+        ctx.lineTo(bagX - 1, bagY + 4);
+        ctx.closePath();
+        ctx.fill();
         ctx.fillStyle = '#c2410c';
-        ctx.fillRect(bagX, bagY, 12, 3);
+        ctx.fillRect(bagX, bagY + 3, 16, 3.5);
         ctx.strokeStyle = '#431407';
-        ctx.lineWidth = 1.2;
-        ctx.strokeRect(bagX, bagY, 12, 15);
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
         ctx.fillStyle = '#fef3c7';
-        ctx.fillRect(bagX + 2, bagY + 7, 8, 2.2);
+        ctx.fillRect(bagX + 2, bagY + 10, 12, 3);
+        ctx.fillStyle = '#7c2d12';
+        ctx.fillRect(bagX + 6, bagY + 1, 4, 2);
     }
 
     // Торс / Джерси
@@ -4749,12 +4814,18 @@ function drawBike(bike, label, color) {
     }
 
     if (riderId === 'r4') {
-        // Лямка проходит поверх формы и закрепляет сумку на спине.
-        ctx.strokeStyle = '#7c2d12';
-        ctx.lineWidth = 1.7;
+        // Контрастная лямка перекинута через плечо к сумке на спине.
+        ctx.strokeStyle = '#431407';
+        ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(shoulder.x - 1, shoulder.y + 1);
-        ctx.lineTo(hip.x - 8, hip.y - 1);
+        ctx.moveTo(shoulder.x + 2, shoulder.y + 1);
+        ctx.lineTo(hip.x - 13, hip.y - 1);
+        ctx.stroke();
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(shoulder.x + 2, shoulder.y + 1);
+        ctx.lineTo(hip.x - 13, hip.y - 1);
         ctx.stroke();
     }
 
