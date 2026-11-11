@@ -14,8 +14,10 @@ const BOT_OPTIONAL_JUMP_CHANCES = {
     cone: 0.74,
     fallen_branch: 0.9,
     wooden_gate: 0.88,
+    iron_gate: 0.9,
     pulse_gate: 0.95,
     rolling_boulder: 0.55,
+    rolling_wheel: 0.88,
     smith_hammer: 0.95,
     mill_paddle: 0.9,
     crank_rack: 0.9,
@@ -40,7 +42,13 @@ const HISTORY_BOT_PACE = Object.freeze({
     m2: { maxSpeed: 4.8, acceleration: 0.071, jumpForce: 10.7, power: 22 },
     m3: { maxSpeed: 4.8, acceleration: 0.071, jumpForce: 10.7, power: 25 },
     m4: { maxSpeed: 4.8, acceleration: 0.071, jumpForce: 10.7, power: 28 },
-    m5: { maxSpeed: 5.0, acceleration: 0.075, jumpForce: 10.9, power: 31 }
+    m5: { maxSpeed: 5.0, acceleration: 0.075, jumpForce: 10.9, power: 31 },
+    l1: { maxSpeed: 5.35, acceleration: 0.085, jumpForce: 10.7, power: 27 },
+    l2: { maxSpeed: 6.05, acceleration: 0.095, jumpForce: 10.8, power: 31 },
+    l3: { maxSpeed: 6.8, acceleration: 0.12, jumpForce: 10.8, power: 34 },
+    l4: { maxSpeed: 6.05, acceleration: 0.095, jumpForce: 10.8, power: 31 },
+    l5: { maxSpeed: 6.8, acceleration: 0.12, jumpForce: 10.9, power: 35 },
+    l6: { maxSpeed: 7.5, acceleration: 0.15, jumpForce: 11.1, power: 40 }
 });
 
 export function getBotPersonality(botIndex) {

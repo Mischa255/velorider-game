@@ -36,7 +36,7 @@ const part = (
     visuals = {} // <-- Новый параметр
 ) => {
     const partData = { id, name, rarity, speed, accel, jump, brake, price, visuals }; // <-- Сохраняем visuals
-    if (Number.isFinite(visuals.stability) && /^(?:f\d+|fk\d+|s\d+)$/.test(id)) {
+    if (Number.isFinite(visuals.stability) && /^(?:f\d+|fk\d+|s\d+|w\d+)$/.test(id)) {
         const modestHardtailBonus = /^f\d+$/.test(id) && visuals.type === 'hardtail' && rarity !== 'special'
             ? 6
             : 0;
@@ -93,7 +93,8 @@ export const ITEMS_DB = {
         part('f3', 'Cannondale Jekyll Carbon', 'legendary', 4, 3, 8, 4, 5600, 0, { color: '#22c55e', width: 15, type: 'dh', stability: 26 }),
         part('f13', 'Specialized Stumpjumper EVO Carbon', 'legendary', 6, 4, 11, 6, 7000, 0, { color: '#f97316', width: 16, type: 'dh', stability: 27 }),
         part('f14', 'Laufmaschine Карла Дреза', 'special', 0, 0, 0, 0, 0, 0, { color: '#9a6538', width: 12, type: 'hardtail', stability: 1, specialHistoryFrame: true }),
-        part('f15', 'Педальный велоципед Макмиллана', 'special', 4, 3, 3, 2, 0, 0, { color: '#8b5a2b', width: 12, type: 'hardtail', stability: 22, specialMacmillanFrame: true })
+        part('f15', 'Педальный велоципед Макмиллана', 'special', 4, 3, 3, 2, 0, 0, { color: '#8b5a2b', width: 12, type: 'hardtail', stability: 22, specialMacmillanFrame: true }),
+        part('f16', 'Высокая рама Лальмана', 'special', 8, 6, 7, 4, 0, 0, { color: '#536579', width: 14, type: 'hardtail', stability: 25, specialHighWheelerFrame: true })
     ],
 
     // =====================================
@@ -187,7 +188,8 @@ export const ITEMS_DB = {
         part("w4", "DT Swiss M 1900", "rare", 4, 4, 4, 5, 3600, 0, {rimColor:"#e2e8f0",radius:9.8,hubColor:"#ef4444"}),
         part('w5', 'DT Swiss XM 1700', 'legendary', 7, 6, 6, 7, 2300, 0, { rimColor: '#f43f5e', radius: 10.2, hubColor: '#f8fafc' }),
         part('w6', 'DT Swiss XRC 1200 Carbon', 'legendary', 9, 8, 8, 8, 3500, 0, { rimColor: '#fbbf24', radius: 10.5, hubColor: '#fcd34d' }),
-        part('w7', 'Разновеликие деревянные колёса', 'special', 0, 0, 0, 0, 0, 0, { rimColor: '#8b5a2b', hubColor: '#563819', radius: 12, rearRadius: 15, frontRadius: 12 })
+        part('w7', 'Разновеликие деревянные колёса', 'special', 0, 0, 0, 0, 0, 0, { rimColor: '#8b5a2b', hubColor: '#563819', radius: 12, rearRadius: 15, frontRadius: 12 }),
+        part('w8', 'Стальные колёса «Высокого велосипеда»', 'special', 4, 4, 4, 5, 0, 0, { rimColor: '#b9a16c', hubColor: '#dbc48c', radius: 20, rearRadius: 8, frontRadius: 20, stability: 18, highWheelerWheels: true })
     ],
 
     // =====================================
@@ -265,7 +267,8 @@ export const ITEMS_DB = {
         part("hb4", "Race Face Chester", "rare", 3, 4, 4, 2, 2560, 0, {color:"#ef4444",width:2.1}),
         part('hb5', 'Renthal Fatbar Carbon', 'legendary', 5, 5, 6, 3, 1800, 0, { color: '#d97706', width: 2.5 }),
         part('hb6', 'Деревянный руль Дреза', 'special', 0, 0, 0, 0, 0, 0, { color: '#9a6538', width: 1.6 }),
-        part('hb7', 'Кованый руль Макмиллана', 'special', 2, 3, 2, 1, 0, 0, { color: '#8b5a2b', width: 1.7 })
+        part('hb7', 'Кованый руль Макмиллана', 'special', 2, 3, 2, 1, 0, 0, { color: '#8b5a2b', width: 1.7 }),
+        part('hb8', 'Руль «Костотряса»', 'special', 3, 4, 4, 2, 0, 0, { color: '#64748b', width: 2.1 })
     ],
 
     // =====================================
@@ -277,7 +280,8 @@ export const ITEMS_DB = {
         part("st3", "Race Face Ride", "rare", 2, 3, 2, 0, 1360),
         part('st4', 'Race Face Turbine', 'legendary', 4, 5, 3, 0, 1000),
         part('st5', 'Деревянный вынос Дреза', 'special', 0, 0, 0, 0, 0, 0, { color: '#9a6538' }),
-        part('st6', 'Короткий кованый вынос Макмиллана', 'special', 1, 2, 1, 0, 0, 0, { color: '#8b5a2b' })
+        part('st6', 'Короткий кованый вынос Макмиллана', 'special', 1, 2, 1, 0, 0, 0, { color: '#8b5a2b' }),
+        part('st7', 'Стальной вынос Лальмана', 'special', 2, 3, 2, 0, 0, 0, { color: '#64748b' })
     ],
 
     // =====================================
@@ -312,7 +316,8 @@ export const ITEMS_DB = {
         part("pd3", "Shimano PD-M520", "rare", 2, 3, 3, 0, 1360),
         part("pd4", "Race Face Chester", "rare", 3, 4, 4, 0, 1960),
         part('pd5', 'Crankbrothers Mallet E', 'legendary', 5, 6, 6, 0, 1300),
-        part('pd6', 'Рычажные педали Макмиллана', 'special', 2, 3, 3, 0, 0, 0, { color: '#8b5a2b', macmillanTreadles: true })
+        part('pd6', 'Рычажные педали Макмиллана', 'special', 2, 3, 3, 0, 0, 0, { color: '#8b5a2b', macmillanTreadles: true }),
+        part('pd7', 'Передние педали Лальмана', 'special', 3, 4, 4, 0, 0, 0, { color: '#64748b', frontWheelDrive: true })
     ],
 
     // =====================================
@@ -509,6 +514,9 @@ export const OBSTACLE_TYPES = {
 OBSTACLE_TYPES.cobblestones = { name: 'Булыжная мостовая', width: 92, height: 9, color: '#8b8174' };
 OBSTACLE_TYPES.plank_bridge = { name: 'Деревянный настил', width: 118, height: 12, color: '#9a6538' };
 OBSTACLE_TYPES.wooden_gate = { name: 'Садовая калитка', width: 48, height: 32, color: '#704522' };
+OBSTACLE_TYPES.iron_gate = { name: 'Кузнечные железные ворота', width: 60, height: 46, color: '#64748b' };
+OBSTACLE_TYPES.metal_grate = { name: 'Рифлёная металлическая решётка', width: 112, height: 12, color: '#94a3b8' };
+OBSTACLE_TYPES.rolling_wheel = { name: 'Катящееся колесо высокого велосипеда', width: 54, height: 54, color: '#9ca3af' };
 OBSTACLE_TYPES.cliff = { name: 'Обрыв перед финишем', width: 150, height: 72, color: '#020617' };
 OBSTACLE_TYPES.forge_slag = { name: 'Горячий шлак', width: 84, height: 15, color: '#f97316' };
 OBSTACLE_TYPES.smith_hammer = { name: 'Кузнечный молот', width: 58, height: 68, color: '#64748b' };
@@ -833,5 +841,78 @@ export const HISTORY_TRACKS_DB = [
             { category: 'frames', id: 'f15' },
             { category: 'pedals', id: 'pd6' }
         ]
+    },
+    {
+        id: 'l1', historyChapter: 3, historyStage: 1, isHistory: true, musicTheme: '3h1',
+        name: 'Мастерская Пьера', year: '1862–1866', opponent: 'Евкакий', historyCinematicLocation: 'ФРАНЦИЯ · 1866',
+        historyFeature: 'Первый костотряс собирают в мастерской: короткие настилы, камни и ямы проверяют, готов ли ты к жёсткой металлической машине.',
+        recommendedStats: { speed: 28, accel: 22, jump: 16, brake: 12, stability: 30, power: 28 },
+        historyDifficultyLevel: 3, botDifficultyLevel: 3, length: 24000, hills: 18, botMaxSpeed: 10, botAccel: 0.12,
+        botDifficultyTrackId: 't3', obstacles: 15,
+        obstacleTypes: ['cobblestones', 'pit', 'rock', 'ramp', 'log', 'plank_bridge', 'metal_grate'],
+        historyObstaclePattern: ['cobblestones', 'ramp', 'rock', 'pit', 'log', 'plank_bridge', 'metal_grate', 'cobblestones', 'pit', 'ramp', 'rock', 'log', 'cobblestones'],
+        winReward: 0, lossReward: 0, couponReward: 0,
+        historyRewards: [{ type: 'coupons', amount: 7 }]
+    },
+    {
+        id: 'l2', historyChapter: 3, historyStage: 2, isHistory: true, musicTheme: '3h2',
+        name: 'Педали на переднем колесе', year: '1866', opponent: 'Евкакий', historyCinematicLocation: 'ПЕРВАЯ ПЕДАЛЬНАЯ МАШИНА',
+        historyFeature: 'Небольшая площадка для разгона, резкий подъём и пара коротких разрывов моста напоминают, что педали теперь стоят прямо у передней оси.',
+        recommendedStats: { speed: 36, accel: 30, jump: 20, brake: 14, stability: 34, power: 38 },
+        historyDifficultyLevel: 4, botDifficultyLevel: 4, length: 27000, hills: 24, botMaxSpeed: 14, botAccel: 0.18,
+        botDifficultyTrackId: 't4', obstacles: 19,
+        obstacleTypes: ['cobblestones', 'ramp', 'pit', 'plank_bridge', 'rock', 'fallen_branch', 'metal_grate'],
+        historyObstaclePattern: ['cobblestones', 'ramp', 'pit', 'rock', 'plank_bridge', 'metal_grate', 'fallen_branch', 'ramp', 'pit', 'rock', 'plank_bridge', 'cobblestones'],
+        winReward: 0, lossReward: 0, couponReward: 0,
+        historyRewards: [{ category: 'pedals', id: 'pd7' }]
+    },
+    {
+        id: 'l3', historyChapter: 3, historyStage: 3, isHistory: true, musicTheme: '3h3',
+        name: 'Патентный спринт · 100 метров', year: '1866', opponent: 'Погоньщик', historyCinematicLocation: 'ФИНИШ · 100 МЕТРОВ',
+        historyFeature: 'Ровная прямая на 100 метров без ям и трамплинов: разгонись быстрее соперника на гладкой испытательной дороге.',
+        recommendedStats: { speed: 44, accel: 37, jump: 24, brake: 17, stability: 38, power: 46 },
+        historyDifficultyLevel: 5, botDifficultyLevel: 5, length: 3500, hills: 0, botMaxSpeed: 16, botAccel: 0.2,
+        botDifficultyTrackId: 't5', obstacles: 0, obstacleTypes: [], historyObstaclePattern: [],
+        winReward: 0, lossReward: 0, couponReward: 0,
+        historyRewards: [
+            { category: 'handlebars', id: 'hb8' },
+            { category: 'stems', id: 'st7' }
+        ]
+    },
+    {
+        id: 'l4', historyChapter: 3, historyStage: 4, isHistory: true, musicTheme: '3h4',
+        name: 'Испытание у кузницы', year: '1870-е', opponent: 'Лера', historyCinematicLocation: 'ФРАНЦИЯ · КУЗНИЧНЫЙ МАРШРУТ',
+        historyFeature: 'Железные ограждения, насыпь из угля и несколько каменных секций заставляют вовремя выбирать разгон и прыжок.',
+        recommendedStats: { speed: 52, accel: 44, jump: 28, brake: 20, stability: 42, power: 54 },
+        historyDifficultyLevel: 5, botDifficultyLevel: 4, length: 30000, hills: 32, botMaxSpeed: 14, botAccel: 0.18,
+        botDifficultyTrackId: 't4', obstacles: 23,
+        obstacleTypes: ['forge_slag', 'smith_hammer', 'cobblestones', 'ramp', 'pit', 'rock', 'plank_bridge', 'iron_gate', 'metal_grate'],
+        historyObstaclePattern: ['cobblestones', 'ramp', 'forge_slag', 'rock', 'pit', 'smith_hammer', 'plank_bridge', 'cobblestones', 'metal_grate', 'ramp', 'iron_gate', 'rock', 'forge_slag', 'pit', 'cobblestones', 'smith_hammer', 'ramp'],
+        winReward: 0, lossReward: 0, couponReward: 0,
+        historyRewards: [{ type: 'coupons', amount: 10 }]
+    },
+    {
+        id: 'l5', historyChapter: 3, historyStage: 5, isHistory: true, musicTheme: '3h5',
+        name: 'Гонка высоких колёс', year: '1870-е', opponent: 'Лера', historyCinematicLocation: 'ВЫСОКИЙ ВЕЛОСИПЕД',
+        historyFeature: 'Большое переднее колесо быстро катится по деревянному настилу, но частые камни и разрывы требуют аккуратных прыжков.',
+        recommendedStats: { speed: 60, accel: 50, jump: 32, brake: 23, stability: 48, power: 62 },
+        historyDifficultyLevel: 5, botDifficultyLevel: 5, length: 32000, hills: 38, botMaxSpeed: 16, botAccel: 0.2,
+        botDifficultyTrackId: 't5', obstacles: 27,
+        obstacleTypes: ['cobblestones', 'plank_bridge', 'pit', 'ramp', 'rock', 'log', 'iron_gate', 'loose_planks', 'rolling_wheel'],
+        historyObstaclePattern: ['cobblestones', 'ramp', 'plank_bridge', 'rock', 'pit', 'iron_gate', 'cobblestones', 'rolling_wheel', 'ramp', 'loose_planks', 'log', 'pit', 'plank_bridge', 'rock', 'cobblestones', 'ramp', 'iron_gate', 'pit', 'loose_planks'],
+        winReward: 0, lossReward: 0, couponReward: 0,
+        historyRewards: [{ category: 'wheels', id: 'w8' }]
+    },
+    {
+        id: 'l6', historyChapter: 3, historyStage: 6, isHistory: true, musicTheme: '3h6',
+        name: 'Финальное испытание Пьера Лальмана', year: '1870-е', opponent: 'Пьер Лальман', historyCinematicLocation: 'ФИНАЛ · 1870-е',
+        historyFeature: 'Финальный маршрут объединяет костотряс и высокий велосипед: расколотый мост, каменный подъём и крутые трамплины ведут к встрече с Пьером Лальманом.',
+        recommendedStats: { speed: 60, accel: 50, jump: 32, brake: 23, stability: 48, power: 62 },
+        historyDifficultyLevel: 5, botDifficultyLevel: 6, length: 35000, hills: 45, botMaxSpeed: 18, botAccel: 0.23,
+        botDifficultyTrackId: 't6', obstacles: 31,
+        obstacleTypes: ['cobblestones', 'plank_bridge', 'pit', 'cliff', 'ramp', 'rock', 'iron_gate', 'loose_planks', 'rolling_boulder', 'rolling_wheel', 'metal_grate'],
+        historyObstaclePattern: ['cobblestones', 'ramp', 'rock', 'plank_bridge', 'pit', 'iron_gate', 'metal_grate', 'ramp', 'loose_planks', 'rock', 'cobblestones', 'rolling_boulder', 'pit', 'plank_bridge', 'rolling_wheel', 'ramp', 'iron_gate', 'cliff', 'cobblestones', 'rock', 'ramp', 'loose_planks'],
+        winReward: 0, lossReward: 0, couponReward: 0,
+        historyRewards: [{ category: 'frames', id: 'f16' }]
     }
 ];

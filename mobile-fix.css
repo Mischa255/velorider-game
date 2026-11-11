@@ -1280,6 +1280,29 @@
 .history-stage-grid--macmillan .history-stage-play:disabled { border-color: #344256; background: #202b39; }
 .history-stage-grid--macmillan .history-final-mark { color: #d8b4fe; }
 
+.history-hero--lallement {
+    margin-top: 22px;
+    border-color: rgba(148, 163, 184, .32);
+    background: radial-gradient(circle at 84% 18%, rgba(180, 151, 92, .2), transparent 40%), linear-gradient(135deg, #202936, #111827 78%);
+}
+.history-hero--lallement .history-kicker,
+.history-hero--lallement .history-year { color: #d9c28d; }
+.history-hero--lallement .history-year span { color: #8190a2; }
+.history-hero__machine--lallement { border-color: rgba(197, 169, 107, .24); background: linear-gradient(145deg, rgba(33, 42, 53, .86), rgba(13, 19, 29, .96)); }
+.history-hero__machine--lallement > span { color: #d9c28d; }
+.history-story-card--lallement .history-story-card__date { border-color: rgba(197, 169, 107, .34); background: rgba(71, 62, 43, .32); color: #e7d6a8; }
+.history-chapter-lock--lallement { border-color: rgba(148, 163, 184, .3); background: linear-gradient(110deg, rgba(51, 65, 85, .64), rgba(17, 24, 39, .9)); color: #e2e8f0; }
+.history-chapter-lock--lallement div span { color: #bdc8d6; }
+.history-stage-heading--lallement { margin-top: 9px; }
+.history-stage-heading--lallement .history-kicker { color: #d9c28d; }
+.history-stage-heading--lallement h3 { color: #f1f5f9; }
+.history-stage-grid--lallement .history-stage-card { border-color: rgba(148, 163, 184, .25); background: linear-gradient(150deg, #202a38, #111827); }
+.history-stage-grid--lallement .history-stage-number { color: #d9c28d; }
+.history-stage-grid--lallement .history-stage-card.is-completed { border-color: rgba(217, 194, 141, .55); }
+.history-stage-grid--lallement .history-stage-play { border-color: #718096; background: linear-gradient(135deg, #475569, #334155); }
+.history-stage-grid--lallement .history-stage-play:disabled { border-color: #344256; background: #202b39; }
+.history-stage-grid--lallement .history-final-mark { color: #d9c28d; }
+
 @media screen and (max-width: 1000px) and (max-height: 600px) and (orientation: landscape) and (pointer: coarse) {
     .history-scroll { padding: 7px; }
     .history-hero { grid-template-columns: minmax(0, 1fr) minmax(210px, .8fr); gap: 10px; min-height: 165px; padding: 10px; border-radius: 14px; }

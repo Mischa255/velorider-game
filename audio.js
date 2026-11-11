@@ -93,7 +93,7 @@ function playBgm(sceneName) {
     const restoreRaceResultVolume = clearRaceResultVolumeTimer();
     if (!enabled || !audioUnlocked) return;
 
-    const trackName = /^(?:t\d+|[12]h[1-5])$/.test(sceneName) ? sceneName : 'garage';
+    const trackName = /^(?:t\d+|[1-3]h[1-6])$/.test(sceneName) ? sceneName : 'garage';
     const fileName = `music/${trackName}.mp3`;
 
     // Если этот же трек уже играет и не на паузе — не дергаем лишний раз
