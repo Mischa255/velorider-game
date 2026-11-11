@@ -38,13 +38,6 @@ const MACMILLAN_PEDAL_CADENCE = 0.22;
 const RACE_ZOOM_DESKTOP = 0.86;
 const RACE_ZOOM_MOBILE_PORTRAIT = 0.60;
 const RACE_ZOOM_MOBILE_LANDSCAPE = 0.56;
-const LANDING_FLOW_DURATION_FRAMES = 22;
-const LANDING_FLOW_COOLDOWN_FRAMES = 105;
-const LANDING_FLOW_CHAIN_FRAMES = 240;
-const LANDING_FLOW_TIP_DURATION_FRAMES = 360;
-const LANDING_FLOW_MAX_STREAK = 3;
-const LANDING_FLOW_BASE_BONUS = 0.16;
-const LANDING_FLOW_STREAK_BONUS = 0.035;
 const ROAD_DASH_PATTERN = Object.freeze([16, 12]);
 const PLAYER_LANE_OFFSET = 0;
 const BOT_LANE_OFFSET = 0;
@@ -140,19 +133,17 @@ const TRACK_TERRAIN = {
     l3:  { amplitude: 0, longFrequency: 0, shortFrequency: 0, micro: 0, phase: 0, ridge: 0, chop: 0 },
     l4:  { amplitude: 44, longFrequency: 0.0019, shortFrequency: 0.013, micro: 3.0, phase: 2.0, ridge: 0.22, chop: 0.09 },
     l5:  { amplitude: 52, longFrequency: 0.0018, shortFrequency: 0.0145, micro: 3.7, phase: 2.0, ridge: 0.29, chop: 0.12 },
-    // Финал сохраняет высокий длинный подъём, но реже подбрасывает байк
-    // частыми короткими волнами, которые раньше требовали скрыто много тяги.
-    l6:  { amplitude: 58, longFrequency: 0.0017, shortFrequency: 0.013, micro: 4.2, phase: 2.08, ridge: 0.32, chop: 0.11 },
+    l6:  { amplitude: 60, longFrequency: 0.0017, shortFrequency: 0.016, micro: 4.4, phase: 2.08, ridge: 0.38, chop: 0.15 },
     t1:  { amplitude: 8,  longFrequency: 0.0034, shortFrequency: 0.0080, micro: 1.0, phase: 0.2, ridge: 0.04, chop: 0.02 },
-    t2:  { amplitude: 15, longFrequency: 0.0035, shortFrequency: 0.0088, micro: 1.5, phase: 0.5, ridge: 0.07, chop: 0.032 },
-    t3:  { amplitude: 21, longFrequency: 0.0035, shortFrequency: 0.0095, micro: 2.0, phase: 0.8, ridge: 0.11, chop: 0.045 },
-    t4:  { amplitude: 28, longFrequency: 0.0034, shortFrequency: 0.0100, micro: 2.5, phase: 1.1, ridge: 0.17, chop: 0.06 },
-    t5:  { amplitude: 36, longFrequency: 0.0032, shortFrequency: 0.0108, micro: 3.0, phase: 1.4, ridge: 0.24, chop: 0.075 },
-    t6:  { amplitude: 45, longFrequency: 0.0029, shortFrequency: 0.0088, micro: 3.5, phase: 1.7, ridge: 0.18, chop: 0.05 },
-    t7:  { amplitude: 54, longFrequency: 0.0027, shortFrequency: 0.0087, micro: 4.0, phase: 2.0, ridge: 0.24, chop: 0.055 },
-    t8:  { amplitude: 64, longFrequency: 0.0024, shortFrequency: 0.0085, micro: 4.5, phase: 2.3, ridge: 0.26, chop: 0.06 },
-    t9:  { amplitude: 74, longFrequency: 0.0022, shortFrequency: 0.0090, micro: 5.0, phase: 2.6, ridge: 0.32, chop: 0.07 },
-    t10: { amplitude: 88, longFrequency: 0.0020, shortFrequency: 0.0092, micro: 5.5, phase: 2.9, ridge: 0.34, chop: 0.07 }
+    t2:  { amplitude: 15, longFrequency: 0.0038, shortFrequency: 0.0095, micro: 1.5, phase: 0.5, ridge: 0.07, chop: 0.035 },
+    t3:  { amplitude: 21, longFrequency: 0.0042, shortFrequency: 0.0110, micro: 2.0, phase: 0.8, ridge: 0.11, chop: 0.05 },
+    t4:  { amplitude: 28, longFrequency: 0.0046, shortFrequency: 0.0125, micro: 2.5, phase: 1.1, ridge: 0.17, chop: 0.065 },
+    t5:  { amplitude: 36, longFrequency: 0.0050, shortFrequency: 0.0140, micro: 3.0, phase: 1.4, ridge: 0.24, chop: 0.08 },
+    t6:  { amplitude: 45, longFrequency: 0.0054, shortFrequency: 0.0160, micro: 3.5, phase: 1.7, ridge: 0.32, chop: 0.10 },
+    t7:  { amplitude: 54, longFrequency: 0.0058, shortFrequency: 0.0180, micro: 4.0, phase: 2.0, ridge: 0.40, chop: 0.12 },
+    t8:  { amplitude: 64, longFrequency: 0.0062, shortFrequency: 0.0200, micro: 4.5, phase: 2.3, ridge: 0.50, chop: 0.14 },
+    t9:  { amplitude: 74, longFrequency: 0.0068, shortFrequency: 0.0220, micro: 5.0, phase: 2.6, ridge: 0.60, chop: 0.17 },
+    t10: { amplitude: 88, longFrequency: 0.0074, shortFrequency: 0.0250, micro: 5.5, phase: 2.9, ridge: 0.74, chop: 0.20 }
 };
 
 // =========================================
@@ -511,27 +502,6 @@ function createObstacles() {
     if (!typePool.length) return [];
 
     const obstacleCount = getTrackObstacleCount(currentTrack, currentTrackLevel);
-    // Каждая трасса может задавать свой повторяемый ритм препятствий; случайный
-    // сдвиг позиции сохраняет вариативность, но ключевые связки не теряются.
-    const configuredPattern = currentTrack.isHistory
-        ? currentTrack.historyObstaclePattern
-        : currentTrack.obstaclePattern;
-    const routePattern = Array.isArray(configuredPattern)
-        ? configuredPattern.filter(type => typePool.includes(type))
-        : [];
-    const getPatternTypeAtIndex = index => {
-        if (!routePattern.length) return null;
-        // На длинной трассе повторяем ритм маршрута, а не растягиваем одну
-        // запись на блок одинаковых препятствий. Короткие этапы равномерно
-        // выбирают элементы всей последовательности, чтобы не терять финал.
-        const patternIndex = obstacleCount > routePattern.length
-            ? index % routePattern.length
-            : obstacleCount <= 1
-                ? Math.floor((routePattern.length - 1) / 2)
-                : Math.round(index * (routePattern.length - 1) / (obstacleCount - 1));
-        return routePattern[patternIndex];
-    };
-
     // На сюжетных трассах ямы размещаются гарантированно. Глава II использует
     // плотность ям обычных трасс 2–3 уровня, остальные истории — мягкую прогрессию.
     const historyDifficultyLevel = Number(currentTrack.historyChapter) === 2
@@ -542,28 +512,27 @@ function createObstacles() {
             ? Math.round((historyDifficultyLevel * 2 + 1) * TRACK_DISTANCE_SCALE)
             : Math.round(Math.ceil(historyDifficultyLevel / 2) * TRACK_DISTANCE_SCALE)
         : Math.round((currentTrackLevel * 2 + 1) * TRACK_DISTANCE_SCALE);
-    const pitCount = typePool.includes('pit')
-        ? Math.min(obstacleCount, configuredPitCount)
-        : 0;
-    // Если ямы уже входят в маршрутный рисунок, считаем их частью гарантии.
-    // Добавляем только недостающие позиции, чтобы ямы не дублировались поверх
-    // авторской расстановки и не превращали трассу в сплошную полосу разрывов.
+    const pitCount = currentTrack.isHistory
+        ? (typePool.includes('pit') ? Math.min(obstacleCount, configuredPitCount) : 0)
+        : Math.min(obstacleCount, configuredPitCount);
     const pitIndices = new Set();
-    if (routePattern.length) {
-        for (let index = 0; index < obstacleCount; index++) {
-            if (getPatternTypeAtIndex(index) === 'pit') pitIndices.add(index);
-        }
-    }
-    for (let pitIndex = pitIndices.size; pitIndex < pitCount; pitIndex++) {
+    for (let pitIndex = 0; pitIndex < pitCount; pitIndex++) {
         const targetIndex = Math.round(
             ((pitIndex + 1) / (pitCount + 1)) * Math.max(0, obstacleCount - 1)
         );
         let index = targetIndex;
         while (pitIndices.has(index) && index < obstacleCount - 1) index++;
         while (pitIndices.has(index) && index > 0) index--;
-        if (!pitIndices.has(index)) pitIndices.add(index);
+        pitIndices.add(index);
     }
-    const signatureTypes = !routePattern.length && Array.isArray(currentTrack.signatureObstacleTypes)
+
+    // Глава II использует собственный чередующийся сценарий препятствий,
+    // чтобы у каждого испытания был узнаваемый ритм, а ключевые элементы
+    // не зависели от случайной выборки.
+    const historyPattern = Number(currentTrack.historyChapter) >= 2 && Array.isArray(currentTrack.historyObstaclePattern)
+        ? currentTrack.historyObstaclePattern.filter(type => typePool.includes(type))
+        : [];
+    const signatureTypes = Number(currentTrack.historyChapter) >= 2 && !historyPattern.length && Array.isArray(currentTrack.signatureObstacleTypes)
         ? currentTrack.signatureObstacleTypes.filter(type => typePool.includes(type) && type !== 'pit')
         : [];
     const signatureAssignments = new Map();
@@ -579,55 +548,27 @@ function createObstacles() {
     const randomTypePool = nonPitTypePool.length
         ? nonPitTypePool
         : Object.keys(OBSTACLE_TYPES).filter(type => type !== 'pit');
-    const plannedTypes = Array.from({ length: obstacleCount }, (_, index) =>
-        pitIndices.has(index)
-            ? 'pit'
-            : signatureAssignments.get(index) || getPatternTypeAtIndex(index) || randomItem(randomTypePool)
-    );
     const firstObstacleX = 900;
     const lastObstacleX = Math.max(firstObstacleX, finishX - 1200);
     const usableLength = Math.max(1, lastObstacleX - firstObstacleX);
-    const meanSpacing = obstacleCount > 1
+    const spacing = obstacleCount > 1
         ? usableLength / (obstacleCount - 1)
         : usableLength;
-    const gaps = new Set(['pit', 'bridge_gap', 'cliff', 'loose_planks']);
-    const timedHazards = new Set(['pulse_gate', 'smith_hammer', 'mill_paddle', 'crank_rack']);
-    const groundRuns = new Set(['mud', 'water_splash', 'ice_patch', 'cobblestones', 'plank_bridge', 'metal_grate']);
-    const spacingWeights = [];
-    for (let index = 1; index < obstacleCount; index++) {
-        const previousType = plannedTypes[index - 1];
-        const nextType = plannedTypes[index];
-        let weight = 1;
-
-        // Разрыв получает короткую зону подготовки, а после него появляется
-        // более длинное место для безопасной посадки и нового разгона.
-        if (gaps.has(previousType)) weight = 1.38;
-        else if (gaps.has(nextType)) weight = 1.14;
-        else if (timedHazards.has(previousType) || timedHazards.has(nextType)) weight = 1.16;
-        else if (previousType === 'ramp' || nextType === 'ramp') weight = 0.84;
-        else if (groundRuns.has(previousType) && groundRuns.has(nextType)) weight = 0.88;
-
-        // Небольшая вариация не меняет задуманный ритм маршрута.
-        spacingWeights.push(weight * (0.94 + Math.random() * 0.12));
-    }
-    const totalSpacingWeight = spacingWeights.reduce((sum, weight) => sum + weight, 0) || 1;
     const generated = [];
     let previousRight = firstObstacleX - 120;
-    let traversedSpacingWeight = 0;
 
     for (let index = 0; index < obstacleCount; index++) {
-        // Вся последовательность трассы попадает в генерацию даже тогда,
-        // когда дистанция требует меньшего числа препятствий.
-        const type = plannedTypes[index];
+        const patternType = historyPattern.length
+            ? historyPattern[index % historyPattern.length]
+            : null;
+        const type = pitIndices.has(index)
+            ? 'pit'
+            : signatureAssignments.get(index) || patternType || randomItem(randomTypePool);
         const definition = OBSTACLE_TYPES[type];
         if (!definition) continue;
 
-        if (index > 0) traversedSpacingWeight += spacingWeights[index - 1];
-        const progress = index === 0 ? 0 : traversedSpacingWeight / totalSpacingWeight;
-        const jitter = index === 0 || index === obstacleCount - 1
-            ? 0
-            : (Math.random() - 0.5) * Math.min(110, meanSpacing * 0.06);
-        const targetX = firstObstacleX + usableLength * progress + jitter;
+        const jitter = (Math.random() - 0.5) * Math.min(260, spacing * 0.32);
+        const targetX = firstObstacleX + spacing * index + jitter;
         const x = Math.max(
             targetX,
             previousRight + 90,
@@ -919,12 +860,6 @@ function createBike(isBot = false, botIndex = 1) {
         springBoostTimer: 0,
         nitroCooldown: isBot ? 120 + Math.floor(Math.random() * 100) : 0,
         landingBoostCooldown: 0,
-        landingFlowCooldown: 0,
-        landingFlowTimer: 0,
-        landingFlowStreak: 0,
-        landingFlowChainTimer: 0,
-        landingFlowTipTimer: 0,
-        landingFlowTipShown: false,
         jumpLaunchSpeed: 0,
         draftingStrength: 0,
         draftNoticeCooldown: 0,
@@ -1026,8 +961,6 @@ function maybeFlipFromImpact(bike, impactForce, direction = 1, message = 'КОЧ
 
     const flipped = Math.random() < chance && startBikeFlip(bike, direction, message);
     if (flipped) {
-        bike.landingFlowStreak = 0;
-        bike.landingFlowChainTimer = 0;
         queuePlayerCrash(bike, 'stability-flip');
     }
     return flipped;
@@ -1235,10 +1168,6 @@ function updateSuspensionResponse(bike) {
 
 function updateJumpPhysics(bike) {
     if (!bike.isBot && bike.landingBoostCooldown > 0) bike.landingBoostCooldown--;
-    if (bike.landingFlowCooldown > 0) bike.landingFlowCooldown--;
-    if (bike.landingFlowTimer > 0) bike.landingFlowTimer--;
-    if (bike.landingFlowChainTimer > 0) bike.landingFlowChainTimer--;
-    if (bike.landingFlowTipTimer > 0) bike.landingFlowTipTimer--;
 
     const stabilityRatio = getBikeStabilityRatio(bike);
     bike.pitchAngle = Number(bike.pitchAngle) || 0;
@@ -1314,7 +1243,6 @@ function updateJumpPhysics(bike) {
     // Приземление только после короткого отрыва и при движении вниз.
     if (bike.jumpHeight <= 0 && canLand) {
         const landingSpeed = Math.max(0, -bike.jumpVelocity);
-        const launchSpeed = Math.max(4, Number(bike.jumpLaunchSpeed) || 9);
         const frontY = getGroundY(bike.x + 25, 0);
         const rearY = getGroundY(bike.x - 25, 0);
         const groundPitch = Math.atan2(frontY - rearY, 50);
@@ -1341,10 +1269,6 @@ function updateJumpPhysics(bike) {
         bike.airY = null;
         bike.rampLift = 0;
         bike.currentRamp = null;
-        if (failedLanding) {
-            bike.landingFlowStreak = 0;
-            bike.landingFlowChainTimer = 0;
-        }
         if (shieldSavedLanding) {
             bike.abilities.shieldCharges--;
             bike.shieldActiveTimer = 52;
@@ -1367,42 +1291,6 @@ function updateJumpPhysics(bike) {
             queuePlayerCrash(bike, 'hard-landing');
         } else {
             bike.pitchVelocity *= 0.72;
-            // Compare impact speed with this jump's take-off speed. A fixed
-            // low threshold made clean landings almost impossible after ramps.
-            const cleanLandingSpeedLimit = launchSpeed * 1.15 + stabilityRatio * 1.2;
-            const cleanLanding = !shieldSavedLanding &&
-                landingSpeed <= cleanLandingSpeedLimit &&
-                absoluteLandingAngle <= safeLandingAngle * 0.62;
-            if (cleanLanding) {
-                const previousStreak = bike.landingFlowChainTimer > 0
-                    ? Number(bike.landingFlowStreak) || 0
-                    : 0;
-                bike.landingFlowStreak = Math.min(LANDING_FLOW_MAX_STREAK, previousStreak + 1);
-                bike.landingFlowChainTimer = LANDING_FLOW_CHAIN_FRAMES;
-                if (!bike.isBot) {
-                    if (!bike.landingFlowTipShown) {
-                        bike.landingFlowTipShown = true;
-                        bike.landingFlowTipTimer = LANDING_FLOW_TIP_DURATION_FRAMES;
-                    }
-                    const flowReady = bike.landingFlowCooldown <= 0;
-                    const flowBonus = LANDING_FLOW_BASE_BONUS +
-                        Math.max(0, bike.landingFlowStreak - 1) * LANDING_FLOW_STREAK_BONUS;
-                    const streakLabel = flowReady
-                        ? `ЧИСТАЯ ПОСАДКА ×${bike.landingFlowStreak} · ТОЛЧОК +${flowBonus.toFixed(2)}`
-                        : `СЕРИЯ ЧИСТЫХ ПОСАДОК ×${bike.landingFlowStreak}`;
-                    addFloatingText(bike.x, getGroundY(bike.x, 0) - 43, streakLabel, '#86efac');
-                }
-                if (bike.landingFlowCooldown <= 0) {
-                    const flowBonus = LANDING_FLOW_BASE_BONUS +
-                        Math.max(0, bike.landingFlowStreak - 1) * LANDING_FLOW_STREAK_BONUS;
-                    bike.landingFlowTimer = LANDING_FLOW_DURATION_FRAMES;
-                    bike.landingFlowCooldown = LANDING_FLOW_COOLDOWN_FRAMES;
-                    bike.velocityX += flowBonus;
-                }
-            } else {
-                bike.landingFlowStreak = 0;
-                bike.landingFlowChainTimer = 0;
-            }
             if (!bike.isBot && bike.abilities?.landingFrame && bike.landingBoostCooldown <= 0) {
                 bike.velocityX += 0.45;
                 bike.springBoostTimer = Math.max(bike.springBoostTimer || 0, 24);
@@ -1736,7 +1624,7 @@ function updatePlayerPhysics() {
     const jumpGravity = 0.39 + (GRAVITY - 0.39) * Math.exp(-(jump * JUMP_STAT_FACTOR) / 5);
 
     if (driveInput > 0 && playerBike.grounded) {
-        playerBike.velocityX += acceleration * draisinePush * (1 + draftStrength * 0.2 + (playerBike.landingFlowTimer > 0 ? 0.08 : 0));
+        playerBike.velocityX += acceleration * draisinePush * (1 + draftStrength * 0.2);
     }
 
     if (driveInput < 0 && playerBike.grounded && !brakeApplied) {
@@ -1780,7 +1668,7 @@ function updatePlayerPhysics() {
     }
 
     const regularAllowedSpeed = maxSpeed * nitroMultiplier *
-        (1 + draftStrength * 0.055 + (playerBike.landingFlowTimer > 0 ? 0.04 : 0));
+        (1 + draftStrength * 0.055);
     const padBoostFraction = playerBike.padBoostTimer > 0
         ? playerBike.padBoostTimer / 50
         : 0;
@@ -1957,7 +1845,7 @@ function updateBotPhysics(bike) {
     const draftStrength = updateDraftingState(bike);
     const maxSpeed =
         baseMaxSpeed * nitroMultiplier * springBoostMultiplier *
-        (1 + draftStrength * 0.055 + (bike.landingFlowTimer > 0 ? 0.04 : 0));
+        (1 + draftStrength * 0.055);
 
     const baseAcceleration = Math.max(
         0.012,
@@ -1973,7 +1861,7 @@ function updateBotPhysics(bike) {
             ? 0.55 + (Math.sin(frameCounter * 0.13) + 1) * 0.38
             : 1;
         bike.velocityX += baseAcceleration * legPush *
-            (1 + draftStrength * 0.2 + (bike.landingFlowTimer > 0 ? 0.08 : 0));
+            (1 + draftStrength * 0.2);
     }
 
     const padBoostFraction = bike.padBoostTimer > 0
@@ -2070,8 +1958,6 @@ function applyPlayerImpact(obstacle, speedLimit = 1.0) {
     }
 
     let impactDuration = 42;
-    playerBike.landingFlowStreak = 0;
-    playerBike.landingFlowChainTimer = 0;
     if (playerBike.abilities?.impactBrake) impactDuration = Math.round(impactDuration * 0.85);
     if (playerBike.abilities?.flowFrame && ['ice_patch', 'wind_fan'].includes(obstacle.type)) {
         speedLimit = Math.max(speedLimit, Math.min(playerBike.velocityX, speedLimit * 1.15));
@@ -2253,8 +2139,6 @@ function applyBotImpact(
     }
 
     bike.impactSlowTimer = duration;
-    bike.landingFlowStreak = 0;
-    bike.landingFlowChainTimer = 0;
     applyWindGustImpulse(bike, obstacle);
 
     if (
@@ -4553,15 +4437,12 @@ function drawDraisineSeatAndCockpit(points, visuals = {}) {
 
 function drawRaceFlowStreaks(x, y, bike) {
     const draft = clamp(Number(bike.draftingStrength) || 0, 0, 1);
-    const landing = bike.landingFlowTimer > 0
-        ? bike.landingFlowTimer / LANDING_FLOW_DURATION_FRAMES
-        : 0;
-    const intensity = Math.max(draft, landing);
+    const intensity = draft;
     if (intensity < 0.18 || bike.isGhost) return;
 
     ctx.save();
     ctx.globalAlpha *= 0.28 + intensity * 0.42;
-    ctx.strokeStyle = landing > draft ? '#86efac' : '#67e8f9';
+    ctx.strokeStyle = '#67e8f9';
     ctx.lineWidth = 1.6;
     for (let i = 0; i < 3; i++) {
         const offsetY = (i - 1) * 5 + Math.sin(frameCounter * 0.16 + i) * 1.5;
@@ -5949,32 +5830,6 @@ function drawRaceHUD() {
         );
     }
 
-    if (playerBike?.landingFlowTipTimer > 0) {
-        const hintScale = mobileLayout ? uiScale : 1;
-        const hintY = panelY + panelHeight + 6 * hintScale;
-        const hintHeight = 34 * hintScale;
-        ctx.save();
-        ctx.fillStyle = 'rgba(6, 32, 29, .94)';
-        ctx.strokeStyle = 'rgba(134, 239, 172, .72)';
-        ctx.lineWidth = Math.max(1, hintScale);
-        ctx.beginPath();
-        if (typeof ctx.roundRect === 'function') {
-            ctx.roundRect(panelX, hintY, panelWidth, hintHeight, 7 * hintScale);
-        } else {
-            ctx.rect(panelX, hintY, panelWidth, hintHeight);
-        }
-        ctx.fill();
-        ctx.stroke();
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#bbf7d0';
-        ctx.font = `900 ${8.5 * hintScale}px Arial`;
-        ctx.fillText('ЧИСТАЯ ПОСАДКА → ПОТОК · СЕРИЯ ДО ×3', panelX + pad, hintY + 11 * hintScale);
-        ctx.fillStyle = '#f0fdf4';
-        ctx.font = `bold ${8 * hintScale}px Arial`;
-        ctx.fillText('Толчок до +0,23 · 22 кадра: +8% ускорение, +4% лимит скорости', panelX + pad, hintY + 24 * hintScale);
-        ctx.restore();
-    }
 }
 
 // =========================================
