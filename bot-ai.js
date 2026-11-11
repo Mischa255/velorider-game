@@ -31,16 +31,16 @@ const BOT_OPTIONAL_JUMP_CHANCES = {
 // Исторические этапы имеют собственные дистанции и плотность препятствий,
 // поэтому их соперников балансируем отдельно от обычных трасс.
 const HISTORY_BOT_PACE = Object.freeze({
-    h1: { maxSpeed: 2.8, acceleration: 0.0325, jumpForce: 10.5 },
-    h2: { maxSpeed: 3.1, acceleration: 0.039, jumpForce: 10.5 },
-    h3: { maxSpeed: 3.35, acceleration: 0.046, jumpForce: 10.7 },
-    h4: { maxSpeed: 3.65, acceleration: 0.05, jumpForce: 10.7 },
-    h5: { maxSpeed: 3.9, acceleration: 0.054, jumpForce: 10.5 },
-    m1: { maxSpeed: 4.8, acceleration: 0.071, jumpForce: 10.7 },
-    m2: { maxSpeed: 4.8, acceleration: 0.071, jumpForce: 10.7 },
-    m3: { maxSpeed: 4.8, acceleration: 0.071, jumpForce: 10.7 },
-    m4: { maxSpeed: 4.8, acceleration: 0.071, jumpForce: 10.7 },
-    m5: { maxSpeed: 5.0, acceleration: 0.075, jumpForce: 10.9 }
+    h1: { maxSpeed: 2.8, acceleration: 0.0325, jumpForce: 10.5, power: 10 },
+    h2: { maxSpeed: 3.1, acceleration: 0.039, jumpForce: 10.5, power: 12 },
+    h3: { maxSpeed: 3.35, acceleration: 0.046, jumpForce: 10.7, power: 15 },
+    h4: { maxSpeed: 3.65, acceleration: 0.05, jumpForce: 10.7, power: 18 },
+    h5: { maxSpeed: 3.9, acceleration: 0.054, jumpForce: 10.5, power: 22 },
+    m1: { maxSpeed: 4.8, acceleration: 0.071, jumpForce: 10.7, power: 19 },
+    m2: { maxSpeed: 4.8, acceleration: 0.071, jumpForce: 10.7, power: 22 },
+    m3: { maxSpeed: 4.8, acceleration: 0.071, jumpForce: 10.7, power: 25 },
+    m4: { maxSpeed: 4.8, acceleration: 0.071, jumpForce: 10.7, power: 28 },
+    m5: { maxSpeed: 5.0, acceleration: 0.075, jumpForce: 10.9, power: 31 }
 });
 
 export function getBotPersonality(botIndex) {
@@ -82,6 +82,7 @@ export function getBotDifficultyStats(botIndex, difficultyTrack, currentTrack, g
         maxSpeed: Math.max(1.5, (historyPace?.maxSpeed ?? rawSpeed * balance.speed) * speedVariation),
         acceleration: Math.max(0.012, (historyPace?.acceleration ?? rawAcceleration * balance.accel) * accelVariation),
         jumpForce: historyPace?.jumpForce ?? balance.jumpForce,
+        power: Math.max(0, Number(historyPace?.power ?? balance.power) || 0),
         personality
     };
 }

@@ -29,9 +29,11 @@ const MAX_FRAME_DELTA_MS = 100;
 const SPRINT_GHOST_ACCELERATION_SECONDS = 1.2;
 const BIKE_WIDTH = 46;
 const BIKE_HEIGHT = 24;
+const TRACK_DISTANCE_SCALE = 0.5;
 const TRACK_MULTIPLIER = 3;
 const GAME_WORLD_UNITS_PER_METER = 45;
-const OBSTACLE_MULTIPLIER = 3;
+const OBSTACLE_MULTIPLIER = 3 * TRACK_DISTANCE_SCALE;
+const OBSTACLE_LEVEL_STEP = 0.07 * TRACK_DISTANCE_SCALE;
 const MACMILLAN_PEDAL_CADENCE = 0.22;
 const RACE_ZOOM_DESKTOP = 0.86;
 const RACE_ZOOM_MOBILE_PORTRAIT = 0.60;
@@ -96,18 +98,18 @@ function easeInOutCubic(progress) {
 }
 
 const TRACK_BALANCE = {
-    t1:  { speed: 0.70, accel: 0.65, jumpForce: 10.5 },
+    t1:  { speed: 0.70, accel: 0.65, jumpForce: 10.5, power: 10 },
     // Базовые значения соперников растут вместе с трассами, а эти множители
     // распределяют ускорение между этапами без резкого скачка на t3.
-    t2:  { speed: 0.60, accel: 0.675, jumpForce: 10.5 },
-    t3:  { speed: 0.48, accel: 0.592, jumpForce: 10.7 },
-    t4:  { speed: 0.43, accel: 0.517, jumpForce: 10.7 },
-    t5:  { speed: 0.431, accel: 0.610, jumpForce: 10.8 },
-    t6:  { speed: 0.417, accel: 0.687, jumpForce: 11.0 },
-    t7:  { speed: 0.40, accel: 0.75, jumpForce: 11.0 },
-    t8:  { speed: 0.386, accel: 0.80, jumpForce: 11.2 },
-    t9:  { speed: 0.368, accel: 0.844, jumpForce: 11.3 },
-    t10: { speed: 0.35, accel: 0.833, jumpForce: 11.5 }
+    t2:  { speed: 0.60, accel: 0.675, jumpForce: 10.5, power: 15 },
+    t3:  { speed: 0.48, accel: 0.592, jumpForce: 10.7, power: 21 },
+    t4:  { speed: 0.43, accel: 0.517, jumpForce: 10.7, power: 27 },
+    t5:  { speed: 0.431, accel: 0.610, jumpForce: 10.8, power: 32 },
+    t6:  { speed: 0.417, accel: 0.687, jumpForce: 11.0, power: 39 },
+    t7:  { speed: 0.40, accel: 0.75, jumpForce: 11.0, power: 46 },
+    t8:  { speed: 0.386, accel: 0.80, jumpForce: 11.2, power: 53 },
+    t9:  { speed: 0.368, accel: 0.844, jumpForce: 11.3, power: 60 },
+    t10: { speed: 0.35, accel: 0.833, jumpForce: 11.5, power: 68 }
 };
 
 // =========================================
@@ -229,7 +231,8 @@ function getTrackBalance(trackId) {
     return TRACK_BALANCE[trackId] || {
         speed: 0.5,
         accel: 0.7,
-        jumpForce: 10.5
+        jumpForce: 10.5,
+        power: 12
     };
 }
 
@@ -247,7 +250,7 @@ export function getTrackObstacleCount(track, level = 1) {
     const trackLevel = Math.max(1, Math.floor(Number(level) || 1));
     return Math.max(
         1,
-        Math.floor(configuredCount * (OBSTACLE_MULTIPLIER + (trackLevel - 1) * 0.07))
+        Math.floor(configuredCount * (OBSTACLE_MULTIPLIER + (trackLevel - 1) * OBSTACLE_LEVEL_STEP))
     );
 }
 
@@ -431,7 +434,7 @@ export function getTrackDistanceMeters(track) {
     if (track?.id === 'sprint') return 100;
     const worldLength = Math.max(
         6000,
-        (Number(track?.length) || 15000) * TRACK_MULTIPLIER - 1500
+        ((Number(track?.length) || 15000) * TRACK_MULTIPLIER - 1500) * TRACK_DISTANCE_SCALE
     );
     return Math.round(worldLength / GAME_WORLD_UNITS_PER_METER);
 }
@@ -463,9 +466,14 @@ function createObstacles() {
     const historyDifficultyLevel = currentTrack.historyChapter === 2
         ? (Number(currentTrack.historyStage) <= 2 ? 2 : 3)
         : currentTrackLevel;
+    const configuredPitCount = currentTrack.isHistory
+        ? currentTrack.historyChapter === 2
+            ? Math.round((historyDifficultyLevel * 2 + 1) * TRACK_DISTANCE_SCALE)
+            : Math.round(Math.ceil(currentTrackLevel / 2) * TRACK_DISTANCE_SCALE)
+        : Math.round((currentTrackLevel * 2 + 1) * TRACK_DISTANCE_SCALE);
     const pitCount = currentTrack.isHistory
-        ? (typePool.includes('pit') ? Math.min(obstacleCount, currentTrack.historyChapter === 2 ? historyDifficultyLevel * 2 + 1 : Math.ceil(currentTrackLevel / 2)) : 0)
-        : Math.min(obstacleCount, currentTrackLevel * 2 + 1);
+        ? (typePool.includes('pit') ? Math.min(obstacleCount, configuredPitCount) : 0)
+        : Math.min(obstacleCount, configuredPitCount);
     const pitIndices = new Set();
     for (let pitIndex = 0; pitIndex < pitCount; pitIndex++) {
         const targetIndex = Math.round(
@@ -779,6 +787,7 @@ function createBike(isBot = false, botIndex = 1) {
         botDifficultyTrackId: difficulty?.trackId || null,
         botBaseMaxSpeed: difficulty?.maxSpeed || 0,
         botBaseAcceleration: difficulty?.acceleration || 0,
+        botBasePower: difficulty?.power || 0,
         botJumpForce: difficulty?.jumpForce || 0,
 
         nitroTimer: 0,
@@ -1711,10 +1720,27 @@ function updateBotPhysics(bike) {
     const botFrontY = getGroundY(bike.x + botWheelBase, 0);
     const botBackY = getGroundY(bike.x - botWheelBase, 0);
     const botSlope = (botBackY - botFrontY) / (botWheelBase * 2);
-    if (bike.grounded && botSlope > 0.04) {
-        const botHillDrag = botSlope * 0.08;
-        bike.velocityX = Math.max(0.4, bike.velocityX - botHillDrag);
-        allowedSpeed = Math.min(allowedSpeed, Math.max(0.6, maxSpeed * (1 - botSlope * 1.5)));
+    if (bike.grounded && botSlope > 0.035) {
+        const hillLoad = clamp((botSlope - 0.035) / 0.2, 0, 1);
+        const requiredPower = botSlope * 165;
+        const powerRatio = (Math.max(0, Number(bike.botBasePower) || 0) + 6) /
+            Math.max(10, requiredPower);
+        const powerDeficit = clamp(1 - powerRatio, 0, 0.55);
+        const hillSpeedPenalty = hillLoad * (0.035 + powerDeficit * 0.16);
+        const hillDrag = Math.min(
+            baseAcceleration * 0.65,
+            botSlope * (0.018 + powerDeficit * 0.045)
+        );
+
+        // Мощность влияет на подъём, но ограниченный штраф не даёт боту
+        // остановиться или откатиться даже на крутых участках.
+        bike.velocityX = Math.max(0.35, bike.velocityX - hillDrag);
+        bike.velocityX -= Math.min(
+            baseAcceleration * 0.28,
+            baseAcceleration * powerDeficit * 0.42 * hillLoad
+        );
+        bike.velocityX = Math.max(0.35, bike.velocityX);
+        allowedSpeed = Math.min(allowedSpeed, Math.max(0.6, maxSpeed * (1 - hillSpeedPenalty)));
     } else if (bike.grounded && botSlope < -0.04) {
         bike.velocityX += Math.min(0.05, Math.abs(botSlope) * 0.04);
     }
@@ -5681,8 +5707,8 @@ export function initRace(onRaceEnd) {
         ? 4500
         : Math.max(
             6000,
-            (Number(currentTrack.length) || 15000) *
-            TRACK_MULTIPLIER - 1500
+            ((Number(currentTrack.length) || 15000) *
+            TRACK_MULTIPLIER - 1500) * TRACK_DISTANCE_SCALE
         );
 
     playerBike = createBike(false);

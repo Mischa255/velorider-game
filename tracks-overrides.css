@@ -266,6 +266,41 @@
     background: rgba(7, 13, 22, .48);
 }
 
+.track-stat--recommended {
+    grid-column: 1 / -1;
+}
+
+.track-stat--recommended strong {
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.history-stage-recommended {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+    padding: 9px 11px;
+    border: 1px solid rgba(94, 224, 162, .18);
+    border-radius: 11px;
+    background: rgba(7, 13, 22, .45);
+}
+
+.history-stage-recommended span {
+    color: #8fa0b6;
+    font-size: 9px;
+    line-height: 1.35;
+    font-weight: 800;
+}
+
+.history-stage-recommended strong {
+    color: #d7fbe8;
+    font-size: 11px;
+    line-height: 1.5;
+    font-weight: 900;
+    overflow-wrap: anywhere;
+}
+
 .track-stat span {
     color: #8fa0b6;
     font-size: 9px;

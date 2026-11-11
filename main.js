@@ -2212,6 +2212,8 @@ function updateTracksUI() {
             : '';
         const raceLength = getTrackDistanceMeters(track);
         const obstaclesCount = getTrackObstacleCount(track, storyIndex + 1);
+        const recommended = track.recommendedStats || {};
+        const recommendedBuild = `СКР ${Number(recommended.speed) || 0} / УСК ${Number(recommended.accel) || 0} / ПРЖ ${Number(recommended.jump) || 0} / ТОР ${Number(recommended.brake) || 0} / СТАБ ${Number(recommended.stability) || 0} / МОЩ ${Number(recommended.power) || 0}`;
         const trackNumber = isSprint
             ? 'TIME TRIAL'
             : `TRACK ${String(storyIndex + 1).padStart(2, '0')}`;
@@ -2276,9 +2278,9 @@ function updateTracksUI() {
                             <span>Препятствия</span>
                             <strong>${obstaclesCount} шт.</strong>
                         </div>
-                        <div class="track-stat">
-                            <span>Скорость бота</span>
-                            <strong>${track.botMaxSpeed}</strong>
+                        <div class="track-stat track-stat--recommended">
+                            <span>Рекомендуемая сборка · СКР / УСК / ПРЖ / ТОР / СТАБ / МОЩ</span>
+                            <strong>${recommendedBuild}</strong>
                         </div>
                     `}
                 </div>
@@ -2372,9 +2374,9 @@ function updateTracksUI() {
                         <span>Препятствия</span>
                         <strong>${obstaclesCount} шт.</strong>
                     </div>
-                    <div class="track-stat">
-                        <span>Скорость бота</span>
-                        <strong>${track.botMaxSpeed}</strong>
+                    <div class="track-stat track-stat--recommended">
+                        <span>Рекомендуемая сборка · СКР / УСК / ПРЖ / ТОР / СТАБ / МОЩ</span>
+                        <strong>${recommendedBuild}</strong>
                     </div>
                 </div>
 
@@ -2464,6 +2466,8 @@ function updateHistoryUI() {
         const chapterTracks = Number(track.historyChapter) === 2 ? chapterTwoTracks : chapterOneTracks;
         const isFinal = Number(track.historyStage) === chapterTracks.length;
         const rewardMarkup = getHistoryRewardMarkup(track);
+        const recommended = track.recommendedStats || {};
+        const recommendedBuild = `СКР ${Number(recommended.speed) || 0} / УСК ${Number(recommended.accel) || 0} / ПРЖ ${Number(recommended.jump) || 0} / ТОР ${Number(recommended.brake) || 0} / СТАБ ${Number(recommended.stability) || 0} / МОЩ ${Number(recommended.power) || 0}`;
         const card = document.createElement('article');
         card.className = `history-stage-card${isCompleted ? ' is-completed' : ''}${canPlay ? ' is-open' : ' is-locked'}`;
         card.innerHTML = `
@@ -2474,6 +2478,10 @@ function updateHistoryUI() {
             <h4>${escapeHTML(track.name)}</h4>
             <div class="history-stage-meta">${escapeHTML(track.year)} · Соперник: ${escapeHTML(track.opponent)}</div>
             <p>${escapeHTML(track.historyFeature)}</p>
+            <div class="history-stage-recommended">
+                <span>Рекомендуемые характеристики · СКР / УСК / ПРЖ / ТОР / СТАБ / МОЩ</span>
+                <strong>${recommendedBuild}</strong>
+            </div>
             <div class="history-stage-rewards">${rewardMarkup}</div>
             <button type="button" class="history-stage-play" ${canPlay ? '' : 'disabled'}>
                 ${canPlay ? (isCompleted ? 'Переиграть' : 'Начать этап') : !chapterUnlocked ? 'Сначала пройди главу I' : 'Сначала пройди прошлый этап'}
