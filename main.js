@@ -2506,7 +2506,8 @@ function updateHistoryUI() {
         const rewardMarkup = getHistoryRewardMarkup(track);
         const recommended = track.recommendedStats || {};
         const recommendedBuild = `СКР ${Number(recommended.speed) || 0} / УСК ${Number(recommended.accel) || 0} / ПРЖ ${Number(recommended.jump) || 0} / ТОР ${Number(recommended.brake) || 0} / СТАБ ${Number(recommended.stability) || 0} / МОЩ ${Number(recommended.power) || 0}`;
-        const difficultyMeta = track.historyDifficultyLevel
+        const hideFifthHistoryTrialDifficulty = chapter === 3 && Number(track.historyStage) === 5;
+        const difficultyMeta = track.historyDifficultyLevel && !hideFifthHistoryTrialDifficulty
             ? `Сложность трассы ${track.historyDifficultyLevel} · соперник ${track.botDifficultyLevel || track.historyDifficultyLevel}`
             : '';
         const card = document.createElement('article');
