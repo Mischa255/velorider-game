@@ -563,6 +563,8 @@ export const TRACKS_DB = [
         recommendedStats: { speed: 9, accel: 8, jump: 5, brake: 7, stability: 20, power: 12 },
         obstacles: 8,
         obstacleTypes: ['rock', 'pit', 'log', 'ramp', 'cone', 'mud'],
+        obstaclePattern: ['cone', 'ramp', 'log', 'mud', 'rock', 'pit', 'ramp', 'cone', 'log', 'pit', 'rock', 'mud'],
+        routeFeature: 'Узкие дворики, низкие бревна и короткие рампы: сначала разгонись во дворе, потом аккуратно перепрыгни канаву.',
         winReward: 500,
         lossReward: 50,
         couponReward: 1
@@ -580,6 +582,8 @@ export const TRACKS_DB = [
         recommendedStats: { speed: 18, accel: 15, jump: 10, brake: 10, stability: 28, power: 20 },
         obstacles: 18,
         obstacleTypes: ['log', 'rock', 'pit', 'ramp', 'mud', 'water_splash', 'fallen_branch'],
+        obstaclePattern: ['fallen_branch', 'mud', 'ramp', 'water_splash', 'log', 'pit', 'rock', 'mud', 'fallen_branch', 'ramp', 'water_splash', 'pit', 'log', 'rock'],
+        routeFeature: 'Лесная связка: низкая ветка сменяется грязевой колеей, а после лужи часто нужен быстрый прыжок через корень.',
         winReward: 650,
         lossReward: 60,
         couponReward: 1
@@ -597,6 +601,8 @@ export const TRACKS_DB = [
         recommendedStats: { speed: 28, accel: 22, jump: 16, brake: 12, stability: 30, power: 28 },
         obstacles: 30,
         obstacleTypes: ['pit', 'rock', 'ramp', 'fallen_branch', 'wind_fan', 'water_splash'],
+        obstaclePattern: ['wind_fan', 'rock', 'ramp', 'pit', 'water_splash', 'fallen_branch', 'ramp', 'wind_fan', 'pit', 'rock', 'water_splash', 'ramp', 'fallen_branch', 'pit'],
+        routeFeature: 'Открытый яр с боковыми порывами ветра: выбирай момент прыжка, чтобы не потерять траекторию над промоиной.',
         winReward: 800,
         lossReward: 70,
         couponReward: 1
@@ -614,6 +620,8 @@ export const TRACKS_DB = [
         recommendedStats: { speed: 36, accel: 30, jump: 20, brake: 14, stability: 34, power: 38 },
         obstacles: 45,
         obstacleTypes: ['barrier', 'log', 'pit', 'ramp', 'pulse_gate', 'cone'],
+        obstaclePattern: ['cone', 'barrier', 'ramp', 'pulse_gate', 'log', 'pit', 'barrier', 'pulse_gate', 'ramp', 'cone', 'pit', 'log', 'pulse_gate', 'barrier'],
+        routeFeature: 'Кампусный слалом: ворота и ритмичные световые заслоны удобно проходить сериями, если не прыгать слишком рано.',
         winReward: 1000,
         lossReward: 80,
         couponReward: 1
@@ -630,7 +638,9 @@ export const TRACKS_DB = [
         botAccel: 0.20,
         recommendedStats: { speed: 44, accel: 37, jump: 24, brake: 17, stability: 38, power: 46 },
         obstacles: 50,
-        obstacleTypes: ['log', 'pit', 'wind_fan', 'water_splash', 'cone', 'fallen_branch'],
+        obstacleTypes: ['log', 'pit', 'ramp', 'wind_fan', 'water_splash', 'cone', 'fallen_branch'],
+        obstaclePattern: ['water_splash', 'fallen_branch', 'ramp', 'wind_fan', 'pit', 'log', 'cone', 'water_splash', 'wind_fan', 'ramp', 'pit', 'fallen_branch', 'log', 'water_splash'],
+        routeFeature: 'Парковая трасса чередует мокрые дорожки и ветви под кронами; после каждой лужи подготовься к неровному приземлению.',
         winReward: 1200,
         lossReward: 90,
         couponReward: 2
@@ -647,7 +657,9 @@ export const TRACKS_DB = [
         botAccel: 0.23,
         recommendedStats: { speed: 52, accel: 44, jump: 28, brake: 20, stability: 42, power: 54 },
         obstacles: 60,
-        obstacleTypes: ['rock', 'pit', 'rolling_boulder', 'mud', 'bridge_gap', 'wind_fan'],
+        obstacleTypes: ['rock', 'pit', 'ramp', 'rolling_boulder', 'mud', 'bridge_gap', 'wind_fan'],
+        obstaclePattern: ['rock', 'ramp', 'rolling_boulder', 'pit', 'mud', 'bridge_gap', 'rock', 'wind_fan', 'ramp', 'pit', 'rolling_boulder', 'bridge_gap', 'mud', 'rock'],
+        routeFeature: 'Карьерный уступ: валуны катятся с откосов, а короткие настилы заканчиваются разрывами. Держи скорость перед мостом.',
         winReward: 1450,
         lossReward: 100,
         couponReward: 2
@@ -664,7 +676,9 @@ export const TRACKS_DB = [
         botAccel: 0.26,
         recommendedStats: { speed: 60, accel: 52, jump: 32, brake: 23, stability: 46, power: 62 },
         obstacles: 70,
-        obstacleTypes: ['pit', 'ice_patch', 'water_splash', 'bridge_gap', 'fallen_branch', 'pulse_gate', 'wind_fan'],
+        obstacleTypes: ['pit', 'ice_patch', 'water_splash', 'bridge_gap', 'fallen_branch', 'pulse_gate', 'wind_fan', 'ramp'],
+        obstaclePattern: ['wind_fan', 'bridge_gap', 'ice_patch', 'ramp', 'pit', 'pulse_gate', 'water_splash', 'fallen_branch', 'ramp', 'ice_patch', 'bridge_gap', 'wind_fan', 'pit', 'pulse_gate'],
+        routeFeature: 'Горный серпантин с ледяными виражами: ветер толкает на спусках, а на подъёмах важнее тяга и точный разгон.',
         winReward: 1700,
         lossReward: 115,
         couponReward: 2
@@ -681,7 +695,9 @@ export const TRACKS_DB = [
         botAccel: 0.29,
         recommendedStats: { speed: 68, accel: 60, jump: 36, brake: 26, stability: 48, power: 70 },
         obstacles: 80,
-        obstacleTypes: ['pit', 'barrier', 'pulse_gate', 'rolling_boulder', 'mud', 'cone', 'bridge_gap'],
+        obstacleTypes: ['pit', 'barrier', 'pulse_gate', 'rolling_boulder', 'mud', 'cone', 'bridge_gap', 'ramp'],
+        obstaclePattern: ['pulse_gate', 'barrier', 'bridge_gap', 'rolling_boulder', 'pit', 'mud', 'ramp', 'cone', 'pulse_gate', 'bridge_gap', 'barrier', 'rolling_boulder', 'pit', 'ramp'],
+        routeFeature: 'Заброшенная железная дорога: сигнальные ворота задают ритм, а расшатанные мостовые секции требуют держать темп.',
         winReward: 2000,
         lossReward: 130,
         couponReward: 2
@@ -699,6 +715,8 @@ export const TRACKS_DB = [
         recommendedStats: { speed: 76, accel: 68, jump: 40, brake: 29, stability: 50, power: 80 },
         obstacles: 90,
         obstacleTypes: ['rock', 'pit', 'ramp', 'log', 'ice_patch', 'pulse_gate', 'rolling_boulder', 'wind_fan'],
+        obstaclePattern: ['ice_patch', 'ramp', 'rolling_boulder', 'rock', 'pit', 'wind_fan', 'pulse_gate', 'log', 'ramp', 'ice_patch', 'pit', 'rolling_boulder', 'wind_fan', 'rock'],
+        routeFeature: 'Альпийский спуск: длинные скоростные пролёты сменяются льдом и валунами. Тормози до опасного участка, а не на нём.',
         winReward: 2350,
         lossReward: 145,
         couponReward: 3
@@ -716,6 +734,8 @@ export const TRACKS_DB = [
         recommendedStats: { speed: 84, accel: 76, jump: 44, brake: 32, stability: 52, power: 90 },
         obstacles: 110,
         obstacleTypes: ['rock', 'log', 'pit', 'ramp', 'barrier', 'cone', 'mud', 'fallen_branch', 'water_splash', 'wind_fan', 'ice_patch', 'bridge_gap', 'pulse_gate', 'rolling_boulder'],
+        obstaclePattern: ['ramp', 'rock', 'pit', 'wind_fan', 'bridge_gap', 'rolling_boulder', 'mud', 'barrier', 'ice_patch', 'log', 'pulse_gate', 'water_splash', 'ramp', 'fallen_branch', 'pit', 'cone', 'rolling_boulder', 'bridge_gap'],
+        routeFeature: 'Марафон собирает механики предыдущих трасс в длинные связки: после разгона сразу планируй следующий прыжок и подъём.',
         winReward: 2750,
         lossReward: 160,
         couponReward: 3
@@ -730,7 +750,9 @@ export const HISTORY_TRACKS_DB = [
         recommendedStats: { speed: 9, accel: 8, jump: 5, brake: 7, stability: 20, power: 12 },
         length: 15000, hills: 12, botMaxSpeed: 4, botAccel: 0.05,
         botDifficultyTrackId: 't1', obstacles: 3,
-        obstacleTypes: ['pit', 'cobblestones', 'log', 'ramp'], winReward: 0, lossReward: 0, couponReward: 0,
+        obstacleTypes: ['pit', 'cobblestones', 'log', 'ramp'],
+        historyObstaclePattern: ['cobblestones', 'ramp', 'log', 'pit'],
+        winReward: 0, lossReward: 0, couponReward: 0,
         historyRewards: [{ type: 'coupons', amount: 5 }]
     },
     {
@@ -740,7 +762,9 @@ export const HISTORY_TRACKS_DB = [
         recommendedStats: { speed: 14, accel: 12, jump: 8, brake: 8, stability: 23, power: 16 },
         length: 15000, hills: 15, botMaxSpeed: 4, botAccel: 0.05,
         botDifficultyTrackId: 't2', obstacles: 3,
-        obstacleTypes: ['pit', 'fallen_branch', 'water_splash', 'cobblestones'], winReward: 0, lossReward: 0, couponReward: 0,
+        obstacleTypes: ['pit', 'fallen_branch', 'water_splash', 'cobblestones', 'ramp'],
+        historyObstaclePattern: ['cobblestones', 'fallen_branch', 'water_splash', 'pit'],
+        winReward: 0, lossReward: 0, couponReward: 0,
         historyRewards: [{ category: 'handlebars', id: 'hb6' }]
     },
     {
@@ -750,7 +774,9 @@ export const HISTORY_TRACKS_DB = [
         recommendedStats: { speed: 18, accel: 15, jump: 11, brake: 10, stability: 27, power: 21 },
         length: 15000, hills: 18, botMaxSpeed: 4, botAccel: 0.05,
         botDifficultyTrackId: 't3', obstacles: 4,
-        obstacleTypes: ['pit', 'plank_bridge', 'log', 'rock', 'ramp'], winReward: 0, lossReward: 0, couponReward: 0,
+        obstacleTypes: ['pit', 'plank_bridge', 'log', 'rock', 'ramp'],
+        historyObstaclePattern: ['plank_bridge', 'ramp', 'rock', 'pit', 'log', 'plank_bridge', 'ramp', 'rock'],
+        winReward: 0, lossReward: 0, couponReward: 0,
         historyRewards: [{ category: 'wheels', id: 'w7' }]
     },
     {
@@ -760,7 +786,9 @@ export const HISTORY_TRACKS_DB = [
         recommendedStats: { speed: 22, accel: 18, jump: 15, brake: 12, stability: 31, power: 25 },
         length: 15000, hills: 20, botMaxSpeed: 4, botAccel: 0.05,
         botDifficultyTrackId: 't4', obstacles: 5,
-        obstacleTypes: ['pit', 'wooden_gate', 'ramp', 'fallen_branch', 'plank_bridge'], winReward: 0, lossReward: 0, couponReward: 0,
+        obstacleTypes: ['pit', 'wooden_gate', 'ramp', 'fallen_branch', 'plank_bridge'],
+        historyObstaclePattern: ['wooden_gate', 'ramp', 'plank_bridge', 'pit', 'fallen_branch', 'ramp', 'wooden_gate', 'plank_bridge'],
+        winReward: 0, lossReward: 0, couponReward: 0,
         historyRewards: [
             { category: 'stems', id: 'st5' },
             { category: 'saddles', id: 'sa6' }
@@ -773,7 +801,9 @@ export const HISTORY_TRACKS_DB = [
         recommendedStats: { speed: 26, accel: 22, jump: 18, brake: 14, stability: 35, power: 30 },
         length: 25000, hills: 30, botMaxSpeed: 6.5, botAccel: 0.08,
         botDifficultyTrackId: 't2', obstacles: 7,
-        obstacleTypes: ['pit', 'plank_bridge', 'rock', 'water_splash', 'log', 'cobblestones'], winReward: 0, lossReward: 0, couponReward: 0,
+        obstacleTypes: ['pit', 'plank_bridge', 'rock', 'water_splash', 'log', 'cobblestones', 'ramp'],
+        historyObstaclePattern: ['cobblestones', 'ramp', 'plank_bridge', 'rock', 'pit', 'water_splash', 'log', 'ramp'],
+        winReward: 0, lossReward: 0, couponReward: 0,
         historyRewards: [
             { category: 'frames', id: 'f14' },
             { category: 'riders', id: 'r6' }

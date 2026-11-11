@@ -237,18 +237,44 @@
     }
 
     #screen-race.active {
-        padding-bottom: 58px !important;
+        padding-bottom: 16px !important;
     }
 
     #race-controls {
         height: 48px !important;
         bottom: 4px !important;
+        left: 50% !important;
+        right: auto !important;
+        width: min(560px, calc(100vw - 24px)) !important;
+        height: 108px !important;
+        padding: 6px !important;
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        grid-template-rows: repeat(2, minmax(42px, 1fr)) !important;
+        grid-template-areas:
+            "brake jump"
+            "reverse accelerate" !important;
+        gap: 6px !important;
+        transform: translateX(-50%) !important;
     }
 
     #race-controls button {
-        height: 46px !important;
-        min-height: 46px !important;
+        width: 100% !important;
+        height: 100% !important;
+        min-width: 0 !important;
+        min-height: 42px !important;
+        padding: 4px 8px !important;
+        flex-direction: row !important;
+        font-size: clamp(12px, 2.4vw, 16px) !important;
+        white-space: nowrap !important;
     }
+
+    #race-controls button span:last-child { display: none !important; }
+
+    #btn-reverse { grid-area: reverse; }
+    #btn-jump { grid-area: jump; }
+    #btn-brake { grid-area: brake; }
+    #btn-accelerate { grid-area: auto; }
 
 }
 

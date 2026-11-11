@@ -238,7 +238,16 @@ function getTelegramWebApp() {
 }
 
 function getCloudStorage() {
-    return getTelegramWebApp()?.CloudStorage || null;
+    const telegram = getTelegramWebApp();
+    if (
+        !telegram ||
+        typeof telegram.isVersionAtLeast !== 'function' ||
+        !telegram.isVersionAtLeast('6.9')
+    ) {
+        return null;
+    }
+
+    return telegram.CloudStorage || null;
 }
 
 function cloudStorageGet(key) {

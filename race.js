@@ -38,6 +38,12 @@ const MACMILLAN_PEDAL_CADENCE = 0.22;
 const RACE_ZOOM_DESKTOP = 0.86;
 const RACE_ZOOM_MOBILE_PORTRAIT = 0.60;
 const RACE_ZOOM_MOBILE_LANDSCAPE = 0.56;
+const LANDING_FLOW_DURATION_FRAMES = 22;
+const LANDING_FLOW_COOLDOWN_FRAMES = 105;
+const LANDING_FLOW_CHAIN_FRAMES = 240;
+const LANDING_FLOW_MAX_STREAK = 3;
+const LANDING_FLOW_BASE_BONUS = 0.16;
+const LANDING_FLOW_STREAK_BONUS = 0.035;
 const ROAD_DASH_PATTERN = Object.freeze([16, 12]);
 const PLAYER_LANE_OFFSET = 0;
 const BOT_LANE_OFFSET = 0;
@@ -48,9 +54,10 @@ const REPEATING_GROUND_HAZARDS = new Set([
 const GROUND_HAZARD_REHIT_FRAMES = 30;
 
 function getCameraZoom() {
+    ensureRaceMediaQueries();
     const w = window.innerWidth || 800;
     const h = window.innerHeight || 600;
-    const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+    const coarsePointer = coarsePointerQuery.matches;
     if (coarsePointer && w > h && h <= 820) return RACE_ZOOM_MOBILE_LANDSCAPE;
     if (coarsePointer && h >= w && w <= 520) return RACE_ZOOM_MOBILE_PORTRAIT;
     if (w <= 520) return RACE_ZOOM_MOBILE_PORTRAIT;
@@ -132,17 +139,19 @@ const TRACK_TERRAIN = {
     l3:  { amplitude: 0, longFrequency: 0, shortFrequency: 0, micro: 0, phase: 0, ridge: 0, chop: 0 },
     l4:  { amplitude: 44, longFrequency: 0.0019, shortFrequency: 0.013, micro: 3.0, phase: 2.0, ridge: 0.22, chop: 0.09 },
     l5:  { amplitude: 52, longFrequency: 0.0018, shortFrequency: 0.0145, micro: 3.7, phase: 2.0, ridge: 0.29, chop: 0.12 },
-    l6:  { amplitude: 60, longFrequency: 0.0017, shortFrequency: 0.016, micro: 4.4, phase: 2.08, ridge: 0.38, chop: 0.15 },
+    // Финал сохраняет высокий длинный подъём, но реже подбрасывает байк
+    // частыми короткими волнами, которые раньше требовали скрыто много тяги.
+    l6:  { amplitude: 58, longFrequency: 0.0017, shortFrequency: 0.013, micro: 4.2, phase: 2.08, ridge: 0.32, chop: 0.11 },
     t1:  { amplitude: 8,  longFrequency: 0.0034, shortFrequency: 0.0080, micro: 1.0, phase: 0.2, ridge: 0.04, chop: 0.02 },
-    t2:  { amplitude: 15, longFrequency: 0.0038, shortFrequency: 0.0095, micro: 1.5, phase: 0.5, ridge: 0.07, chop: 0.035 },
-    t3:  { amplitude: 21, longFrequency: 0.0042, shortFrequency: 0.0110, micro: 2.0, phase: 0.8, ridge: 0.11, chop: 0.05 },
-    t4:  { amplitude: 28, longFrequency: 0.0046, shortFrequency: 0.0125, micro: 2.5, phase: 1.1, ridge: 0.17, chop: 0.065 },
-    t5:  { amplitude: 36, longFrequency: 0.0050, shortFrequency: 0.0140, micro: 3.0, phase: 1.4, ridge: 0.24, chop: 0.08 },
-    t6:  { amplitude: 45, longFrequency: 0.0054, shortFrequency: 0.0160, micro: 3.5, phase: 1.7, ridge: 0.32, chop: 0.10 },
-    t7:  { amplitude: 54, longFrequency: 0.0058, shortFrequency: 0.0180, micro: 4.0, phase: 2.0, ridge: 0.40, chop: 0.12 },
-    t8:  { amplitude: 64, longFrequency: 0.0062, shortFrequency: 0.0200, micro: 4.5, phase: 2.3, ridge: 0.50, chop: 0.14 },
-    t9:  { amplitude: 74, longFrequency: 0.0068, shortFrequency: 0.0220, micro: 5.0, phase: 2.6, ridge: 0.60, chop: 0.17 },
-    t10: { amplitude: 88, longFrequency: 0.0074, shortFrequency: 0.0250, micro: 5.5, phase: 2.9, ridge: 0.74, chop: 0.20 }
+    t2:  { amplitude: 15, longFrequency: 0.0035, shortFrequency: 0.0088, micro: 1.5, phase: 0.5, ridge: 0.07, chop: 0.032 },
+    t3:  { amplitude: 21, longFrequency: 0.0035, shortFrequency: 0.0095, micro: 2.0, phase: 0.8, ridge: 0.11, chop: 0.045 },
+    t4:  { amplitude: 28, longFrequency: 0.0034, shortFrequency: 0.0100, micro: 2.5, phase: 1.1, ridge: 0.17, chop: 0.06 },
+    t5:  { amplitude: 36, longFrequency: 0.0032, shortFrequency: 0.0108, micro: 3.0, phase: 1.4, ridge: 0.24, chop: 0.075 },
+    t6:  { amplitude: 45, longFrequency: 0.0029, shortFrequency: 0.0088, micro: 3.5, phase: 1.7, ridge: 0.18, chop: 0.05 },
+    t7:  { amplitude: 54, longFrequency: 0.0027, shortFrequency: 0.0087, micro: 4.0, phase: 2.0, ridge: 0.24, chop: 0.055 },
+    t8:  { amplitude: 64, longFrequency: 0.0024, shortFrequency: 0.0085, micro: 4.5, phase: 2.3, ridge: 0.26, chop: 0.06 },
+    t9:  { amplitude: 74, longFrequency: 0.0022, shortFrequency: 0.0090, micro: 5.0, phase: 2.6, ridge: 0.32, chop: 0.07 },
+    t10: { amplitude: 88, longFrequency: 0.0020, shortFrequency: 0.0092, micro: 5.5, phase: 2.9, ridge: 0.34, chop: 0.07 }
 };
 
 // =========================================
@@ -187,11 +196,19 @@ let ctx = null;
 let viewWidth = 0;
 let viewHeight = 0;
 let baseRaceZoom = RACE_ZOOM_DESKTOP;
+let currentRaceZoom = RACE_ZOOM_DESKTOP;
 let cameraVerticalOffset = 0;
 let terrainVisibility = 1;
 let canvasDpr = 1;
 let mobilePerformanceMode = false;
+let mobileViewportQuery = null;
+let coarsePointerQuery = null;
+let landscapePhoneQuery = null;
 const backgroundGradientCache = new Map();
+let celestialGlowSprite = null;
+let celestialGlowSpriteKey = '';
+const CELESTIAL_GLOW_BLUR = 60;
+const CELESTIAL_GLOW_MARGIN_PX = 180;
 let canvasCssWidth = 800;
 let canvasCssHeight = 420;
 let animationId = null;
@@ -224,6 +241,7 @@ let playerBike = null;
 let botBike = null;
 let additionalBots = [];
 let activeBots = [];
+const raceCompetitors = [];
 let collectedRaceCoins = 0;
 let collectibles = [];
 let floatingTexts = [];
@@ -235,8 +253,16 @@ let currentTrackLevel = 1;
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 // =========================================
 
+function ensureRaceMediaQueries() {
+    if (mobileViewportQuery) return;
+    mobileViewportQuery = window.matchMedia('(max-width: 768px)');
+    coarsePointerQuery = window.matchMedia('(pointer: coarse)');
+    landscapePhoneQuery = window.matchMedia('(orientation: landscape) and (max-height: 600px)');
+}
+
 function isMobileScreen() {
-    return window.matchMedia('(max-width: 768px)').matches;
+    ensureRaceMediaQueries();
+    return mobileViewportQuery.matches;
 }
 
 function getTrackBalance(trackId) {
@@ -484,6 +510,27 @@ function createObstacles() {
     if (!typePool.length) return [];
 
     const obstacleCount = getTrackObstacleCount(currentTrack, currentTrackLevel);
+    // Каждая трасса может задавать свой повторяемый ритм препятствий; случайный
+    // сдвиг позиции сохраняет вариативность, но ключевые связки не теряются.
+    const configuredPattern = currentTrack.isHistory
+        ? currentTrack.historyObstaclePattern
+        : currentTrack.obstaclePattern;
+    const routePattern = Array.isArray(configuredPattern)
+        ? configuredPattern.filter(type => typePool.includes(type))
+        : [];
+    const getPatternTypeAtIndex = index => {
+        if (!routePattern.length) return null;
+        // На длинной трассе повторяем ритм маршрута, а не растягиваем одну
+        // запись на блок одинаковых препятствий. Короткие этапы равномерно
+        // выбирают элементы всей последовательности, чтобы не терять финал.
+        const patternIndex = obstacleCount > routePattern.length
+            ? index % routePattern.length
+            : obstacleCount <= 1
+                ? Math.floor((routePattern.length - 1) / 2)
+                : Math.round(index * (routePattern.length - 1) / (obstacleCount - 1));
+        return routePattern[patternIndex];
+    };
+
     // На сюжетных трассах ямы размещаются гарантированно. Глава II использует
     // плотность ям обычных трасс 2–3 уровня, остальные истории — мягкую прогрессию.
     const historyDifficultyLevel = Number(currentTrack.historyChapter) === 2
@@ -494,27 +541,28 @@ function createObstacles() {
             ? Math.round((historyDifficultyLevel * 2 + 1) * TRACK_DISTANCE_SCALE)
             : Math.round(Math.ceil(historyDifficultyLevel / 2) * TRACK_DISTANCE_SCALE)
         : Math.round((currentTrackLevel * 2 + 1) * TRACK_DISTANCE_SCALE);
-    const pitCount = currentTrack.isHistory
-        ? (typePool.includes('pit') ? Math.min(obstacleCount, configuredPitCount) : 0)
-        : Math.min(obstacleCount, configuredPitCount);
+    const pitCount = typePool.includes('pit')
+        ? Math.min(obstacleCount, configuredPitCount)
+        : 0;
+    // Если ямы уже входят в маршрутный рисунок, считаем их частью гарантии.
+    // Добавляем только недостающие позиции, чтобы ямы не дублировались поверх
+    // авторской расстановки и не превращали трассу в сплошную полосу разрывов.
     const pitIndices = new Set();
-    for (let pitIndex = 0; pitIndex < pitCount; pitIndex++) {
+    if (routePattern.length) {
+        for (let index = 0; index < obstacleCount; index++) {
+            if (getPatternTypeAtIndex(index) === 'pit') pitIndices.add(index);
+        }
+    }
+    for (let pitIndex = pitIndices.size; pitIndex < pitCount; pitIndex++) {
         const targetIndex = Math.round(
             ((pitIndex + 1) / (pitCount + 1)) * Math.max(0, obstacleCount - 1)
         );
         let index = targetIndex;
         while (pitIndices.has(index) && index < obstacleCount - 1) index++;
         while (pitIndices.has(index) && index > 0) index--;
-        pitIndices.add(index);
+        if (!pitIndices.has(index)) pitIndices.add(index);
     }
-
-    // Глава II использует собственный чередующийся сценарий препятствий,
-    // чтобы у каждого испытания был узнаваемый ритм, а ключевые элементы
-    // не зависели от случайной выборки.
-    const historyPattern = Number(currentTrack.historyChapter) >= 2 && Array.isArray(currentTrack.historyObstaclePattern)
-        ? currentTrack.historyObstaclePattern.filter(type => typePool.includes(type))
-        : [];
-    const signatureTypes = Number(currentTrack.historyChapter) >= 2 && !historyPattern.length && Array.isArray(currentTrack.signatureObstacleTypes)
+    const signatureTypes = !routePattern.length && Array.isArray(currentTrack.signatureObstacleTypes)
         ? currentTrack.signatureObstacleTypes.filter(type => typePool.includes(type) && type !== 'pit')
         : [];
     const signatureAssignments = new Map();
@@ -530,27 +578,55 @@ function createObstacles() {
     const randomTypePool = nonPitTypePool.length
         ? nonPitTypePool
         : Object.keys(OBSTACLE_TYPES).filter(type => type !== 'pit');
+    const plannedTypes = Array.from({ length: obstacleCount }, (_, index) =>
+        pitIndices.has(index)
+            ? 'pit'
+            : signatureAssignments.get(index) || getPatternTypeAtIndex(index) || randomItem(randomTypePool)
+    );
     const firstObstacleX = 900;
     const lastObstacleX = Math.max(firstObstacleX, finishX - 1200);
     const usableLength = Math.max(1, lastObstacleX - firstObstacleX);
-    const spacing = obstacleCount > 1
+    const meanSpacing = obstacleCount > 1
         ? usableLength / (obstacleCount - 1)
         : usableLength;
+    const gaps = new Set(['pit', 'bridge_gap', 'cliff', 'loose_planks']);
+    const timedHazards = new Set(['pulse_gate', 'smith_hammer', 'mill_paddle', 'crank_rack']);
+    const groundRuns = new Set(['mud', 'water_splash', 'ice_patch', 'cobblestones', 'plank_bridge', 'metal_grate']);
+    const spacingWeights = [];
+    for (let index = 1; index < obstacleCount; index++) {
+        const previousType = plannedTypes[index - 1];
+        const nextType = plannedTypes[index];
+        let weight = 1;
+
+        // Разрыв получает короткую зону подготовки, а после него появляется
+        // более длинное место для безопасной посадки и нового разгона.
+        if (gaps.has(previousType)) weight = 1.38;
+        else if (gaps.has(nextType)) weight = 1.14;
+        else if (timedHazards.has(previousType) || timedHazards.has(nextType)) weight = 1.16;
+        else if (previousType === 'ramp' || nextType === 'ramp') weight = 0.84;
+        else if (groundRuns.has(previousType) && groundRuns.has(nextType)) weight = 0.88;
+
+        // Небольшая вариация не меняет задуманный ритм маршрута.
+        spacingWeights.push(weight * (0.94 + Math.random() * 0.12));
+    }
+    const totalSpacingWeight = spacingWeights.reduce((sum, weight) => sum + weight, 0) || 1;
     const generated = [];
     let previousRight = firstObstacleX - 120;
+    let traversedSpacingWeight = 0;
 
     for (let index = 0; index < obstacleCount; index++) {
-        const patternType = historyPattern.length
-            ? historyPattern[index % historyPattern.length]
-            : null;
-        const type = pitIndices.has(index)
-            ? 'pit'
-            : signatureAssignments.get(index) || patternType || randomItem(randomTypePool);
+        // Вся последовательность трассы попадает в генерацию даже тогда,
+        // когда дистанция требует меньшего числа препятствий.
+        const type = plannedTypes[index];
         const definition = OBSTACLE_TYPES[type];
         if (!definition) continue;
 
-        const jitter = (Math.random() - 0.5) * Math.min(260, spacing * 0.32);
-        const targetX = firstObstacleX + spacing * index + jitter;
+        if (index > 0) traversedSpacingWeight += spacingWeights[index - 1];
+        const progress = index === 0 ? 0 : traversedSpacingWeight / totalSpacingWeight;
+        const jitter = index === 0 || index === obstacleCount - 1
+            ? 0
+            : (Math.random() - 0.5) * Math.min(110, meanSpacing * 0.06);
+        const targetX = firstObstacleX + usableLength * progress + jitter;
         const x = Math.max(
             targetX,
             previousRight + 90,
@@ -562,10 +638,14 @@ function createObstacles() {
             id: `${currentTrack.id}-obstacle-${index}`,
             type,
             x,
+            baseX: x,
+            aiSeedX: x,
             width: definition.width,
             height: definition.height,
             color: definition.color,
             phase: Math.random() * Math.PI * 2,
+            motionAmplitude: type === 'rolling_boulder' ? 22 : type === 'rolling_wheel' ? 30 : 0,
+            motionSpeed: type === 'rolling_boulder' ? 0.024 : 0.032,
             playerHit: false,
             botHitBy: new Map(),
             botJumpAttemptedBy: new Set(),
@@ -586,6 +666,8 @@ function createObstacles() {
             id: `${currentTrack.id}-finish-cliff`,
             type: 'cliff',
             x: Math.max(firstObstacleX, finishX - cliff.width - 300),
+            baseX: Math.max(firstObstacleX, finishX - cliff.width - 300),
+            aiSeedX: Math.max(firstObstacleX, finishX - cliff.width - 300),
             width: cliff.width,
             height: cliff.height,
             color: cliff.color,
@@ -598,6 +680,15 @@ function createObstacles() {
     }
 
     return generated.sort((a, b) => a.x - b.x);
+}
+
+function updateDynamicObstacles() {
+    for (const obstacle of obstacles) {
+        if (!(obstacle.motionAmplitude > 0)) continue;
+        const phase = Number(obstacle.phase) || 0;
+        const speed = Number(obstacle.motionSpeed) || 0.02;
+        obstacle.x = obstacle.baseX + Math.sin(frameCounter * speed + phase) * obstacle.motionAmplitude;
+    }
 }
 
 // =========================================
@@ -826,6 +917,13 @@ function createBike(isBot = false, botIndex = 1) {
         springBoostTimer: 0,
         nitroCooldown: isBot ? 120 + Math.floor(Math.random() * 100) : 0,
         landingBoostCooldown: 0,
+        landingFlowCooldown: 0,
+        landingFlowTimer: 0,
+        landingFlowStreak: 0,
+        landingFlowChainTimer: 0,
+        jumpLaunchSpeed: 0,
+        draftingStrength: 0,
+        draftNoticeCooldown: 0,
         shieldActiveTimer: 0,
         jumpBufferFrames: 0,
         finishFrame: null,
@@ -923,7 +1021,11 @@ function maybeFlipFromImpact(bike, impactForce, direction = 1, message = 'КОЧ
     }
 
     const flipped = Math.random() < chance && startBikeFlip(bike, direction, message);
-    if (flipped) queuePlayerCrash(bike, 'stability-flip');
+    if (flipped) {
+        bike.landingFlowStreak = 0;
+        bike.landingFlowChainTimer = 0;
+        queuePlayerCrash(bike, 'stability-flip');
+    }
     return flipped;
 }
 
@@ -958,6 +1060,38 @@ function applyImpactPitchImpulse(bike, impactForce, direction = 1) {
     const frontContact = direction < 0;
     const contactX = bike.x + (frontContact ? 25 : -25);
     applyPitchImpulseAtContact(bike, impactForce, contactX, -1);
+}
+
+function applyWindGustImpulse(bike, obstacle) {
+    if (!bike || obstacle?.type !== 'wind_fan') return;
+
+    const gust = Math.sin(frameCounter * 0.045 + (Number(obstacle.phase) || 0));
+    if (Math.abs(gust) < 0.08) return;
+
+    const instability = 1 - getBikeStabilityRatio(bike);
+    const impulse = Math.sign(gust) * Math.abs(gust) * (0.002 + instability * 0.006);
+    bike.pitchVelocity = clamp(
+        (Number(bike.pitchVelocity) || 0) + impulse,
+        -0.09,
+        0.09
+    );
+}
+
+function applyAirborneWindGust(bike, obstacle) {
+    if (!bike || bike.grounded || obstacle?.type !== 'wind_fan') return;
+    if (Math.max(0, Number(bike.jumpHeight) || 0) >= obstacle.height + 26) return;
+
+    if (bike.isBot) {
+        const botHitBy = ensureBotHitMap(obstacle);
+        if (botHitBy.has(bike.botIndex)) return;
+        botHitBy.set(bike.botIndex, frameCounter);
+    } else {
+        if (bike.collidedObstacles.has(obstacle.id)) return;
+        bike.collidedObstacles.set(obstacle.id, frameCounter);
+    }
+
+    // В воздухе поток меняет наклон велосипеда, но не добавляет наземный штраф скорости.
+    applyWindGustImpulse(bike, obstacle);
 }
 
 function updateBikeFlipRecovery(bike) {
@@ -1097,6 +1231,9 @@ function updateSuspensionResponse(bike) {
 
 function updateJumpPhysics(bike) {
     if (!bike.isBot && bike.landingBoostCooldown > 0) bike.landingBoostCooldown--;
+    if (bike.landingFlowCooldown > 0) bike.landingFlowCooldown--;
+    if (bike.landingFlowTimer > 0) bike.landingFlowTimer--;
+    if (bike.landingFlowChainTimer > 0) bike.landingFlowChainTimer--;
 
     const stabilityRatio = getBikeStabilityRatio(bike);
     bike.pitchAngle = Number(bike.pitchAngle) || 0;
@@ -1156,6 +1293,7 @@ function updateJumpPhysics(bike) {
     // Приземление, когда траектория пересекла линию рельефа
     if (bike.jumpHeight <= 0) {
         const landingSpeed = Math.max(0, -bike.jumpVelocity);
+        const launchSpeed = Math.max(4, Number(bike.jumpLaunchSpeed) || 9);
         const frontY = getGroundY(bike.x + 25, 0);
         const rearY = getGroundY(bike.x - 25, 0);
         const groundPitch = Math.atan2(frontY - rearY, 50);
@@ -1176,11 +1314,16 @@ function updateJumpPhysics(bike) {
 
         bike.jumpHeight = 0;
         bike.jumpVelocity = 0;
+        bike.jumpLaunchSpeed = 0;
         bike.jumpGravity = GRAVITY;
         bike.grounded = true;
         bike.airY = null;
         bike.rampLift = 0;
         bike.currentRamp = null;
+        if (failedLanding) {
+            bike.landingFlowStreak = 0;
+            bike.landingFlowChainTimer = 0;
+        }
         if (shieldSavedLanding) {
             bike.abilities.shieldCharges--;
             bike.shieldActiveTimer = 52;
@@ -1203,6 +1346,37 @@ function updateJumpPhysics(bike) {
             queuePlayerCrash(bike, 'hard-landing');
         } else {
             bike.pitchVelocity *= 0.72;
+            // Compare impact speed with this jump's take-off speed. A fixed
+            // low threshold made clean landings almost impossible after ramps.
+            const cleanLandingSpeedLimit = launchSpeed * 1.15 + stabilityRatio * 1.2;
+            const cleanLanding = !shieldSavedLanding &&
+                landingSpeed <= cleanLandingSpeedLimit &&
+                absoluteLandingAngle <= safeLandingAngle * 0.62;
+            if (cleanLanding) {
+                const previousStreak = bike.landingFlowChainTimer > 0
+                    ? Number(bike.landingFlowStreak) || 0
+                    : 0;
+                bike.landingFlowStreak = Math.min(LANDING_FLOW_MAX_STREAK, previousStreak + 1);
+                bike.landingFlowChainTimer = LANDING_FLOW_CHAIN_FRAMES;
+                if (!bike.isBot) {
+                    const streakLabel = bike.landingFlowCooldown > 0
+                        ? `СЕРИЯ ПОСАДОК ×${bike.landingFlowStreak}`
+                        : bike.landingFlowStreak > 1
+                            ? `ПОТОК ×${bike.landingFlowStreak} · ЧИСТАЯ ПОСАДКА`
+                            : 'ЧИСТАЯ ПОСАДКА · ПОТОК';
+                    addFloatingText(bike.x, getGroundY(bike.x, 0) - 43, streakLabel, '#86efac');
+                }
+                if (bike.landingFlowCooldown <= 0) {
+                    const flowBonus = LANDING_FLOW_BASE_BONUS +
+                        Math.max(0, bike.landingFlowStreak - 1) * LANDING_FLOW_STREAK_BONUS;
+                    bike.landingFlowTimer = LANDING_FLOW_DURATION_FRAMES;
+                    bike.landingFlowCooldown = LANDING_FLOW_COOLDOWN_FRAMES;
+                    bike.velocityX += flowBonus;
+                }
+            } else {
+                bike.landingFlowStreak = 0;
+                bike.landingFlowChainTimer = 0;
+            }
             if (!bike.isBot && bike.abilities?.landingFrame && bike.landingBoostCooldown <= 0) {
                 bike.velocityX += 0.45;
                 bike.springBoostTimer = Math.max(bike.springBoostTimer || 0, 24);
@@ -1231,6 +1405,7 @@ function startJump(bike, force, gravity = GRAVITY) {
         4,
         Number(force) || 9
     ) + terrainSlopeVy;
+    bike.jumpLaunchSpeed = Math.max(4, bike.jumpVelocity);
     // Прыжок сохраняет текущий наклон; сам отрыв не добавляет резкого переворота.
     bike.pitchVelocity = clamp(Number(bike.pitchVelocity) || 0, -0.045, 0.045);
 
@@ -1353,6 +1528,7 @@ function updateRamp(bike, isBot) {
         bike.rampLift = 0;
         bike.grounded = false;
         bike.jumpVelocity = 12 + extraJump;
+        bike.jumpLaunchSpeed = bike.jumpVelocity;
 
         bike.jumpGravity = isBot && bike.abilities?.superJumpUnlocked
             ? 0.355
@@ -1445,6 +1621,39 @@ function syncAbilityButtons() {
 // ФИЗИКА ИГРОКА
 // =========================================
 
+function getDraftingStrengthFromRival(bike, rival) {
+    if (!rival || rival === bike || rival.isGhost || !rival.grounded || rival.velocityX < -0.1) return 0;
+    const gap = rival.x - bike.x;
+    if (gap < BIKE_WIDTH + 10 || gap > 360) return 0;
+    if (Math.abs((Number(rival.jumpHeight) || 0) - (Number(bike.jumpHeight) || 0)) > 28) return 0;
+
+    const distanceFactor = clamp((360 - gap) / 305, 0, 1);
+    const paceFactor = clamp(1 - Math.abs(rival.velocityX - bike.velocityX) / 7, 0.45, 1);
+    return distanceFactor * paceFactor;
+}
+
+function updateDraftingState(bike) {
+    if (!bike) return 0;
+    if (!bike.grounded || bike.velocityX < -0.1 || bike.isGhost) {
+        bike.draftingStrength = 0;
+        return 0;
+    }
+
+    let strength = getDraftingStrengthFromRival(bike, playerBike);
+    for (let index = 0; index < activeBots.length; index++) {
+        strength = Math.max(strength, getDraftingStrengthFromRival(bike, activeBots[index]));
+    }
+
+    const previousStrength = Number(bike.draftingStrength) || 0;
+    bike.draftingStrength = strength;
+    if (bike.draftNoticeCooldown > 0) bike.draftNoticeCooldown--;
+    if (!bike.isBot && strength >= 0.72 && previousStrength < 0.72 && bike.draftNoticeCooldown <= 0) {
+        addFloatingText(bike.x, getGroundY(bike.x, 0) - 58, 'ВОЗДУШНЫЙ ПОТОК · +СКОРОСТЬ', '#67e8f9');
+        bike.draftNoticeCooldown = 150;
+    }
+    return strength;
+}
+
 function updatePlayerPhysics() {
     if (updateBikeFlipRecovery(playerBike)) {
         updateReverseButtonLabel();
@@ -1489,6 +1698,7 @@ function updatePlayerPhysics() {
 
     const brakeApplied = input.braking && playerBike.hasBrakes;
     const driveInput = Number(input.accelerating) - Number(input.reversing);
+    const draftStrength = updateDraftingState(playerBike);
     const draisinePush = playerBike.visuals?.draisine && playerBike.grounded
         ? 0.55 + (Math.sin(frameCounter * 0.13) + 1) * 0.38
         : 1;
@@ -1499,7 +1709,7 @@ function updatePlayerPhysics() {
     const jumpGravity = 0.39 + (GRAVITY - 0.39) * Math.exp(-(jump * JUMP_STAT_FACTOR) / 5);
 
     if (driveInput > 0 && playerBike.grounded) {
-        playerBike.velocityX += acceleration * draisinePush;
+        playerBike.velocityX += acceleration * draisinePush * (1 + draftStrength * 0.2 + (playerBike.landingFlowTimer > 0 ? 0.08 : 0));
     }
 
     if (driveInput < 0 && playerBike.grounded && !brakeApplied) {
@@ -1542,7 +1752,8 @@ function updatePlayerPhysics() {
         playerBike.velocityX *= 1 - 0.005;
     }
 
-    const regularAllowedSpeed = maxSpeed * nitroMultiplier;
+    const regularAllowedSpeed = maxSpeed * nitroMultiplier *
+        (1 + draftStrength * 0.055 + (playerBike.landingFlowTimer > 0 ? 0.04 : 0));
     const padBoostFraction = playerBike.padBoostTimer > 0
         ? playerBike.padBoostTimer / 50
         : 0;
@@ -1700,7 +1911,7 @@ function updatePlayerPhysics() {
 function updateBotPhysics(bike) {
     if (updateBikeFlipRecovery(bike)) return;
 
-    updateBotAbilities(bike, obstacles, BIKE_WIDTH, [playerBike, ...activeBots]);
+    updateBotAbilities(bike, obstacles, BIKE_WIDTH, raceCompetitors);
     if (bike.padBoostTimer > 0) bike.padBoostTimer--;
     if (bike.springBoostTimer > 0) bike.springBoostTimer--;
 
@@ -1716,8 +1927,10 @@ function updateBotPhysics(bike) {
             : 1;
 
     const springBoostMultiplier = bike.springBoostTimer > 0 ? 1.18 : 1;
+    const draftStrength = updateDraftingState(bike);
     const maxSpeed =
-        baseMaxSpeed * nitroMultiplier * springBoostMultiplier;
+        baseMaxSpeed * nitroMultiplier * springBoostMultiplier *
+        (1 + draftStrength * 0.055 + (bike.landingFlowTimer > 0 ? 0.04 : 0));
 
     const baseAcceleration = Math.max(
         0.012,
@@ -1732,16 +1945,8 @@ function updateBotPhysics(bike) {
         const legPush = bike.visuals?.draisine
             ? 0.55 + (Math.sin(frameCounter * 0.13) + 1) * 0.38
             : 1;
-        bike.velocityX += baseAcceleration * legPush;
-    }
-
-    // Соревновательный азарт: бот активнее крутит педали (драфтинг), если отстает от лидера или соперника
-    if (bike.grounded && !bike.isGhost) {
-        const competitors = [playerBike, ...activeBots.filter(b => b !== bike && !b.isGhost)];
-        const ahead = competitors.find(c => c && (c.x - bike.x) > 50 && (c.x - bike.x) < 450);
-        if (ahead) {
-            bike.velocityX += baseAcceleration * 0.28;
-        }
+        bike.velocityX += baseAcceleration * legPush *
+            (1 + draftStrength * 0.2 + (bike.landingFlowTimer > 0 ? 0.08 : 0));
     }
 
     const padBoostFraction = bike.padBoostTimer > 0
@@ -1759,15 +1964,18 @@ function updateBotPhysics(bike) {
         const powerRatio = (Math.max(0, Number(bike.botBasePower) || 0) + 6) /
             Math.max(10, requiredPower);
         const powerDeficit = clamp(1 - powerRatio, 0, 0.5);
-        const powerSpeedPenalty = powerDeficit * 0.035;
         const hillDrag = botSlope * 0.08 + baseAcceleration * powerDeficit * 0.18;
 
-        // Возвращаем базовое сопротивление склону; мощность добавляет лишь
-        // небольшой штраф при нехватке тяги, не меняя общий темп ботов резко.
+        // Ограничение подъёмной скорости зависит от тяги, как у игрока.
+        // Раньше множитель 1 - slope*1.5 почти останавливал даже мощных ботов
+        // на крутом склоне и делал рекомендованный уровень нечестным.
         bike.velocityX = Math.max(0.4, bike.velocityX - hillDrag);
+        const slopePowerFactor = powerRatio < 1
+            ? Math.pow(Math.max(0.08, powerRatio), 1.25)
+            : 1;
         const slopeSpeedLimit = Math.max(
             0.6,
-            maxSpeed * (1 - botSlope * 1.5 - powerSpeedPenalty)
+            maxSpeed * slopePowerFactor
         );
         allowedSpeed = Math.min(allowedSpeed, slopeSpeedLimit);
     } else if (bike.grounded && botSlope < -0.04) {
@@ -1796,7 +2004,7 @@ function updateBotPhysics(bike) {
         startJump,
         gravity: GRAVITY,
         bikeWidth: BIKE_WIDTH,
-        competitors: [playerBike, ...activeBots],
+        competitors: raceCompetitors,
         maxSpeed
     });
 
@@ -1835,13 +2043,16 @@ function applyPlayerImpact(obstacle, speedLimit = 1.0) {
     }
 
     let impactDuration = 42;
+    playerBike.landingFlowStreak = 0;
+    playerBike.landingFlowChainTimer = 0;
     if (playerBike.abilities?.impactBrake) impactDuration = Math.round(impactDuration * 0.85);
     if (playerBike.abilities?.flowFrame && ['ice_patch', 'wind_fan'].includes(obstacle.type)) {
         speedLimit = Math.max(speedLimit, Math.min(playerBike.velocityX, speedLimit * 1.15));
     }
+    applyWindGustImpulse(playerBike, obstacle);
 
     const roughObstacle = ['rock', 'rolling_boulder', 'rolling_wheel', 'log', 'fallen_branch', 'crank_rack'].includes(obstacle.type);
-        const stability = getBikeStabilityRatio(playerBike);
+    const stability = getBikeStabilityRatio(playerBike);
     if (roughObstacle) {
         const retainedSpeed = (playerBike.velocityX - speedLimit) * stability * 0.18;
         speedLimit += retainedSpeed;
@@ -1940,6 +2151,8 @@ function updatePlayerCollisions() {
                 } else {
                     applyPlayerImpact(obstacle, obstacle.type === 'water_splash' ? 0.8 : 1.05);
                 }
+            } else if (obstacle.type === 'wind_fan') {
+                applyAirborneWindGust(playerBike, obstacle);
             }
             continue;
         }
@@ -2013,6 +2226,9 @@ function applyBotImpact(
     }
 
     bike.impactSlowTimer = duration;
+    bike.landingFlowStreak = 0;
+    bike.landingFlowChainTimer = 0;
+    applyWindGustImpulse(bike, obstacle);
 
     if (
         bike.abilities?.shieldCharges > 0
@@ -2108,6 +2324,8 @@ function updateBotCollisions(bike) {
             if (bike.grounded) {
                 const factor = obstacle.type === 'metal_grate' ? 0.72 : obstacle.type === 'wind_fan' ? 0.28 : obstacle.type === 'ice_patch' ? 0.52 : obstacle.type === 'water_splash' ? 0.42 : obstacle.type === 'forge_slag' ? 0.48 : obstacle.type === 'ford_stones' ? 0.62 : 0.58;
                 applyBotImpact(bike, obstacle, factor, obstacle.type === 'metal_grate' ? 42 : obstacle.type === 'ice_patch' ? 24 : 48);
+            } else if (obstacle.type === 'wind_fan') {
+                applyAirborneWindGust(bike, obstacle);
             }
             continue;
         }
@@ -2789,6 +3007,31 @@ function getBackgroundGradient(cacheKey, x0, y0, x1, y1, stops) {
     return gradient;
 }
 
+function getCelestialGlowSprite(radiusCss, isNight) {
+    const key = `${Math.round(radiusCss * 100)}:${canvasDpr}:${isNight}`;
+    if (celestialGlowSprite && celestialGlowSpriteKey === key) return celestialGlowSprite;
+
+    const sprite = document.createElement('canvas');
+    const radiusPixels = radiusCss * canvasDpr;
+    const marginPixels = CELESTIAL_GLOW_MARGIN_PX;
+    sprite.width = Math.ceil(radiusPixels * 2 + marginPixels * 2);
+    sprite.height = sprite.width;
+    const spriteContext = sprite.getContext('2d');
+    if (!spriteContext) return null;
+
+    const center = sprite.width * 0.5;
+    spriteContext.beginPath();
+    spriteContext.arc(center, center, radiusPixels, 0, Math.PI * 2);
+    spriteContext.fillStyle = isNight ? 'rgba(226, 232, 240, 0.9)' : 'rgba(253, 224, 71, 0.95)';
+    spriteContext.shadowColor = isNight ? 'rgba(148, 163, 184, 0.6)' : 'rgba(250, 204, 21, 0.6)';
+    spriteContext.shadowBlur = CELESTIAL_GLOW_BLUR;
+    spriteContext.fill();
+
+    celestialGlowSprite = sprite;
+    celestialGlowSpriteKey = key;
+    return sprite;
+}
+
 function drawBackground() {
     const palette = getTrackPalette();
 
@@ -2803,12 +3046,12 @@ function drawBackground() {
     );
 
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, viewWidth, viewHeight);
+    // Slight overscan keeps the opaque backing filled even when DPR rounding
+    // leaves a fractional physical pixel at the canvas edge.
+    ctx.fillRect(0, 0, viewWidth + 1, viewHeight + 1);
 
     // 2. Солнце или Луна со свечением вдали
     const isNight = ['#1d233f', '#090f2b', '#1a263c', '#281b2c'].includes(palette.skyTop);
-    ctx.save();
-    ctx.beginPath();
     const celestialRadius = viewWidth * 0.08;
     const celestialCycle = viewWidth + celestialRadius * 2;
     const celestialTravel = cameraX * 0.015;
@@ -2817,12 +3060,40 @@ function drawBackground() {
     const celestialOffset = ((celestialTravel % celestialCycle) + celestialCycle) % celestialCycle;
     const celestialX = viewWidth + celestialRadius - celestialOffset;
     const celestialY = viewHeight * 0.35;
-    ctx.arc(celestialX, celestialY, celestialRadius, 0, Math.PI * 2);
-    ctx.fillStyle = isNight ? 'rgba(226, 232, 240, 0.9)' : 'rgba(253, 224, 71, 0.95)';
-    ctx.shadowColor = isNight ? 'rgba(148, 163, 184, 0.6)' : 'rgba(250, 204, 21, 0.6)';
-    ctx.shadowBlur = 60;
-    ctx.fill();
-    ctx.restore();
+    const glowSprite = historyVictoryOutro
+        ? null
+        : getCelestialGlowSprite(celestialRadius, isNight);
+    if (glowSprite && !historyVictoryOutro) {
+        // The sun's circle and glow are static. Blit a full-resolution cached
+        // sprite in screen space so Canvas does not recompute shadowBlur every
+        // frame; this keeps the old DPR, radius, and glow while avoiding the
+        // zoom scaling that would otherwise change the blur during camera follow.
+        const screenRadius = celestialRadius * currentRaceZoom;
+        const screenX = celestialX * currentRaceZoom;
+        const screenY = celestialY * currentRaceZoom;
+        const spriteSizeCss = glowSprite.width / canvasDpr;
+        ctx.save();
+        ctx.setTransform(canvasDpr, 0, 0, canvasDpr, 0, 0);
+        ctx.drawImage(
+            glowSprite,
+            screenX - spriteSizeCss * 0.5,
+            screenY - spriteSizeCss * 0.5,
+            spriteSizeCss,
+            spriteSizeCss
+        );
+        ctx.restore();
+    } else {
+        // Keep the cinematic push-in on its original vector path because its
+        // zoom changes every frame and is too brief to benefit from a cache.
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(celestialX, celestialY, celestialRadius, 0, Math.PI * 2);
+        ctx.fillStyle = isNight ? 'rgba(226, 232, 240, 0.9)' : 'rgba(253, 224, 71, 0.95)';
+        ctx.shadowColor = isNight ? 'rgba(148, 163, 184, 0.6)' : 'rgba(250, 204, 21, 0.6)';
+        ctx.shadowBlur = CELESTIAL_GLOW_BLUR;
+        ctx.fill();
+        ctx.restore();
+    }
 
     // 3. Многослойные горы с вертикальным градиентом (туманом)
     const drawMountainLayer = (
@@ -3042,15 +3313,16 @@ function updateCollectibles() {
         powerWarningCooldown--;
     }
 
-    // Все участники заезда: игрок и боты
-    const allBikes = [playerBike, ...activeBots.filter(b => !b.isGhost)];
-
-    collectibles.forEach(item => {
+    const bikeCount = activeBots.length + 1;
+    for (let itemIndex = 0; itemIndex < collectibles.length; itemIndex++) {
+        const item = collectibles[itemIndex];
         if (item.type === 'coin') {
-            if (item.collected) return;
+            if (item.collected) continue;
             const itemY = item.y !== null ? item.y : getGroundY(item.x, 0) - 22;
 
-            for (const bike of allBikes) {
+            for (let bikeIndex = 0; bikeIndex < bikeCount; bikeIndex++) {
+                const bike = bikeIndex === 0 ? playerBike : activeBots[bikeIndex - 1];
+                if (bike.isGhost) continue;
                 if (item.collected) break;
                 const bx = bike.x;
                 const by = bike.grounded
@@ -3085,11 +3357,13 @@ function updateCollectibles() {
         } else if (item.type === 'booster') {
             if (item.cooldown > 0) {
                 item.cooldown--;
-                return;
+                continue;
             }
             const itemY = getGroundY(item.x, 0);
 
-            for (const bike of allBikes) {
+            for (let bikeIndex = 0; bikeIndex < bikeCount; bikeIndex++) {
+                const bike = bikeIndex === 0 ? playerBike : activeBots[bikeIndex - 1];
+                if (bike.isGhost) continue;
                 const bx = bike.x;
                 const by = bike.grounded
                     ? getGroundY(bike.x, 0)
@@ -3121,7 +3395,7 @@ function updateCollectibles() {
                 }
             }
         }
-    });
+    }
 
     updateFloatingTexts();
 }
@@ -3799,11 +4073,15 @@ function drawObstacle(obstacle) {
 }
 
 function drawObstacles() {
-    obstacles.forEach(obstacle => {
+    for (let index = 0; index < obstacles.length; index++) {
+        const obstacle = obstacles[index];
         const screenX = obstacle.x - cameraX;
         
-        // Не тратим ресурсы на просчет того, что за экраном
-        if (screenX < -150 || screenX > viewWidth + 150) return;
+        // Пропускаем уже пройденные объекты и останавливаемся на первом
+        // объекте впереди экрана: список отсортирован, а подвижные объекты
+        // смещаются недостаточно, чтобы поменять порядок препятствий.
+        if (screenX < -150) continue;
+        if (screenX > viewWidth + 150) break;
         
         // Вычисляем высоту земли в начале и в конце препятствия
         const groundY = getGroundY(obstacle.x, 0);
@@ -3823,7 +4101,7 @@ function drawObstacles() {
         drawObstacle(obstacle);
         
         ctx.restore();
-    });
+    }
 }
 
 // =========================================
@@ -4246,6 +4524,29 @@ function drawDraisineSeatAndCockpit(points, visuals = {}) {
     ctx.stroke();
 }
 
+function drawRaceFlowStreaks(x, y, bike) {
+    const draft = clamp(Number(bike.draftingStrength) || 0, 0, 1);
+    const landing = bike.landingFlowTimer > 0
+        ? bike.landingFlowTimer / LANDING_FLOW_DURATION_FRAMES
+        : 0;
+    const intensity = Math.max(draft, landing);
+    if (intensity < 0.18 || bike.isGhost) return;
+
+    ctx.save();
+    ctx.globalAlpha *= 0.28 + intensity * 0.42;
+    ctx.strokeStyle = landing > draft ? '#86efac' : '#67e8f9';
+    ctx.lineWidth = 1.6;
+    for (let i = 0; i < 3; i++) {
+        const offsetY = (i - 1) * 5 + Math.sin(frameCounter * 0.16 + i) * 1.5;
+        const tail = 12 + intensity * 12 + ((frameCounter + i * 5) % 8);
+        ctx.beginPath();
+        ctx.moveTo(x - 28 - i * 2, y + offsetY);
+        ctx.lineTo(x - 28 - tail, y + offsetY - 1.5);
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
 function drawDraisineBike(bike, label, variant = 'draisine') {
     const macmillan = variant === 'macmillan';
     const highWheeler = variant === 'highWheeler';
@@ -4566,6 +4867,7 @@ function drawDraisineBike(bike, label, variant = 'draisine') {
         ctx.fillStyle = '#fff7e8';
         ctx.fillText(label, x, bodyY - 119);
     }
+    drawRaceFlowStreaks(x, bodyY - 15, bike);
     ctx.restore();
 }
 
@@ -5436,6 +5738,8 @@ function drawBike(bike, label, color) {
     ctx.restore(); // Возвращаем наклон холста после отрисовки велосипеда.
     ctx.restore(); // Убираем только визуальное увеличение велосипеда.
 
+    drawRaceFlowStreaks(x, wheelY - 9, bike);
+
     if (!bike.isBot && ['dismount', 'watch'].includes(historyPhase)) {
         const runnerWorldX = Number.isFinite(Number(bike.historyVictoryRunnerX))
             ? Number(bike.historyVictoryRunnerX)
@@ -5500,39 +5804,11 @@ function drawRaceHUD() {
         ctx.restore();
     }
 
-    const racers = [
-        {
-            bike: playerBike,
-            // Число рывков уже показано на кнопке E; не дублируем его в HUD.
-            label: `🚴 ТЫ${playerBike.abilities?.shieldCharges > 0 || playerBike.shieldActiveTimer > 0 ? ' 🛡️' : ''}`,
-            color: '#22c55e'
-        },
+    const racerCount = 1 + activeBots.length;
 
-        ...activeBots.map((bike, index) => {
-            const icon = bike.nitroTimer > 0
-                ? ' ⚡'
-                : bike.springBoostTimer > 0
-                    ? ' ↗'
-                    : bike.abilities?.superJumpUnlocked
-                    ? ' ✦'
-                    : bike.abilities?.shieldCharges > 0 ||
-                      bike.shieldActiveTimer > 0
-                        ? ' 🛡'
-                        : '';
-
-            return {
-                bike,
-                label: `${bike.displayName}${icon}${bike.abilities?.macmillanBurst ? ` ⏩${bike.macmillanBurstCharges}` : ''}`,
-                color: bike.color
-            };
-        })
-    ];
-
-    const mobileLayout =
-    window.matchMedia('(max-width: 768px)').matches ||
-    window.matchMedia('(pointer: coarse)').matches;
-    const landscapePhone = mobileLayout &&
-        window.matchMedia('(orientation: landscape) and (max-height: 600px)').matches;
+    ensureRaceMediaQueries();
+    const mobileLayout = mobileViewportQuery.matches || coarsePointerQuery.matches;
+    const landscapePhone = mobileLayout && landscapePhoneQuery.matches;
     // The progress comparison HUD was taking too much of the playfield on
     // landscape phones. Scale its complete layout while still cancelling the
     // camera zoom so the HUD remains fixed-size relative to the screen.
@@ -5543,8 +5819,8 @@ function drawRaceHUD() {
         : Math.min(390, viewWidth - 28);
     const rowHeight = mobileLayout ? (landscapePhone ? 22 : 29) * uiScale : 19;
     const panelHeight = mobileLayout
-        ? ((landscapePhone ? 28 : 42) + racers.length * (landscapePhone ? 22 : 29)) * uiScale
-        : 35 + racers.length * rowHeight;
+        ? ((landscapePhone ? 28 : 42) + racerCount * (landscapePhone ? 22 : 29)) * uiScale
+        : 35 + racerCount * rowHeight;
     const panelX = mobileLayout ? 12 * uiScale : 14;
     const panelY = mobileLayout ? (landscapePhone ? 32 : 52) * uiScale : 12;
     const pad = mobileLayout ? 11 * uiScale : 11;
@@ -5584,9 +5860,24 @@ function drawRaceHUD() {
         panelWidth - labelWidth - percentWidth - (mobileLayout ? 24 * uiScale : 24)
     );
 
-    racers.forEach((racer, index) => {
+    for (let index = 0; index < racerCount; index++) {
+        const bike = index === 0 ? playerBike : activeBots[index - 1];
+        const isPlayer = index === 0;
+        const icon = bike.nitroTimer > 0
+            ? ' ⚡'
+            : bike.springBoostTimer > 0
+                ? ' ↗'
+                : bike.abilities?.superJumpUnlocked
+                    ? ' ✦'
+                    : bike.abilities?.shieldCharges > 0 || bike.shieldActiveTimer > 0
+                        ? ' 🛡'
+                        : '';
+        const label = isPlayer
+            ? `🚴 ТЫ${bike.abilities?.shieldCharges > 0 || bike.shieldActiveTimer > 0 ? ' 🛡️' : ''}`
+            : `${bike.displayName}${icon}${bike.abilities?.macmillanBurst ? ` ⏩${bike.macmillanBurstCharges}` : ''}`;
+        const racerColor = isPlayer ? '#22c55e' : bike.color;
         const progress = clamp(
-            racer.bike.x / finishX,
+            bike.x / finishX,
             0,
             1
         );
@@ -5595,10 +5886,10 @@ function drawRaceHUD() {
 
         ctx.font = `bold ${mobileLayout ? (landscapePhone ? 11 : 13) * uiScale : 10}px Arial`;
         ctx.textAlign = 'left';
-        ctx.fillStyle = racer.color;
+        ctx.fillStyle = racerColor;
 
         ctx.fillText(
-            racer.label,
+            label,
             panelX + pad,
             y + rowBarHeight
         );
@@ -5612,7 +5903,7 @@ function drawRaceHUD() {
             rowBarHeight
         );
 
-        ctx.fillStyle = racer.color;
+        ctx.fillStyle = racerColor;
 
         ctx.fillRect(
             barX,
@@ -5629,7 +5920,7 @@ function drawRaceHUD() {
             panelX + panelWidth - pad,
             y + rowBarHeight
         );
-    });
+    }
 }
 
 // =========================================
@@ -5723,7 +6014,9 @@ function render() {
 
     ctx.save();
     ctx.translate(0, cameraVerticalOffset);
-    activeBots.filter(bike => !bike.isGhost).forEach(drawBot);
+    for (let index = 0; index < activeBots.length; index++) {
+        if (!activeBots[index].isGhost) drawBot(activeBots[index]);
+    }
 
     drawBike(
         playerBike,
@@ -5732,7 +6025,9 @@ function render() {
     );
 
     // Рисуем призрака поверх игрока, чтобы он оставался заметен при совпадении позиций.
-    activeBots.filter(bike => bike.isGhost).forEach(drawBot);
+    for (let index = 0; index < activeBots.length; index++) {
+        if (activeBots[index].isGhost) drawBot(activeBots[index]);
+    }
     ctx.restore();
 
     if (!historyVictoryOutro) {
@@ -5757,6 +6052,7 @@ function updateRaceViewportTransform() {
     // Масштаб во время прыжка не меняется. Вместо "уменьшения" велосипеда
     // камера плавно сопровождает его по вертикали, а трасса уходит вниз.
     const zoom = baseRaceZoom * zoomIn;
+    currentRaceZoom = zoom;
     viewWidth = canvasCssWidth / zoom;
     viewHeight = canvasCssHeight / zoom;
     ctx.setTransform(canvasDpr * zoom, 0, 0, canvasDpr * zoom, 0, 0);
@@ -5870,6 +6166,10 @@ function update() {
 
     frameCounter++;
 
+    // Катящиеся объекты обновляются до решений ИИ и проверок столкновений,
+    // поэтому и бот, и игрок видят одну и ту же текущую позицию опасности.
+    updateDynamicObstacles();
+
     updatePlayerPhysics();
     updateCollectibles();
 
@@ -5887,8 +6187,9 @@ function update() {
     }
 
     if (currentTrack?.id === 'sprint') {
-        activeBots.forEach(bike => {
-            if (!bike.isGhost || !timerStarted) return;
+        for (let index = 0; index < activeBots.length; index++) {
+            const bike = activeBots[index];
+            if (!bike.isGhost || !timerStarted) continue;
 
             const previousX = bike.x;
             // Координата 0 — корректная линия старта, её нельзя заменять
@@ -5911,18 +6212,20 @@ function update() {
             if (bike.x >= finishX && bike.finishFrame === null) {
                 bike.finishFrame = frameCounter;
             }
-        });
+        }
     } else {
-        activeBots.forEach(bike => updateBotPhysics(bike));
+        for (let index = 0; index < activeBots.length; index++) {
+            updateBotPhysics(activeBots[index]);
+        }
     }
 
     updatePlayerCollisions();
 
     if (raceFinished) return;
 
-    activeBots.forEach(bike => {
-        updateBotCollisions(bike);
-    });
+    for (let index = 0; index < activeBots.length; index++) {
+        updateBotCollisions(activeBots[index]);
+    }
 
     const isMobileScreen = (window.innerWidth || 800) <= 768;
     const cameraLead = isMobileScreen ? 0.24 : 0.34;
@@ -5982,14 +6285,15 @@ function gameLoop(timestamp = performance.now()) {
 function resizeCanvas() {
     if (!canvas || canvas.offsetParent === null) return;
 
+    ensureRaceMediaQueries();
     const rect = canvas.getBoundingClientRect();
 
     mobilePerformanceMode = document.documentElement.classList.contains('touch-device')
-        || window.matchMedia('(pointer: coarse)').matches;
-    const dpr = Math.max(
-        1,
-        Math.min(2, window.devicePixelRatio || 1)
-    );
+        || coarsePointerQuery.matches;
+    // Use the device's full native pixel ratio. Mobile rendering should stay
+    // sharp; performance savings come from cached glow and route rendering,
+    // not from lowering the canvas resolution.
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
 
     const canvasWidth = Math.max(320, rect.width || canvas.clientWidth || 800);
     const canvasHeight = Math.max(220, rect.height || canvas.clientHeight || 420);
@@ -5998,16 +6302,21 @@ function resizeCanvas() {
     canvasCssHeight = canvasHeight;
     canvasDpr = dpr;
     baseRaceZoom = zoom;
+    currentRaceZoom = zoom;
     viewWidth = canvasWidth / zoom;
     viewHeight = canvasHeight / zoom;
 
     canvas.width = Math.round(canvasWidth * dpr);
     canvas.height = Math.round(canvasHeight * dpr);
     backgroundGradientCache.clear();
+    celestialGlowSprite = null;
+    celestialGlowSpriteKey = '';
 
-    ctx = canvas.getContext('2d', mobilePerformanceMode
-        ? { desynchronized: true }
-        : undefined);
+    const contextOptions = { alpha: false };
+    if (mobilePerformanceMode) contextOptions.desynchronized = true;
+    // The race canvas paints an opaque sky before every frame, so an alpha
+    // channel is unnecessary work for the browser's compositor.
+    ctx = canvas.getContext('2d', contextOptions);
 
     if (ctx) {
         ctx.setTransform(
@@ -6177,6 +6486,12 @@ export function initRace(onRaceEnd) {
             ? [createBike(true, 2)]
             : [];
         activeBots = [botBike, ...additionalBots];
+    }
+
+    raceCompetitors.length = 0;
+    raceCompetitors.push(playerBike);
+    for (let index = 0; index < activeBots.length; index++) {
+        raceCompetitors.push(activeBots[index]);
     }
 
     cameraX = 0;

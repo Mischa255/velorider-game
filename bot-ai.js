@@ -42,12 +42,12 @@ const HISTORY_BOT_PACE = Object.freeze({
     m2: { maxSpeed: 4.8, acceleration: 0.071, jumpForce: 10.7, power: 22 },
     m3: { maxSpeed: 4.8, acceleration: 0.071, jumpForce: 10.7, power: 25 },
     m4: { maxSpeed: 4.8, acceleration: 0.071, jumpForce: 10.7, power: 28 },
-    m5: { maxSpeed: 5.0, acceleration: 0.075, jumpForce: 10.9, power: 31 },
+    m5: { maxSpeed: 5.0, acceleration: 0.075, jumpForce: 10.9, power: 38 },
     l1: { maxSpeed: 5.35, acceleration: 0.085, jumpForce: 10.7, power: 27 },
     l2: { maxSpeed: 6.05, acceleration: 0.095, jumpForce: 10.8, power: 31 },
     l3: { maxSpeed: 6.8, acceleration: 0.12, jumpForce: 10.8, power: 34 },
-    l4: { maxSpeed: 6.05, acceleration: 0.095, jumpForce: 10.8, power: 31 },
-    l5: { maxSpeed: 6.8, acceleration: 0.12, jumpForce: 10.9, power: 35 },
+    l4: { maxSpeed: 6.05, acceleration: 0.095, jumpForce: 10.8, power: 37 },
+    l5: { maxSpeed: 6.8, acceleration: 0.12, jumpForce: 10.9, power: 48 },
     l6: { maxSpeed: 7.5, acceleration: 0.15, jumpForce: 11.1, power: 40 }
 });
 
@@ -93,6 +93,16 @@ export function getBotDifficultyStats(botIndex, difficultyTrack, currentTrack, g
         power: Math.max(0, Number(historyPace?.power ?? balance.power) || 0),
         personality
     };
+}
+
+function getLeaderX(bike, competitors) {
+    let leaderX = Number(bike.x) || 0;
+    for (let index = 0; index < competitors.length; index++) {
+        const racer = competitors[index];
+        if (!racer || racer === bike || racer.isGhost) continue;
+        leaderX = Math.max(leaderX, Number(racer.x) || 0);
+    }
+    return leaderX;
 }
 
 export function getBotAbilities(botIndex, currentTrack, currentTrackLevel) {
@@ -142,7 +152,8 @@ function shouldBotJumpObstacle(bike, obstacle, frameCounter, racePressure = 0) {
     }
 
     // Фиксированный бросок для пары «бот-препятствие»: ИИ не меняет решение каждый кадр.
-    const roll = ((Math.floor(obstacle.x * 17) + bike.botIndex * 31) % 100) / 100;
+    const stableObstacleX = Number(obstacle.aiSeedX ?? obstacle.baseX ?? obstacle.x);
+    const roll = ((Math.floor(stableObstacleX * 17) + bike.botIndex * 31) % 100) / 100;
     const confidence = Number(bike.botBrain?.jumpConfidence) || getBotPersonality(bike.botIndex).jumpConfidence;
     const stabilityRatio = clamp(Number(bike.stability) || 0, 0, 100) / 100;
     // Бот, который отстаёт, чаще выбирает прыжок, чтобы не терять темп.
@@ -219,8 +230,7 @@ export function updateBotDrivingDecision(bike, context) {
         competitors = []
     } = context;
     const brain = bike.botBrain || (bike.botBrain = createBotBrain(bike.botIndex));
-    const otherRacers = competitors.filter(racer => racer && racer !== bike && !racer.isGhost);
-    const leaderX = Math.max(bike.x, ...otherRacers.map(racer => Number(racer.x) || 0));
+    const leaderX = getLeaderX(bike, competitors);
     const racePressure = clamp((leaderX - bike.x) / 900, -0.35, 1);
 
     brain.state = 'cruising';
@@ -277,8 +287,7 @@ export function updateBotAbilities(bike, obstacles, bikeWidth, competitors = [])
     if (bike.shieldActiveTimer > 0) bike.shieldActiveTimer--;
 
     const front = bike.x + bikeWidth * 0.35;
-    const otherRacers = competitors.filter(racer => racer && racer !== bike && !racer.isGhost);
-    const leaderX = Math.max(bike.x, ...otherRacers.map(racer => Number(racer.x) || 0));
+    const leaderX = getLeaderX(bike, competitors);
     const racePressure = clamp((leaderX - bike.x) / 900, -0.35, 1);
     const burstTopSpeed = Math.max(1.5, Number(bike.botBaseMaxSpeed) || 3);
     const burstObstacleAhead = obstacles.some(obstacle =>

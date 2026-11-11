@@ -2311,6 +2311,12 @@ function updateTracksUI() {
                     `}
                 </div>
 
+                ${track.routeFeature ? `
+                    <div class="mt-3 rounded-lg border border-slate-600/60 bg-slate-900/55 px-3 py-2 text-xs leading-relaxed text-slate-300">
+                        <strong class="mr-1 text-cyan-200">Маршрут:</strong>${escapeHTML(track.routeFeature)}
+                    </div>
+                ` : ''}
+
                 <div class="track-card__rewards">
                     <div class="track-card__section-label">НАГРАДЫ ЗА ЗАЕЗД</div>
                     <div class="track-card__reward-grid">
